@@ -43,7 +43,7 @@ const (
 // Frame Header
 /*
 +--------+--------+--------+--------+--------+---    ---+
- Public |    Connection ID (0, 8, 32, or 64)    ...    | ->
+| Public |    Connection ID (0, 8, 32, or 64)    ...    | ->
 |Flags(8)|      (variable length)                       |
 +--------+--------+--------+--------+--------+---    ---+
 
