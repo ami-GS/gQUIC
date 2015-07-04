@@ -16,6 +16,30 @@ const (
 	CongestionFeedbackFrameType = 0x20
 )
 
+type PublicFlags uint8
+
+const (
+	QUIC_VERSION              PublicFlags = 0x01
+	PUBLIC_RESET                          = 0x02
+	CONTAIN_CONNECTION_ID_8               = 0x0c
+	CONTAIN_CONNECTION_ID_4               = 0x08
+	CONTAIN_CONNECTION_ID_1               = 0x04
+	OMIT_CONNECTION_ID                    = 0x00
+	CONTAIN_SEQUENCE_NUMBER_6             = 0x30
+	CONTAIN_SEQUENCE_NUMBER_4             = 0x20
+	CONTAIN_SEQUENCE_NUMBER_2             = 0x10
+	CONTAIN_SEQUENCE_NUMBER_1             = 0x00
+	RESERVED                              = 0xc0
+)
+
+type PrivateFlags uint8
+
+const (
+	FLAG_ENTROPY   PrivateFlags = 0x01
+	FLAG_FEC_GROUP              = 0x02
+	FLAG_FEC                    = 0x03
+)
+
 // Frame Header
 /*
 +--------+--------+--------+--------+--------+---    ---+
