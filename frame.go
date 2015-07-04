@@ -81,34 +81,46 @@ func NewFrameHeader(publicFlags byte, connectionID uint64, version uint32, seque
 	return fh
 }
 
-func (self *FrameHeader) Parse(data []byte) (err error) {
+func (fh *FrameHeader) Parse(data []byte) (err error) {
 	index := 0
-	self.PublicFlags = data[index]
+	fh.PublicFlags = data[index]
 
-	if self.PublicFlags&0x0c > 0 {
-		self.ConnectionID = uint64(data[1]<<56 | data[2]<<48 | data[3]<<40 | data[4]<<32 | data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
+	if fh.PublicFlags&0x0c == 0x0c {
+		fh.ConnectionID = uint64(data[1]<<56 | data[2]<<48 | data[3]<<40 | data[4]<<32 | data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
 		index = 9
-	} else if self.PublicFlags&0x08 > 0 {
-		self.ConnectionID = uint64(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+	} else if fh.PublicFlags&0x08 == 0x08 {
+		fh.ConnectionID = uint64(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 		index = 5
-	} else if self.PublicFlags&0x04 > 0 {
-		self.ConnectionID = uint64(data[1])
+	} else if fh.PublicFlags&0x04 == 0x04 {
+		fh.ConnectionID = uint64(data[1])
 		index = 2
 	} else {
-		self.ConnectionID = 0 // omitted
+		fh.ConnectionID = 0 // omitted
 		index = 1
 	}
 
-	if self.PublicFlags&0x01 > 0 {
-		self.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
+	if fh.PublicFlags&0x01 == 0x01 {
+		fh.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
 		index += 4
 	}
 
 	// TODO: parse sequence number
+	if fh.PublicFlags&0x30 == 0x30 {
+		fh.SequenceNumber = uint64(data[index]<<40 | data[index+1]<<32 | data[index+2]<<24 | data[index+3]<<16 | data[index+4]<<8 | data[index+5])
+		index += 6
+	} else if fh.PublicFlags&0x20 == 0x20 {
+		fh.SequenceNumber = uint64(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
+		index += 4
+	} else if fh.PublicFlags&0x10 == 0x10 {
+		fh.SequenceNumber = uint64(data[index]<<8 | data[index+1])
+		index += 2
+	} else if fh.PublicFlags&0x00 == 0x00 {
+		fh.SequenceNumber = uint64(data[index])
+		index += 1
+	}
 
-	self.PrivateFlags = data[index]
+	fh.PrivateFlags = data[index]
 
 	// TODO: parse FEC
-
-	return err
+	return
 }
