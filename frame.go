@@ -478,3 +478,40 @@ func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
 
 	return
 }
+
+/*
+      0        1        2        3         4
+ +--------+--------+--------+--------+--------+
+ |Type(8) |          Stream ID (32 bits)      |
+ +--------+--------+--------+--------+--------+
+*/
+type BlockedFrame struct {
+	*FrameHeader
+	Type     byte
+	StreamID uint32
+}
+
+func NewBlockedFrame(streamID uint32) *BlockedFrame {
+	fh := &FrameHeader{} //temporaly
+	blockedFrame := &BlockedFrame{fh,
+		BlockedFrameType,
+		streamID,
+	}
+	return blockedFrame
+}
+
+func (frame *BlockedFrame) Parse(data []byte) (err error) {
+	frame.Type = data[0]
+	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+	return
+}
+
+func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
+	wire = make([]byte, 5)
+	wire[0] = frame.Type
+	for i := 0; i < 4; i++ {
+		wire[1+i] = uint32(frame.StreamID >> (8 * (3 - i)))
+	}
+
+	return
+}
