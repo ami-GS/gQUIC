@@ -124,3 +124,59 @@ func (fh *FrameHeader) Parse(data []byte) (err error) {
 	// TODO: parse FEC
 	return
 }
+
+func (fh *FrameHeader) GetWire() (wire []byte, err error) {
+	// confirm variable length
+	connectionIDLen := 0
+	if fh.PublicFlags&0x0c == 0x0c {
+		connectionIDLen = 8
+	} else if fh.PublicFlags&0x08 == 0x08 {
+		connectionIDLen = 4
+	} else if fh.PublicFlags&0x04 == 0x04 {
+		connectionIDLen = 1
+	}
+
+	versionLen := 0
+	if fh.PublicFlags&0x01 > 0 {
+		versionLen = 4
+	}
+
+	sequenceNumberLen := 1
+	if fh.PublicFlags&0x30 == 0x30 {
+		sequenceNumberLen = 6
+	} else if fh.PublicFlags&0x20 == 0x20 {
+		sequenceNumberLen = 4
+	} else if fh.PublicFlags&0x10 == 0x10 {
+		sequenceNumberLen = 2
+	}
+
+	// deal with FEC part
+	fecLen := 1 // temporaly
+
+	// pack to wire
+	wire = make([]byte, 1+connectionIDLen+versionLen+sequenceNumberLen+1+fecLen)
+	wire[0] = byte(fh.PublicFlags)
+	index := 1
+	for i := 0; i < connectionIDLen; i++ {
+		wire[index+i] = byte(fh.ConnectionID >> (8 * (connectionIDLen - i - 1)))
+	}
+	index += connectionIDLen
+
+	for i := 0; i < versionLen; i++ {
+		wire[index+i] = byte(fh.Version >> (8 * (versionLen - i - 1)))
+	}
+	index += versionLen
+
+	for i := 0; i < sequenceNumberLen; i++ {
+		wire[index+i] = byte(fh.SequenceNumber >> (8 * (sequenceNumberLen - i - 1)))
+	}
+	index += sequenceNumberLen
+
+	wire[index] = fh.PrivateFlags
+
+	if fecLen > 0 {
+		wire[index+1] = fh.FEC
+	}
+
+	return
+}
