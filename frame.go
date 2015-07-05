@@ -257,7 +257,8 @@ func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16)
 		frameType,
 		streamID,
 		offset,
-		dataLength}
+		dataLength,
+	}
 	return streamFrame
 }
 
@@ -379,11 +380,12 @@ type StopWaitingFrame struct {
 }
 
 func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaiting {
-	fh := &FrameHeader{}
+	fh := &FrameHeader{} // temporaly
 	stopWaitingFrame := &StopWaitingFrame{fh,
 		StopWaitingFrameType,
 		sentEntropy,
-		leasetUnackedDelta}
+		leasetUnackedDelta,
+	}
 	return stopWaitingFrame
 }
 
