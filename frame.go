@@ -362,3 +362,71 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	}
 	return
 }
+
+/*
+      0        1        2        3         4        5        6      7
+ +--------+--------+--------+--------+--------+--------+-------+-------+
+ |Type (8)|Sent    |   Least unacked delta (8, 16, 32, or 48 bits)     |
+ |        |Entropy |                       (variable length)           |
+ +--------+--------+--------+--------+--------+--------+-------+-------+
+*/
+
+type StopWaitingFrame struct {
+	*FrameHeader
+	Type              byte
+	SentEntropy       byte
+	LeastUnackedDelta uint64
+}
+
+func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaiting {
+	fh := &FrameHeader{}
+	stopWaitingFrame := &StopWaitingFrame{fh,
+		StopWaitingFrameType,
+		sentEntropy,
+		leasetUnackedDelta}
+	return stopWaitingFrame
+}
+
+func (frame *StopWaitingFrame) Parse(data []byte) (err error) {
+	frame.Type = data[0]
+	frame.SentEntropy = data[1]
+
+	// the same length as the packet header's sequence number
+	length := 1
+	switch {
+	case frame.PublicFlags&0x30 == 0x30:
+		length = 6
+	case frame.PublicFlags&0x20 == 0x20:
+		length = 4
+	case frame.PublicFlags&0x10 == 0x10:
+		length = 2
+	}
+	for i := 0; i < length; i++ {
+		frame.LeastUnackedDelta |= uint64(data[2+i] << (8 * (length - i - 1)))
+	}
+
+	return
+}
+
+func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
+	// shold here be functionized?
+	length := 1
+	switch {
+	case frame.PublicFlags&0x30 == 0x30:
+		length = 6
+	case frame.PublicFlags&0x20 == 0x20:
+		length = 4
+	case frame.PublicFlags&0x10 == 0x10:
+		length = 2
+	}
+
+	wire = make([]byte, 2+length)
+	wire[0] = frame.Type
+	wire[1] = frame.SentEntropy
+
+	for i := 0; i < length; i++ {
+		wire[2+i] = byte(frame.LeastUnackedDelta >> (8 * (length - i - 1)))
+	}
+
+	return
+}
