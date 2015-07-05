@@ -432,3 +432,49 @@ func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 
 	return
 }
+
+/*
+     0         1                 4        5                 12
+ +--------+--------+-- ... --+-------+--------+-- ... --+-------+
+ |Type(8) |    Stream ID (32 bits)   |  Byte offset (64 bits)   |
+ +--------+--------+-- ... --+-------+--------+-- ... --+-------+
+*/
+
+type WindowUpdateFrame struct {
+	*FrameHeader
+	Type     byte
+	StreamID uint32
+	Offset   uint64
+}
+
+func NewWindowUpdateFrame(streamID uint32, offset uint64) *WindowUpdateFrame {
+	fh := &WindowUpdateFrame{} //temporaly
+	windowUpdateFrame := &WindowUpdateFrame{fh,
+		WindowUpdateFrameType,
+		streamID,
+		offset,
+	}
+	return
+}
+
+func (frame *WindowUpdateFrame) Parse(data []byte) (err error) {
+	frame.Type = data[0]
+	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+	for i := 0; i < 8; i++ {
+		frame.Offset |= uint64(data[5+i] << (8 * (7 - i)))
+	}
+	return
+}
+
+func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
+	wire = make([]byte, 13)
+	wire[0] = frame.Type
+	for i := 0; i < 4; i++ {
+		wire[1+i] = uint32(frame.StreamID >> (8 * (3 - i)))
+	}
+	for i := 0; i < 8; i++ {
+		wire[5+i] = uint32(frame.Offset >> (8 * (7 - i)))
+	}
+
+	return
+}
