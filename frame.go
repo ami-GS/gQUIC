@@ -180,3 +180,185 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 
 	return
 }
+
+/*
+    0        1       ...               SLEN
++--------+--------+--------+--------+--------+
+|Type (8)| Stream ID (8, 16, 24, or 32 bits) |
+|        |    (Variable length SLEN bytes)   |
++--------+--------+--------+--------+--------+
+
+  SLEN+1  SLEN+2     ...                                         SLEN+OLEN
++--------+--------+--------+--------+--------+--------+--------+--------+
+|   Offset (0, 16, 24, 32, 40, 48, 56, or 64 bits) (variable length)    |
+|                    (Variable length: OLEN  bytes)                     |
++--------+--------+--------+--------+--------+--------+--------+--------+
+
+  SLEN+OLEN+1   SLEN+OLEN+2
++-------------+-------------+
+| Data length (0 or 16 bits)|
+|  Optional(maybe 0 bytes)  |
++------------+--------------+
+*/
+
+type StreamFrame struct {
+	*FrameHeader
+	Type       byte
+	StreamID   uint32
+	Offset     uint64
+	DataLength uint16
+}
+
+func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16) *StreamFrame {
+	var frameType byte = 0x80
+	if fin {
+		frameType |= 0x40
+	}
+	if dataLength == 0 { // should other argument be used?
+		frameType |= 0x20
+	}
+
+	// CHECK: are these bit length fixed?
+	// 'ooo' bits
+	switch {
+	case offset == 0:
+		frameType |= 0x00
+	case offset <= 0xffff:
+		frameType |= 0x04
+	case offset <= 0xffffff:
+		frameType |= 0x08
+	case offset <= 0xffffffff:
+		frameType |= 0x0c
+	case offset <= 0xffffffffff:
+		frameType |= 0x10
+	case offset <= 0xffffffffffff:
+		frametype |= 0x14
+	case offset <= 0xffffffffffffff:
+		frameType |= 0x18
+	case offset <= 0xffffffffffffffff:
+		frameType |= 0x1c
+	}
+
+	// 'ss' bits
+	switch {
+	case streamID <= 0xff:
+		frameType |= 0x00
+	case streamID <= 0xffff:
+		frameType |= 0x01
+	case streamID <= 0xffffff:
+		frameType |= 0x02
+	case streamID <= 0xffffffff:
+		frameType |= 0x03
+	}
+
+	//fh := NewFrameHeader()
+	fh := &FrameHeader{} //temporaly
+	streamFrame := &StreamFrame{fh,
+		frameType,
+		streamID,
+		offset,
+		dataLength}
+	return streamFrame
+}
+
+func (frame *StreamFrame) Parse(data []byte) (err error) {
+	frame.Type = data[0]
+	if frame.Type&0x40 == 0x40 {
+		//TODO: fin
+	}
+
+	index := 1
+	switch {
+	case frame.Type&0x03 == 0x00:
+		frame.StreamID = uint32(data[1])
+		index += 1
+	case frame.Type&0x03 == 0x01:
+		frame.StreamID = uint32(data[1]<<8 | data[2])
+		index += 2
+	case frame.Type&0x03 == 0x02:
+		frame.StreamID = uint32(data[1]<<16 | data[2]<<8 | data[3])
+		index += 3
+	case frame.Type&0x03 == 0x03:
+		frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+		index += 4
+	}
+
+	var offset uint64 = 0
+	switch {
+	case frame.Type&0x1c == 0x00:
+		frame.Offset = uint64(data[index])
+		index += 1
+	case frame.Type&0x1c == 0x04:
+		frame.Offset = uint64(data[index]<<8 | data[index+1])
+		index += 2
+	case frame.Type&0x1c == 0x08:
+		frame.Offset = uint64(data[index]<<16 | data[index+1]<<8 | data[index+2])
+		index += 3
+	case frame.Type&0x1c == 0x0c:
+		for i := 0; i < 4; i++ {
+			frame.Offset |= uint64(data[index+i] << (8 * (3 - i)))
+		}
+		index += 4
+	case frame.Type&0x1c == 0x10:
+		for i := 0; i < 5; i++ {
+			frame.Offset |= uint64(data[index+i] << (8 * (4 - i)))
+		}
+		index += 5
+	case frame.Type&0x1c == 0x14:
+		for i := 0; i < 6; i++ {
+			frame.Offset |= uint64(data[index+i] << (8 * (5 - i)))
+		}
+		index += 6
+	case frame.Type&0x1c == 0x18:
+		for i := 0; i < 7; i++ {
+			frame.Offset |= uint64(data[index+i] << (8 * (6 - i)))
+		}
+		index += 7
+	case frame.Type&0x1c == 0x1c:
+		for i := 0; i < 8; i++ {
+			frame.Offset |= uint64(data[index+i] << (8 * (7 - i)))
+		}
+		index += 8
+	}
+
+	frame.DataLength = 0 // as is not contained. right?
+	if frame.Type&0x20 == 0x20 {
+		frame.DataLength = uint16(data[index]<<8 | data[index])
+	}
+
+	return
+}
+
+func (frame *StreamFrame) GetWire() (wire []byte, err error) {
+	// data length's length
+	DLEN := (frame.Type & 0x20 >> 5) * 2
+
+	// streamID length
+	SLEN := (frame.Type & 0x03) + 1
+
+	// offset length
+	OLEN := (frame.Type & 0x1c >> 2)
+	if tmp > 0 {
+		OLEN += 1
+	}
+
+	wire = make([]byte, 1+DLEN+SLEN+OLEN)
+	wire[0] = frame.Type
+	index := 1
+
+	for i := 0; i < SLEN; i++ {
+		wire[index+i] = byte(frame.StreamID >> (8 * (SLEN - i - 1)))
+	}
+	index += SLEN
+
+	for i := 0; i < OLEN; i++ {
+		wire[index+i] = byte(frame.Offset >> (8 * (OLEN - i - 1)))
+	}
+	index += OLEN
+
+	if DLEN > 0 {
+		wire[index] = byte(frame.DataLength >> 8)
+		wire[index+1] = byte(frame.DataLength)
+	}
+	return
+}
