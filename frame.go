@@ -40,6 +40,15 @@ const (
 	FLAG_FEC                    = 0x03
 )
 
+type QuicErrorCode byte
+
+const (
+	NO_ERROR QuicErrorCode = iota
+	// TODO: write down Error code
+	// the details are stil in progress?
+
+)
+
 // Frame Header
 /*
 +--------+--------+--------+--------+--------+---    ---+
