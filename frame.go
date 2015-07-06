@@ -212,14 +212,14 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 
 type StreamFrame struct {
 	*FrameHeader
-	Type       byte
+	Type       FrameType
 	StreamID   uint32
 	Offset     uint64
 	DataLength uint16
 }
 
 func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16) *StreamFrame {
-	var frameType byte = 0x80
+	var frameType FrameType = StreamFrameType
 	if fin {
 		frameType |= 0x40
 	}
@@ -272,7 +272,7 @@ func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16)
 }
 
 func (frame *StreamFrame) Parse(data []byte) (err error) {
-	frame.Type = data[0]
+	frame.Type = FrameType(data[0])
 	if frame.Type&0x40 == 0x40 {
 		//TODO: fin
 	}
@@ -353,7 +353,7 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	}
 
 	wire = make([]byte, 1+DLEN+SLEN+OLEN)
-	wire[0] = frame.Type
+	wire[0] = byte(frame.Type)
 	index := 1
 
 	for i := 0; i < SLEN; i++ {
@@ -383,7 +383,7 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 
 type StopWaitingFrame struct {
 	*FrameHeader
-	Type              byte
+	Type              FrameType
 	SentEntropy       byte
 	LeastUnackedDelta uint64
 }
@@ -399,7 +399,7 @@ func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaitin
 }
 
 func (frame *StopWaitingFrame) Parse(data []byte) (err error) {
-	frame.Type = data[0]
+	frame.Type = FrameType(data[0])
 	frame.SentEntropy = data[1]
 
 	// the same length as the packet header's sequence number
@@ -432,7 +432,7 @@ func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 	}
 
 	wire = make([]byte, 2+length)
-	wire[0] = frame.Type
+	wire[0] = byte(frame.Type)
 	wire[1] = frame.SentEntropy
 
 	for i := 0; i < length; i++ {
@@ -451,7 +451,7 @@ func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 
 type WindowUpdateFrame struct {
 	*FrameHeader
-	Type     byte
+	Type     FrameType
 	StreamID uint32
 	Offset   uint64
 }
@@ -467,7 +467,7 @@ func NewWindowUpdateFrame(streamID uint32, offset uint64) *WindowUpdateFrame {
 }
 
 func (frame *WindowUpdateFrame) Parse(data []byte) (err error) {
-	frame.Type = data[0]
+	frame.Type = FrameType(data[0])
 	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	for i := 0; i < 8; i++ {
 		frame.Offset |= uint64(data[5+i] << (8 * (7 - i)))
@@ -477,7 +477,7 @@ func (frame *WindowUpdateFrame) Parse(data []byte) (err error) {
 
 func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 13)
-	wire[0] = frame.Type
+	wire[0] = byte(frame.Type)
 	for i := 0; i < 4; i++ {
 		wire[1+i] = uint32(frame.StreamID >> (8 * (3 - i)))
 	}
@@ -496,7 +496,7 @@ func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
 */
 type BlockedFrame struct {
 	*FrameHeader
-	Type     byte
+	Type     FrameType
 	StreamID uint32
 }
 
@@ -510,14 +510,14 @@ func NewBlockedFrame(streamID uint32) *BlockedFrame {
 }
 
 func (frame *BlockedFrame) Parse(data []byte) (err error) {
-	frame.Type = data[0]
+	frame.Type = FrameType(data[0])
 	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	return
 }
 
 func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 5)
-	wire[0] = frame.Type
+	wire[0] = byte(frame.Type)
 	for i := 0; i < 4; i++ {
 		wire[1+i] = uint32(frame.StreamID >> (8 * (3 - i)))
 	}
@@ -528,12 +528,14 @@ func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 // CongestionFeedback
 type PaddingFrame struct {
 	*FrameHeader
-	Type byte
+	Type FrameType
 }
 
 func NewPadding() *PaddingFrame {
 	fh := &FrameHeader{} //temporally
-	paddingFrame := &PaddingFrame{fh, PaddingFrameType}
+	paddingFrame := &PaddingFrame{fh,
+		PaddingFrameType,
+	}
 	return paddingFrame
 }
 
@@ -544,7 +546,7 @@ func (frame *PaddingFrame) Parse(data []byte) (err error) {
 
 func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1)
-	wire[0] = frame.Type
+	wire[0] = byte(frame.Type)
 	return
 }
 
@@ -557,7 +559,7 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 
 type RstStreamFrame struct {
 	*FrameHeader
-	Type      byte
+	Type      FrameType
 	StreamID  uint32
 	Offset    uint64
 	ErrorCode QuicErrorCode
@@ -566,6 +568,7 @@ type RstStreamFrame struct {
 func NewRstStreamFrame(streamID uint32, offset uint64, error QuicErrorCode) *RstStreamFrame {
 	fh := &FrameHeader{} //temporally
 	rstStreamFrame := &RstStreamFrame{fh,
+		RstStreamFrameType,
 		streamID,
 		offset,
 		error,
@@ -574,7 +577,7 @@ func NewRstStreamFrame(streamID uint32, offset uint64, error QuicErrorCode) *Rst
 }
 
 func (frame *RstStreamFrame) Parse(data []byte) (err error) {
-	frame.Type = data[0]
+	frame.Type = FrameType(data[0])
 	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	for i := 0; i < 8; i++ {
 		frame.Offset |= uint64(data[5+i] << (8 * (7 - i)))
@@ -585,7 +588,7 @@ func (frame *RstStreamFrame) Parse(data []byte) (err error) {
 
 func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 17)
-	wire[0] = frame.Type
+	wire[0] = byte(frame.Type)
 	for i := 0; i < 4; i++ {
 		wire[1+i] = byte(frame.StreamID >> (8 * (3 - i)))
 	}
@@ -600,7 +603,7 @@ func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 
 type PingFrame struct {
 	*FrameHeader
-	Type byte
+	Type Frametype
 }
 
 func NewPingFrame() *PingFrame {
@@ -612,11 +615,11 @@ func NewPingFrame() *PingFrame {
 }
 
 func (frame *PingFrame) Parse(data []byte) (err error) {
-	frame.Type = data[0]
+	frame.Type = FrameType(data[0])
 	return
 }
 func (frame *PingFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1)
-	wire[0] = frame.Type
+	wire[0] = byte(frame.Type)
 	return
 }
