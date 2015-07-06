@@ -596,5 +596,27 @@ func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 		wire[13+i] = byte(frame.ErrorCode >> (8 * (3 - i)))
 	}
 	return
+}
 
+type PingFrame struct {
+	*FrameHeader
+	Type byte
+}
+
+func NewPingFrame() *PingFrame {
+	fh := &FrameHeader{} //temporally
+	pingFrame := &PingFrame{fh,
+		PingFrameType,
+	}
+	return pingFrame
+}
+
+func (frame *PingFrame) Parse(data []byte) (err error) {
+	frame.Type = data[0]
+	return
+}
+func (frame *PingFrame) GetWire() (wire []byte, err error) {
+	wire = make([]byte, 1)
+	wire[0] = frame.Type
+	return
 }
