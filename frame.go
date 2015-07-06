@@ -538,3 +538,54 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 	wire[0] = frame.Type
 	return
 }
+
+/*
+     0        1            4      5              12     8             16
++-------+--------+-- ... ----+--------+-- ... ------+-------+-- ... ------+
+|Type(8)| StreamID (32 bits) | Byte offset (64 bits)| Error code (32 bits)|
++-------+--------+-- ... ----+--------+-- ... ------+-------+-- ... ------+
+*/
+
+type RstStreamFrame struct {
+	*FrameHeader
+	Type      byte
+	StreamID  uint32
+	Offset    uint64
+	ErrorCode QuicErrorCode
+}
+
+func NewRstStreamFrame(streamID uint32, offset uint64, error QuicErrorCode) *RstStreamFrame {
+	fh := &FrameHeader{} //temporally
+	rstStreamFrame := &RstStreamFrame{fh,
+		streamID,
+		offset,
+		error,
+	}
+	return rstStream
+}
+
+func (frame *RstStreamFrame) Parse(data []byte) (err error) {
+	frame.Type = data[0]
+	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+	for i := 0; i < 8; i++ {
+		frame.Offset |= uint64(data[5+i] << (8 * (7 - i)))
+	}
+	frame.ErrorCode = QuicErrorCode(data[13]<<24 | data[14]<<16 | data[15]<<8 | data[16])
+	return
+}
+
+func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
+	wire = make([]byte, 17)
+	wire[0] = frame.Type
+	for i := 0; i < 4; i++ {
+		wire[1+i] = byte(frame.StreamID >> (8 * (3 - i)))
+	}
+	for i := 0; i < 8; i++ {
+		wire[5+i] = byte(frame.Offset >> (8 * (7 - i)))
+	}
+	for i := 0; i < 4; i++ {
+		wire[13+i] = byte(frame.ErrorCode >> (8 * (3 - i)))
+	}
+	return
+
+}
