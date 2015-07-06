@@ -517,3 +517,24 @@ func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 }
 
 // CongestionFeedback
+type PaddingFrame struct {
+	*FrameHeader
+	Type byte
+}
+
+func NewPadding() *PaddingFrame {
+	fh := &FrameHeader{} //temporally
+	paddingFrame := &PaddingFrame{fh, PaddingFrameType}
+	return paddingFrame
+}
+
+func (frame *PaddingFrame) Parse(data []byte) (err error) {
+	// TODO: do something?
+	return
+}
+
+func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
+	wire = make([]byte, 1)
+	wire[0] = frame.Type
+	return
+}
