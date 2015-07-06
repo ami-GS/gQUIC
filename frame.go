@@ -515,3 +515,5 @@ func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 
 	return
 }
+
+// CongestionFeedback
