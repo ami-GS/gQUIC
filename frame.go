@@ -674,3 +674,66 @@ func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 	}
 	return
 }
+
+/*
+        0        1             4      5       6       7      8
+   +--------+--------+-- ... -----+-------+-------+-------+------+
+   |Type(8) | Error code (32 bits)| Last Good Stream ID (32 bits)| ->
+   +--------+--------+-- ... -----+-------+-------+-------+------+
+         9        10       11
+   +--------+--------+--------+----- ...
+   | Reason phrase   |  Reason phrase
+   | length (16 bits)|(variable length)
+   +--------+--------+--------+----- ...
+*/
+
+type GoAwayFrame struct {
+	*FrameHeader
+	Type               FrameType
+	ErrorCode          QuicErrorCode
+	LastGoodStreamID   uint32
+	ReasonPhraseLength uint16
+	ReasonPhrase       string
+}
+
+func NewGoAwayFrame(errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
+	fh := &FrameHeader{} // temporally
+	goAwayFrame := &GoAwayFrame{fh,
+		GoAwayFrameType,
+		errorCode,
+		lastGoodStreamID,
+		uint16(len(reasonPhrase)),
+		reasonPhrase,
+	}
+	return goAwayFrame
+}
+
+func (frame *GoAwayFrame) Parse(data []byte) (err error) {
+	frame.Type = FrameType(data[0])
+	frame.ErrorCode = QuicErrorCode(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+	frame.LastGoodStreamID = uint32(data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
+	frame.ReasonPhraseLength = uint16(data[9]<<8 | data[10])
+	frame.ReasonPhrase = string(data[11 : 11+frame.ReasonPhraseLength])
+	return
+}
+
+func (frame *GoAwayFrame) GetWire() (wire []byte, err error) {
+	wire = make([]byte, 11+frame.ReasonPhraseLength)
+	wire[0] = byte(frame.Type)
+	for i := 0; i < 4; i++ {
+		wire[1+i] = byte(frame.ErrorCode >> (8 * (3 - i)))
+	}
+	for i := 0; i < 4; i++ {
+		wire[5+i] = byte(frame.LastGoodStreamID >> (8 * (3 - i)))
+	}
+
+	wire[9] = byte(frame.ReasonPhraseLength >> 8)
+	wire[10] = byte(frame.ReasonPhraseLength)
+
+	byteString := []byte(frame.ReasonPhrase)
+	for i, v := range byteString {
+		wire[11+i] = v
+	}
+
+	return
+}
