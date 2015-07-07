@@ -40,7 +40,7 @@ const (
 	FLAG_FEC                    = 0x03
 )
 
-type QuicErrorCode byte
+type QuicErrorCode uint32
 
 const (
 	NO_ERROR QuicErrorCode = iota
@@ -603,7 +603,7 @@ func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 
 type PingFrame struct {
 	*FrameHeader
-	Type Frametype
+	Type FrameType
 }
 
 func NewPingFrame() *PingFrame {
