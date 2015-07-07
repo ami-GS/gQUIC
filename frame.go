@@ -623,3 +623,54 @@ func (frame *PingFrame) GetWire() (wire []byte, err error) {
 	wire[0] = byte(frame.Type)
 	return
 }
+
+/*
+        0        1             4        5        6       7
+   +--------+--------+-- ... -----+--------+--------+--------+----- ...
+   |Type(8) | Error code (32 bits)| Reason phrase   |  Reason phrase
+   |        |                     | length (16 bits)|(variable length)
+   +--------+--------+-- ... -----+--------+--------+--------+----- ...
+*/
+
+type ConnectionCloseFrame struct {
+	*FrameType
+	Type               FrameType
+	ErrorCode          QuicErrorCode
+	ReasonPhraseLength uint16
+	ReasonPhrase       string
+}
+
+func NewConnectionCloseFrame(errorCode QuicErrorCode, reasonPhrase string) *ConnectionCloseFrame {
+	fh := &FrameHeader{} //temporally
+	connectionCloseFrame := &ConnectionCloseFrame{fh,
+		ConnectionCloseFrameType,
+		errorCode,
+		uint16(len(reasonPhrase)), // TODO: cut if the length is over uint16
+		reasonPhrase,
+	}
+	return connectionCloseFrame
+}
+
+func (frame *ConnectionCloseFrame) Parse(data []byte) (err error) {
+	frame.Type = data[0]
+	frame.ErrorCode = QuicErrorCode(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+	frame.ReasonPhraseLength = uint16(data[5]<<8 | data[6])
+	frame.ReasonPhrase = string(data[7 : 7+frame.ReasonPhraseLength])
+	return
+}
+
+func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
+	wire = make([]byte, 7+frame.ReasonPhraseLength)
+	wire[0] = byte(frame.Type)
+	for i := 0; i < 4; i++ {
+		wire[1+i] = byte(frame.ErrorCode >> (8 * (3 - i)))
+	}
+	wire[5] = byte(frame.ReasonPhraseLength >> 8)
+	wire[6] = byte(frame.ReasonPhraseLength)
+
+	byteString := []byte(frame.ReasonPhrase)
+	for i, v := range byteString {
+		wire[7+i] = v
+	}
+	return
+}
