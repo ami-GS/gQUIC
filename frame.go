@@ -565,13 +565,13 @@ type RstStreamFrame struct {
 	ErrorCode QuicErrorCode
 }
 
-func NewRstStreamFrame(streamID uint32, offset uint64, error QuicErrorCode) *RstStreamFrame {
+func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QuicErrorCode) *RstStreamFrame {
 	fh := &FrameHeader{} //temporally
 	rstStreamFrame := &RstStreamFrame{fh,
 		RstStreamFrameType,
 		streamID,
 		offset,
-		error,
+		errorCode,
 	}
 	return rstStream
 }
