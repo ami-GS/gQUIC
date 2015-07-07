@@ -16,7 +16,7 @@ const (
 	CongestionFeedbackFrameType = 0x20
 )
 
-type PublicFlagType uint8
+type PublicFlagType byte
 
 const (
 	QUIC_VERSION              PublicFlagType = 0x01
@@ -32,7 +32,7 @@ const (
 	RESERVED                                 = 0xc0
 )
 
-type PrivateFlagType uint8
+type PrivateFlagType byte
 
 const (
 	FLAG_ENTROPY   PrivateFlagType = 0x01
@@ -78,7 +78,7 @@ type FrameHeader struct {
 	FEC            byte
 }
 
-func NewFrameHeader(publicFlags byte, connectionID uint64, version uint32, sequenceNumber uint64, privateFlags, fec byte) *FrameHeader {
+func NewFrameHeader(publicFlags PublicFlagType, connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *FrameHeader {
 	fh := &FrameHeader{
 		publicFlags,
 		connectionID,
@@ -92,7 +92,7 @@ func NewFrameHeader(publicFlags byte, connectionID uint64, version uint32, seque
 
 func (fh *FrameHeader) Parse(data []byte) (err error) {
 	index := 0
-	fh.PublicFlags = data[index]
+	fh.PublicFlags = PublicFlagType(data[index])
 
 	if fh.PublicFlags&0x0c == 0x0c {
 		fh.ConnectionID = uint64(data[1]<<56 | data[2]<<48 | data[3]<<40 | data[4]<<32 | data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
@@ -128,7 +128,7 @@ func (fh *FrameHeader) Parse(data []byte) (err error) {
 		index += 1
 	}
 
-	fh.PrivateFlags = data[index]
+	fh.PrivateFlags = PrivateFlagType(data[index])
 
 	// TODO: parse FEC
 	return
@@ -181,7 +181,7 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 	}
 	index += sequenceNumberLen
 
-	wire[index] = fh.PrivateFlags
+	wire[index] = byte(fh.PrivateFlags)
 
 	if fecLen > 0 {
 		wire[index+1] = fh.FEC
