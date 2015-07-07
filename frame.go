@@ -16,28 +16,28 @@ const (
 	CongestionFeedbackFrameType = 0x20
 )
 
-type PublicFlags uint8
+type PublicFlagType uint8
 
 const (
-	QUIC_VERSION              PublicFlags = 0x01
-	PUBLIC_RESET                          = 0x02
-	CONTAIN_CONNECTION_ID_8               = 0x0c
-	CONTAIN_CONNECTION_ID_4               = 0x08
-	CONTAIN_CONNECTION_ID_1               = 0x04
-	OMIT_CONNECTION_ID                    = 0x00
-	CONTAIN_SEQUENCE_NUMBER_6             = 0x30
-	CONTAIN_SEQUENCE_NUMBER_4             = 0x20
-	CONTAIN_SEQUENCE_NUMBER_2             = 0x10
-	CONTAIN_SEQUENCE_NUMBER_1             = 0x00
-	RESERVED                              = 0xc0
+	QUIC_VERSION              PublicFlagType = 0x01
+	PUBLIC_RESET                             = 0x02
+	CONTAIN_CONNECTION_ID_8                  = 0x0c
+	CONTAIN_CONNECTION_ID_4                  = 0x08
+	CONTAIN_CONNECTION_ID_1                  = 0x04
+	OMIT_CONNECTION_ID                       = 0x00
+	CONTAIN_SEQUENCE_NUMBER_6                = 0x30
+	CONTAIN_SEQUENCE_NUMBER_4                = 0x20
+	CONTAIN_SEQUENCE_NUMBER_2                = 0x10
+	CONTAIN_SEQUENCE_NUMBER_1                = 0x00
+	RESERVED                                 = 0xc0
 )
 
-type PrivateFlags uint8
+type PrivateFlagType uint8
 
 const (
-	FLAG_ENTROPY   PrivateFlags = 0x01
-	FLAG_FEC_GROUP              = 0x02
-	FLAG_FEC                    = 0x03
+	FLAG_ENTROPY   PrivateFlagType = 0x01
+	FLAG_FEC_GROUP                 = 0x02
+	FLAG_FEC                       = 0x03
 )
 
 type QuicErrorCode uint32
@@ -70,11 +70,11 @@ const (
 */
 
 type FrameHeader struct {
-	PublicFlags    byte
+	PublicFlags    PublicFlagType
 	ConnectionID   uint64
 	Version        uint32
 	SequenceNumber uint64
-	PrivateFlags   byte
+	PrivateFlags   PrivateFlagType
 	FEC            byte
 }
 
