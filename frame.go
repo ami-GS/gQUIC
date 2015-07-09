@@ -39,7 +39,7 @@ type PrivateFlagType byte
 const (
 	FLAG_ENTROPY   PrivateFlagType = 0x01
 	FLAG_FEC_GROUP                 = 0x02
-	FLAG_FEC                       = 0x03
+	FLAG_FEC                       = 0x04
 )
 
 type QuicErrorCode uint32
