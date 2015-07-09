@@ -19,17 +19,19 @@ const (
 type PublicFlagType byte
 
 const (
-	QUIC_VERSION              PublicFlagType = 0x01
-	PUBLIC_RESET                             = 0x02
-	CONTAIN_CONNECTION_ID_8                  = 0x0c
-	CONTAIN_CONNECTION_ID_4                  = 0x08
-	CONTAIN_CONNECTION_ID_1                  = 0x04
-	OMIT_CONNECTION_ID                       = 0x00
-	CONTAIN_SEQUENCE_NUMBER_6                = 0x30
-	CONTAIN_SEQUENCE_NUMBER_4                = 0x20
-	CONTAIN_SEQUENCE_NUMBER_2                = 0x10
-	CONTAIN_SEQUENCE_NUMBER_1                = 0x00
-	RESERVED                                 = 0xc0
+	QUIC_VERSION                PublicFlagType = 0x01
+	PUBLIC_RESET                               = 0x02
+	CONNECTION_ID_LENGTH_MASK                  = 0x0c
+	CONNECTION_ID_LENGTH_8                     = 0x0c
+	CONNECTION_ID_LENGTH_4                     = 0x08
+	CONNECTION_ID_LENGTH_1                     = 0x04
+	OMIT_CONNECTION_ID                         = 0x00
+	SEQUENCE_NUMBER_LENGTH_MASK                = 0x30
+	SEQUENCE_NUMBER_LENGTH_6                   = 0x30
+	SEQUENCE_NUMBER_LENGTH_4                   = 0x20
+	SEQUENCE_NUMBER_LENGTH_2                   = 0x10
+	SEQUENCE_NUMBER_LENGTH_1                   = 0x00
+	RESERVED                                   = 0xc0
 )
 
 type PrivateFlagType byte
@@ -94,36 +96,39 @@ func (fh *FrameHeader) Parse(data []byte) (err error) {
 	index := 0
 	fh.PublicFlags = PublicFlagType(data[index])
 
-	if fh.PublicFlags&0x0c == 0x0c {
+	switch fh.PublicFlags & CONNECTION_ID_LENGTH_MASK {
+	case CONNECTION_ID_LENGTH_8:
 		fh.ConnectionID = uint64(data[1]<<56 | data[2]<<48 | data[3]<<40 | data[4]<<32 | data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
 		index = 9
-	} else if fh.PublicFlags&0x08 == 0x08 {
+	case CONNECTION_ID_LENGTH_4:
 		fh.ConnectionID = uint64(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 		index = 5
-	} else if fh.PublicFlags&0x04 == 0x04 {
+	case CONNECTION_ID_LENGTH_1:
 		fh.ConnectionID = uint64(data[1])
 		index = 2
-	} else {
+	case OMIT_CONNECTION_ID:
 		fh.ConnectionID = 0 // omitted
 		index = 1
+
 	}
 
-	if fh.PublicFlags&0x01 == 0x01 {
+	if fh.PublicFlags&QUIC_VERSION == QUIC_VERSION {
 		fh.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
 		index += 4
 	}
 
 	// TODO: parse sequence number
-	if fh.PublicFlags&0x30 == 0x30 {
+	switch fh.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
+	case SEQUENCE_NUMBER_LENGTH_6:
 		fh.SequenceNumber = uint64(data[index]<<40 | data[index+1]<<32 | data[index+2]<<24 | data[index+3]<<16 | data[index+4]<<8 | data[index+5])
 		index += 6
-	} else if fh.PublicFlags&0x20 == 0x20 {
+	case SEQUENCE_NUMBER_LENGTH_4:
 		fh.SequenceNumber = uint64(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
 		index += 4
-	} else if fh.PublicFlags&0x10 == 0x10 {
+	case SEQUENCE_NUMBER_LENGTH_2:
 		fh.SequenceNumber = uint64(data[index]<<8 | data[index+1])
 		index += 2
-	} else if fh.PublicFlags&0x00 == 0x00 {
+	case SEQUENCE_NUMBER_LENGTH_1:
 		fh.SequenceNumber = uint64(data[index])
 		index += 1
 	}
@@ -137,12 +142,15 @@ func (fh *FrameHeader) Parse(data []byte) (err error) {
 func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 	// confirm variable length
 	connectionIDLen := 0
-	if fh.PublicFlags&0x0c == 0x0c {
+	switch fh.PublicFlags & CONNECTION_ID_LENGTH_MASK {
+	case CONNECTION_ID_LENGTH_8:
 		connectionIDLen = 8
-	} else if fh.PublicFlags&0x08 == 0x08 {
+	case CONNECTION_ID_LENGTH_4:
 		connectionIDLen = 4
-	} else if fh.PublicFlags&0x04 == 0x04 {
+	case CONNECTION_ID_LENGTH_1:
 		connectionIDLen = 1
+	case OMIT_CONNECTION_ID:
+		//pass
 	}
 
 	versionLen := 0
@@ -151,12 +159,15 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 	}
 
 	sequenceNumberLen := 1
-	if fh.PublicFlags&0x30 == 0x30 {
+	switch fh.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
+	case SEQUENCE_NUMBER_LENGTH_6:
 		sequenceNumberLen = 6
-	} else if fh.PublicFlags&0x20 == 0x20 {
+	case SEQUENCE_NUMBER_LENGTH_4:
 		sequenceNumberLen = 4
-	} else if fh.PublicFlags&0x10 == 0x10 {
+	case SEQUENCE_NUMBER_LENGTH_2:
 		sequenceNumberLen = 2
+	case SEQUENCE_NUMBER_LENGTH_1:
+		//pass
 	}
 
 	// deal with FEC part
