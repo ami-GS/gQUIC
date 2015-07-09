@@ -134,8 +134,16 @@ func (fh *FrameHeader) Parse(data []byte) (err error) {
 	}
 
 	fh.PrivateFlags = PrivateFlagType(data[index])
+	if fh.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
+		// TODO: ?
+	}
+	if fh.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
+		fh.FEC = data[index]
+	}
+	if fh.PrivateFlags&FLAG_FEC == FLAG_FEC {
+		//TODO: FEC packet
+	}
 
-	// TODO: parse FEC
 	return
 }
 
@@ -171,7 +179,16 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 	}
 
 	// deal with FEC part
-	fecLen := 1 // temporaly
+	fecLen := 0
+	if fh.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
+		// TODO: ?
+	}
+	if fh.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
+		fecLen = 1
+	}
+	if fh.PrivateFlags&FLAG_FEC == FLAG_FEC {
+		//TODO: FEC packet
+	}
 
 	// pack to wire
 	wire = make([]byte, 1+connectionIDLen+versionLen+sequenceNumberLen+1+fecLen)
