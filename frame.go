@@ -6,7 +6,7 @@ const (
 	PaddingFrameType FrameType = iota
 	RstStreamFrameType
 	ConnectionCloseFrameType
-	GoawayFrameType
+	GoAwayFrameType
 	WindowUpdateFrameType
 	BlockedFrameType
 	StopWaitingFrameType
@@ -195,17 +195,17 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 	wire[0] = byte(fh.PublicFlags)
 	index := 1
 	for i := 0; i < connectionIDLen; i++ {
-		wire[index+i] = byte(fh.ConnectionID >> (8 * (connectionIDLen - i - 1)))
+		wire[index+i] = byte(fh.ConnectionID >> byte(8*(connectionIDLen-i-1)))
 	}
 	index += connectionIDLen
 
 	for i := 0; i < versionLen; i++ {
-		wire[index+i] = byte(fh.Version >> (8 * (versionLen - i - 1)))
+		wire[index+i] = byte(fh.Version >> byte(8*(versionLen-i-1)))
 	}
 	index += versionLen
 
 	for i := 0; i < sequenceNumberLen; i++ {
-		wire[index+i] = byte(fh.SequenceNumber >> (8 * (sequenceNumberLen - i - 1)))
+		wire[index+i] = byte(fh.SequenceNumber >> byte(8*(sequenceNumberLen-i-1)))
 	}
 	index += sequenceNumberLen
 
@@ -269,7 +269,7 @@ func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16)
 	case offset <= 0xffffffffff:
 		frameType |= 0x10
 	case offset <= 0xffffffffffff:
-		frametype |= 0x14
+		frameType |= 0x14
 	case offset <= 0xffffffffffffff:
 		frameType |= 0x18
 	case offset <= 0xffffffffffffffff:
@@ -321,7 +321,6 @@ func (frame *StreamFrame) Parse(data []byte) (err error) {
 		index += 4
 	}
 
-	var offset uint64 = 0
 	switch {
 	case frame.Type&0x1c == 0x00:
 		frame.Offset = uint64(data[index])
@@ -334,27 +333,27 @@ func (frame *StreamFrame) Parse(data []byte) (err error) {
 		index += 3
 	case frame.Type&0x1c == 0x0c:
 		for i := 0; i < 4; i++ {
-			frame.Offset |= uint64(data[index+i] << (8 * (3 - i)))
+			frame.Offset |= uint64(data[index+i] << byte(8*(3-i)))
 		}
 		index += 4
 	case frame.Type&0x1c == 0x10:
 		for i := 0; i < 5; i++ {
-			frame.Offset |= uint64(data[index+i] << (8 * (4 - i)))
+			frame.Offset |= uint64(data[index+i] << byte(8*(4-i)))
 		}
 		index += 5
 	case frame.Type&0x1c == 0x14:
 		for i := 0; i < 6; i++ {
-			frame.Offset |= uint64(data[index+i] << (8 * (5 - i)))
+			frame.Offset |= uint64(data[index+i] << byte(8*(5-i)))
 		}
 		index += 6
 	case frame.Type&0x1c == 0x18:
 		for i := 0; i < 7; i++ {
-			frame.Offset |= uint64(data[index+i] << (8 * (6 - i)))
+			frame.Offset |= uint64(data[index+i] << byte(8*(6-i)))
 		}
 		index += 7
 	case frame.Type&0x1c == 0x1c:
 		for i := 0; i < 8; i++ {
-			frame.Offset |= uint64(data[index+i] << (8 * (7 - i)))
+			frame.Offset |= uint64(data[index+i] << byte(8*(7-i)))
 		}
 		index += 8
 	}
@@ -369,14 +368,14 @@ func (frame *StreamFrame) Parse(data []byte) (err error) {
 
 func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	// data length's length
-	DLEN := (frame.Type & 0x20 >> 5) * 2
+	DLEN := int((frame.Type & 0x20 >> 5) * 2)
 
 	// streamID length
-	SLEN := (frame.Type & 0x03) + 1
+	SLEN := int((frame.Type & 0x03) + 1)
 
 	// offset length
-	OLEN := (frame.Type & 0x1c >> 2)
-	if tmp > 0 {
+	OLEN := int((frame.Type & 0x1c >> 2))
+	if OLEN > 0 {
 		OLEN += 1
 	}
 
@@ -385,12 +384,12 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	index := 1
 
 	for i := 0; i < SLEN; i++ {
-		wire[index+i] = byte(frame.StreamID >> (8 * (SLEN - i - 1)))
+		wire[index+i] = byte(frame.StreamID >> byte(8*(SLEN-i-1)))
 	}
 	index += SLEN
 
 	for i := 0; i < OLEN; i++ {
-		wire[index+i] = byte(frame.Offset >> (8 * (OLEN - i - 1)))
+		wire[index+i] = byte(frame.Offset >> byte(8*(OLEN-i-1)))
 	}
 	index += OLEN
 
@@ -416,12 +415,12 @@ type StopWaitingFrame struct {
 	LeastUnackedDelta uint64
 }
 
-func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaiting {
+func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaitingFrame {
 	fh := &FrameHeader{} // temporaly
 	stopWaitingFrame := &StopWaitingFrame{fh,
 		StopWaitingFrameType,
 		sentEntropy,
-		leasetUnackedDelta,
+		leastUnackedDelta,
 	}
 	return stopWaitingFrame
 }
@@ -441,7 +440,7 @@ func (frame *StopWaitingFrame) Parse(data []byte) (err error) {
 		length = 2
 	}
 	for i := 0; i < length; i++ {
-		frame.LeastUnackedDelta |= uint64(data[2+i] << (8 * (length - i - 1)))
+		frame.LeastUnackedDelta |= uint64(data[2+i] << byte(8*(length-i-1)))
 	}
 
 	return
@@ -464,7 +463,7 @@ func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 	wire[1] = frame.SentEntropy
 
 	for i := 0; i < length; i++ {
-		wire[2+i] = byte(frame.LeastUnackedDelta >> (8 * (length - i - 1)))
+		wire[2+i] = byte(frame.LeastUnackedDelta >> byte(8*(length-i-1)))
 	}
 
 	return
@@ -485,20 +484,20 @@ type WindowUpdateFrame struct {
 }
 
 func NewWindowUpdateFrame(streamID uint32, offset uint64) *WindowUpdateFrame {
-	fh := &WindowUpdateFrame{} //temporaly
+	fh := &FrameHeader{} //temporaly
 	windowUpdateFrame := &WindowUpdateFrame{fh,
 		WindowUpdateFrameType,
 		streamID,
 		offset,
 	}
-	return
+	return windowUpdateFrame
 }
 
 func (frame *WindowUpdateFrame) Parse(data []byte) (err error) {
 	frame.Type = FrameType(data[0])
 	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	for i := 0; i < 8; i++ {
-		frame.Offset |= uint64(data[5+i] << (8 * (7 - i)))
+		frame.Offset |= uint64(data[5+i] << byte(8*(7-i)))
 	}
 	return
 }
@@ -507,10 +506,10 @@ func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 13)
 	wire[0] = byte(frame.Type)
 	for i := 0; i < 4; i++ {
-		wire[1+i] = uint32(frame.StreamID >> (8 * (3 - i)))
+		wire[1+i] = byte(frame.StreamID >> byte(8*(3-i)))
 	}
 	for i := 0; i < 8; i++ {
-		wire[5+i] = uint32(frame.Offset >> (8 * (7 - i)))
+		wire[5+i] = byte(frame.Offset >> byte(8*(7-i)))
 	}
 
 	return
@@ -547,7 +546,7 @@ func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 5)
 	wire[0] = byte(frame.Type)
 	for i := 0; i < 4; i++ {
-		wire[1+i] = uint32(frame.StreamID >> (8 * (3 - i)))
+		wire[1+i] = byte(frame.StreamID >> byte(8*(3-i)))
 	}
 
 	return
@@ -601,14 +600,14 @@ func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QuicErrorCode) 
 		offset,
 		errorCode,
 	}
-	return rstStream
+	return rstStreamFrame
 }
 
 func (frame *RstStreamFrame) Parse(data []byte) (err error) {
 	frame.Type = FrameType(data[0])
 	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	for i := 0; i < 8; i++ {
-		frame.Offset |= uint64(data[5+i] << (8 * (7 - i)))
+		frame.Offset |= uint64(data[5+i] << byte(8*(7-i)))
 	}
 	frame.ErrorCode = QuicErrorCode(data[13]<<24 | data[14]<<16 | data[15]<<8 | data[16])
 	return
@@ -618,13 +617,13 @@ func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 17)
 	wire[0] = byte(frame.Type)
 	for i := 0; i < 4; i++ {
-		wire[1+i] = byte(frame.StreamID >> (8 * (3 - i)))
+		wire[1+i] = byte(frame.StreamID >> byte(8*(3-i)))
 	}
 	for i := 0; i < 8; i++ {
-		wire[5+i] = byte(frame.Offset >> (8 * (7 - i)))
+		wire[5+i] = byte(frame.Offset >> byte(8*(7-i)))
 	}
 	for i := 0; i < 4; i++ {
-		wire[13+i] = byte(frame.ErrorCode >> (8 * (3 - i)))
+		wire[13+i] = byte(frame.ErrorCode >> byte(8*(3-i)))
 	}
 	return
 }
@@ -661,7 +660,7 @@ func (frame *PingFrame) GetWire() (wire []byte, err error) {
 */
 
 type ConnectionCloseFrame struct {
-	*FrameType
+	*FrameHeader
 	Type               FrameType
 	ErrorCode          QuicErrorCode
 	ReasonPhraseLength uint16
@@ -680,7 +679,7 @@ func NewConnectionCloseFrame(errorCode QuicErrorCode, reasonPhrase string) *Conn
 }
 
 func (frame *ConnectionCloseFrame) Parse(data []byte) (err error) {
-	frame.Type = data[0]
+	frame.Type = FrameType(data[0])
 	frame.ErrorCode = QuicErrorCode(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	frame.ReasonPhraseLength = uint16(data[5]<<8 | data[6])
 	frame.ReasonPhrase = string(data[7 : 7+frame.ReasonPhraseLength])
@@ -691,7 +690,7 @@ func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 7+frame.ReasonPhraseLength)
 	wire[0] = byte(frame.Type)
 	for i := 0; i < 4; i++ {
-		wire[1+i] = byte(frame.ErrorCode >> (8 * (3 - i)))
+		wire[1+i] = byte(frame.ErrorCode >> byte(8*(3-i)))
 	}
 	wire[5] = byte(frame.ReasonPhraseLength >> 8)
 	wire[6] = byte(frame.ReasonPhraseLength)
@@ -749,10 +748,10 @@ func (frame *GoAwayFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 11+frame.ReasonPhraseLength)
 	wire[0] = byte(frame.Type)
 	for i := 0; i < 4; i++ {
-		wire[1+i] = byte(frame.ErrorCode >> (8 * (3 - i)))
+		wire[1+i] = byte(frame.ErrorCode >> byte(8*(3-i)))
 	}
 	for i := 0; i < 4; i++ {
-		wire[5+i] = byte(frame.LastGoodStreamID >> (8 * (3 - i)))
+		wire[5+i] = byte(frame.LastGoodStreamID >> byte(8*(3-i)))
 	}
 
 	wire[9] = byte(frame.ReasonPhraseLength >> 8)
