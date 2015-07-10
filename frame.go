@@ -82,12 +82,12 @@ type FrameHeader struct {
 
 func NewFrameHeader(publicFlags PublicFlagType, connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *FrameHeader {
 	fh := &FrameHeader{
-		publicFlags,
-		connectionID,
-		version,
-		sequenceNumber,
-		privateFlags,
-		fec,
+		PublicFlags:    publicFlags,
+		ConnectionID:   connectionID,
+		Version:        version,
+		SequenceNumber: sequenceNumber,
+		PrivateFlags:   privateFlags,
+		FEC:            fec,
 	}
 	return fh
 }
@@ -290,11 +290,12 @@ func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16)
 
 	//fh := NewFrameHeader()
 	fh := &FrameHeader{} //temporaly
-	streamFrame := &StreamFrame{fh,
-		frameType,
-		streamID,
-		offset,
-		dataLength,
+	streamFrame := &StreamFrame{
+		FrameHeader: fh,
+		Type:        frameType,
+		StreamID:    streamID,
+		Offset:      offset,
+		DataLength:  dataLength,
 	}
 	return streamFrame
 }
@@ -417,10 +418,11 @@ type StopWaitingFrame struct {
 
 func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaitingFrame {
 	fh := &FrameHeader{} // temporaly
-	stopWaitingFrame := &StopWaitingFrame{fh,
-		StopWaitingFrameType,
-		sentEntropy,
-		leastUnackedDelta,
+	stopWaitingFrame := &StopWaitingFrame{
+		FrameHeader:       fh,
+		Type:              StopWaitingFrameType,
+		SentEntropy:       sentEntropy,
+		LeastUnackedDelta: leastUnackedDelta,
 	}
 	return stopWaitingFrame
 }
@@ -485,10 +487,11 @@ type WindowUpdateFrame struct {
 
 func NewWindowUpdateFrame(streamID uint32, offset uint64) *WindowUpdateFrame {
 	fh := &FrameHeader{} //temporaly
-	windowUpdateFrame := &WindowUpdateFrame{fh,
-		WindowUpdateFrameType,
-		streamID,
-		offset,
+	windowUpdateFrame := &WindowUpdateFrame{
+		FrameHeader: fh,
+		Type:        WindowUpdateFrameType,
+		StreamID:    streamID,
+		Offset:      offset,
 	}
 	return windowUpdateFrame
 }
@@ -529,9 +532,10 @@ type BlockedFrame struct {
 
 func NewBlockedFrame(streamID uint32) *BlockedFrame {
 	fh := &FrameHeader{} //temporaly
-	blockedFrame := &BlockedFrame{fh,
-		BlockedFrameType,
-		streamID,
+	blockedFrame := &BlockedFrame{
+		FrameHeader: fh,
+		Type:        BlockedFrameType,
+		StreamID:    streamID,
 	}
 	return blockedFrame
 }
@@ -560,8 +564,9 @@ type PaddingFrame struct {
 
 func NewPadding() *PaddingFrame {
 	fh := &FrameHeader{} //temporally
-	paddingFrame := &PaddingFrame{fh,
-		PaddingFrameType,
+	paddingFrame := &PaddingFrame{
+		FrameHeader: fh,
+		Type:        PaddingFrameType,
 	}
 	return paddingFrame
 }
@@ -594,11 +599,12 @@ type RstStreamFrame struct {
 
 func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QuicErrorCode) *RstStreamFrame {
 	fh := &FrameHeader{} //temporally
-	rstStreamFrame := &RstStreamFrame{fh,
-		RstStreamFrameType,
-		streamID,
-		offset,
-		errorCode,
+	rstStreamFrame := &RstStreamFrame{
+		FrameHeader: fh,
+		Type:        RstStreamFrameType,
+		StreamID:    streamID,
+		Offset:      offset,
+		ErrorCode:   errorCode,
 	}
 	return rstStreamFrame
 }
@@ -635,8 +641,9 @@ type PingFrame struct {
 
 func NewPingFrame() *PingFrame {
 	fh := &FrameHeader{} //temporally
-	pingFrame := &PingFrame{fh,
-		PingFrameType,
+	pingFrame := &PingFrame{
+		FrameHeader: fh,
+		Type:        PingFrameType,
 	}
 	return pingFrame
 }
@@ -669,11 +676,12 @@ type ConnectionCloseFrame struct {
 
 func NewConnectionCloseFrame(errorCode QuicErrorCode, reasonPhrase string) *ConnectionCloseFrame {
 	fh := &FrameHeader{} //temporally
-	connectionCloseFrame := &ConnectionCloseFrame{fh,
-		ConnectionCloseFrameType,
-		errorCode,
-		uint16(len(reasonPhrase)), // TODO: cut if the length is over uint16
-		reasonPhrase,
+	connectionCloseFrame := &ConnectionCloseFrame{
+		FrameHeader:        fh,
+		Type:               ConnectionCloseFrameType,
+		ErrorCode:          errorCode,
+		ReasonPhraseLength: uint16(len(reasonPhrase)), // TODO: cut if the length is over uint16
+		ReasonPhrase:       reasonPhrase,
 	}
 	return connectionCloseFrame
 }
@@ -725,12 +733,13 @@ type GoAwayFrame struct {
 
 func NewGoAwayFrame(errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
 	fh := &FrameHeader{} // temporally
-	goAwayFrame := &GoAwayFrame{fh,
-		GoAwayFrameType,
-		errorCode,
-		lastGoodStreamID,
-		uint16(len(reasonPhrase)),
-		reasonPhrase,
+	goAwayFrame := &GoAwayFrame{
+		FrameHeader:        fh,
+		Type:               GoAwayFrameType,
+		ErrorCode:          errorCode,
+		LastGoodStreamID:   lastGoodStreamID,
+		ReasonPhraseLength: uint16(len(reasonPhrase)),
+		ReasonPhrase:       reasonPhrase,
 	}
 	return goAwayFrame
 }
