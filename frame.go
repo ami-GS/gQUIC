@@ -402,6 +402,97 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 }
 
 /*
+      0        1                           N
+ +--------+--------+---------------------------------------------------+
+ |Type (8)|Received|    Largest Observed (8, 16, 32, or 48 bits)       |
+ |        |Entropy |                     (variable length)             |
+ +--------+--------+---------------------------------------------------+
+    N+1       N+2      N+3      N+4                   N+8
+ +--------+--------+---------+--------+--------------------------------+
+ |Largest Observed |   Num   | Delta  |  Time Since Largest Observed   |
+ | Delta Time (16) |Timestamp|Largest |                                |
+ |        |        |   (8)   |Observed|                                |
+ +--------+--------+---------+--------+--------------------------------+
+    N+9         N+11 - X
+ +--------+------------------+
+ | Delta  |       Time       |
+ |Largest |  Since Previous  |
+ |Observed|Timestamp (Repeat)|
+ +--------+------------------+
+     X                        X+1 - Y                           Y+1
+ +--------+-------------------------------------------------+--------+
+ | Number |    Missing Packet Sequence Number Delta         | Range  |
+ | Ranges | (repeats Number Ranges times with Range Length) | Length |
+ | (opt)  |                                                 |(Repeat)|
+ +--------+-------------------------------------------------+--------+
+     Y+2                       Y+3 - Z
+ +--------+-----------------------------------------------------+
+ | Number |       Revived Packet  (8, 16, 32, or 48 bits)       |
+ | Revived|       Sequence Number (variable length)             |
+ | (opt)  |         (repeats Number Revied times)               |
+ +--------+-----------------------------------------------------+
+*/
+
+type AckFrame struct {
+	*FrameHeader
+	Type                             FrameType
+	RecievedEntropy                  byte
+	LargestObserved                  uint64
+	LargestObservedDeltaTime         float64 // this must be ufloat64?
+	NumTimestamp                     byte
+	DeltaLargestObserved             byte
+	TimeSinceLargestObserved         uint32
+	TimeSincePreviousTimestamp       uint16
+	NumRages                         byte
+	MissingPacketSequenceNumberDelta []byte //suspicious
+	RangeLength                      byte
+	NumberRevived                    byte
+	RevivedPacket                    uint64
+}
+
+func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
+	frameType := AckFrameType
+	// 'n' bit
+	if hasNACK {
+		frameType |= 0x20
+	}
+	// 't' bit
+	if isTruncate {
+		frameType |= 0x10
+	}
+
+	// 'll' bits
+	switch {
+	case largestObserved <= 0xff:
+		frameType |= 0x00
+	case largestObserved <= 0xffff:
+		frameType |= 0x04
+	case largestObserved <= 0xffffff:
+		frameType |= 0x08
+	case largestObserved <= 0xffffffff:
+		frameType |= 0x0c
+	}
+
+	// 'mm' bits
+	switch {
+	case missingDelta <= 0xff:
+		frameType |= 0x00
+	case missingDelta <= 0xffff:
+		frameType |= 0x04
+	case missingDelta <= 0xffffff:
+		frameType |= 0x08
+	case missingDelta <= 0xffffffff:
+		frameType |= 0x0c
+	}
+
+	fh := &FrameHeader{} //temporally
+	ackFrame := &AckFrame{
+		FrameHeader: fh,
+	}
+	return
+}
+
+/*
       0        1        2        3         4        5        6      7
  +--------+--------+--------+--------+--------+--------+-------+-------+
  |Type (8)|Sent    |   Least unacked delta (8, 16, 32, or 48 bits)     |
