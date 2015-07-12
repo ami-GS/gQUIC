@@ -1,5 +1,7 @@
 package quic
 
+const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '1'<<8 | '5') // temporally
+
 type FrameType uint8
 
 const (
@@ -19,7 +21,7 @@ const (
 type PublicFlagType byte
 
 const (
-	QUIC_VERSION                PublicFlagType = 0x01
+	CONTAIN_QUIC_VERSION        PublicFlagType = 0x01
 	PUBLIC_RESET                               = 0x02
 	CONNECTION_ID_LENGTH_MASK                  = 0x0c
 	CONNECTION_ID_LENGTH_8                     = 0x0c
@@ -80,7 +82,30 @@ type FrameHeader struct {
 	FEC            byte
 }
 
-func NewFrameHeader(publicFlags PublicFlagType, connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *FrameHeader {
+func NewFrameHeader(connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *FrameHeader {
+	var publicFlags PublicFlagType = 0x00
+	switch {
+	case connectionID <= 0:
+		publicFlags |= OMIT_CONNECTION_ID
+	case connectionID <= 0xff:
+		publicFlags |= CONNECTION_ID_LENGTH_1
+	case connectionID <= 0xffffffff:
+		publicFlags |= CONNECTION_ID_LENGTH_4
+	case connectionID <= 0xffffffffffffffff:
+		publicFlags |= CONNECTION_ID_LENGTH_8
+	}
+
+	switch {
+	case sequenceNumber <= 0xff:
+		publicFlags |= SEQUENCE_NUMBER_LENGTH_1
+	case sequenceNumber <= 0xffff:
+		publicFlags |= SEQUENCE_NUMBER_LENGTH_2
+	case sequenceNumber <= 0xffffffff:
+		publicFlags |= SEQUENCE_NUMBER_LENGTH_4
+	case sequenceNumber <= 0xffffffffffff:
+		publicFlags |= SEQUENCE_NUMBER_LENGTH_6
+	}
+
 	fh := &FrameHeader{
 		PublicFlags:    publicFlags,
 		ConnectionID:   connectionID,
@@ -112,7 +137,7 @@ func (fh *FrameHeader) Parse(data []byte) (err error) {
 
 	}
 
-	if fh.PublicFlags&QUIC_VERSION == QUIC_VERSION {
+	if fh.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
 		fh.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
 		index += 4
 	}
