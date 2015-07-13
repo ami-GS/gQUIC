@@ -1,7 +1,5 @@
 package quic
 
-const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '1'<<8 | '5') // temporally
-
 type FrameType uint8
 
 const (
@@ -303,7 +301,7 @@ func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64)
 	ackFrame := &AckFrame{
 		PacketHeader: ph,
 	}
-	return
+	return ackFrame
 }
 
 /*
