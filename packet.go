@@ -220,3 +220,46 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 
 	return
 }
+
+type VersionNegotiationPacket struct {
+	*PacketHeader
+	Version uint32 //?
+}
+
+/*
+   +--------+---...---+--------+---...---+
+   | Type   | Payload | Type   | Payload |
+   +--------+---...---+--------+---...---+
+*/
+type FramePacket struct {
+	*PacketHeader
+	Frames []Frame
+}
+
+/*
+   +-----...----+
+   | Redundancy |
+   +-----...----+
+*/
+type FECPacket struct {
+	*PacketHeader
+	Redundancy []byte
+}
+
+/*
+        0        1        2        3        4         8
+   +--------+--------+--------+--------+--------+--   --+
+   | Public |    Connection ID (64)                ...  | ->
+   |Flags(8)|                                           |
+   +--------+--------+--------+--------+--------+--   --+
+        9       10       11        12       13      14
+   +--------+--------+--------+--------+--------+--------+---
+   |      Quic Tag (32)                |  Tag value map      ... ->
+   |         (PRST)                    |  (variable length)
+   +--------+--------+--------+--------+--------+--------+---
+*/
+type PublicResetPacket struct {
+	*PacketHeader
+	QuicTag     uint32
+	TagValueMap uint64 // ?
+}
