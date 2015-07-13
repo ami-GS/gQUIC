@@ -53,7 +53,7 @@ const (
 
 )
 
-// Frame Header
+// Packet Header
 /*
 +--------+--------+--------+--------+--------+---    ---+
 | Public |    Connection ID (0, 8, 32, or 64)    ...    | ->
@@ -73,7 +73,7 @@ const (
 +--------+--------+--------+--------+--------+--------+--------+--------+
 */
 
-type FrameHeader struct {
+type PacketHeader struct {
 	PublicFlags    PublicFlagType
 	ConnectionID   uint64
 	Version        uint32
@@ -82,7 +82,7 @@ type FrameHeader struct {
 	FEC            byte
 }
 
-func NewFrameHeader(connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *FrameHeader {
+func NewPacketHeader(connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *PacketHeader {
 	var publicFlags PublicFlagType = 0x00
 	switch {
 	case connectionID <= 0:
@@ -92,6 +92,7 @@ func NewFrameHeader(connectionID uint64, version uint32, sequenceNumber uint64, 
 	case connectionID <= 0xffffffff:
 		publicFlags |= CONNECTION_ID_LENGTH_4
 	case connectionID <= 0xffffffffffffffff:
+		// This indicate public reset packet
 		publicFlags |= CONNECTION_ID_LENGTH_8
 	}
 
@@ -106,7 +107,11 @@ func NewFrameHeader(connectionID uint64, version uint32, sequenceNumber uint64, 
 		publicFlags |= SEQUENCE_NUMBER_LENGTH_6
 	}
 
-	fh := &FrameHeader{
+	// version negotiation packet is still considering?
+	// private flags == FLAG_FEC indicate FEC packet
+	// others indicate frame packet
+
+	ph := &PacketHeader{
 		PublicFlags:    publicFlags,
 		ConnectionID:   connectionID,
 		Version:        version,
@@ -114,68 +119,68 @@ func NewFrameHeader(connectionID uint64, version uint32, sequenceNumber uint64, 
 		PrivateFlags:   privateFlags,
 		FEC:            fec,
 	}
-	return fh
+	return ph
 }
 
-func (fh *FrameHeader) Parse(data []byte) (err error) {
+func (ph *PacketHeader) Parse(data []byte) (err error) {
 	index := 0
-	fh.PublicFlags = PublicFlagType(data[index])
+	ph.PublicFlags = PublicFlagType(data[index])
 
-	switch fh.PublicFlags & CONNECTION_ID_LENGTH_MASK {
+	switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
 	case CONNECTION_ID_LENGTH_8:
-		fh.ConnectionID = uint64(data[1]<<56 | data[2]<<48 | data[3]<<40 | data[4]<<32 | data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
+		ph.ConnectionID = uint64(data[1]<<56 | data[2]<<48 | data[3]<<40 | data[4]<<32 | data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
 		index = 9
 	case CONNECTION_ID_LENGTH_4:
-		fh.ConnectionID = uint64(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+		ph.ConnectionID = uint64(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 		index = 5
 	case CONNECTION_ID_LENGTH_1:
-		fh.ConnectionID = uint64(data[1])
+		ph.ConnectionID = uint64(data[1])
 		index = 2
 	case OMIT_CONNECTION_ID:
-		fh.ConnectionID = 0 // omitted
+		ph.ConnectionID = 0 // omitted
 		index = 1
 
 	}
 
-	if fh.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-		fh.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
+	if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
+		ph.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
 		index += 4
 	}
 
 	// TODO: parse sequence number
-	switch fh.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
+	switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
 	case SEQUENCE_NUMBER_LENGTH_6:
-		fh.SequenceNumber = uint64(data[index]<<40 | data[index+1]<<32 | data[index+2]<<24 | data[index+3]<<16 | data[index+4]<<8 | data[index+5])
+		ph.SequenceNumber = uint64(data[index]<<40 | data[index+1]<<32 | data[index+2]<<24 | data[index+3]<<16 | data[index+4]<<8 | data[index+5])
 		index += 6
 	case SEQUENCE_NUMBER_LENGTH_4:
-		fh.SequenceNumber = uint64(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
+		ph.SequenceNumber = uint64(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
 		index += 4
 	case SEQUENCE_NUMBER_LENGTH_2:
-		fh.SequenceNumber = uint64(data[index]<<8 | data[index+1])
+		ph.SequenceNumber = uint64(data[index]<<8 | data[index+1])
 		index += 2
 	case SEQUENCE_NUMBER_LENGTH_1:
-		fh.SequenceNumber = uint64(data[index])
+		ph.SequenceNumber = uint64(data[index])
 		index += 1
 	}
 
-	fh.PrivateFlags = PrivateFlagType(data[index])
-	if fh.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
+	ph.PrivateFlags = PrivateFlagType(data[index])
+	if ph.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
 		// TODO: ?
 	}
-	if fh.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
-		fh.FEC = data[index]
+	if ph.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
+		ph.FEC = data[index]
 	}
-	if fh.PrivateFlags&FLAG_FEC == FLAG_FEC {
+	if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
 		//TODO: FEC packet
 	}
 
 	return
 }
 
-func (fh *FrameHeader) GetWire() (wire []byte, err error) {
+func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	// confirm variable length
 	connectionIDLen := 0
-	switch fh.PublicFlags & CONNECTION_ID_LENGTH_MASK {
+	switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
 	case CONNECTION_ID_LENGTH_8:
 		connectionIDLen = 8
 	case CONNECTION_ID_LENGTH_4:
@@ -187,12 +192,12 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 	}
 
 	versionLen := 0
-	if fh.PublicFlags&0x01 > 0 {
+	if ph.PublicFlags&0x01 > 0 {
 		versionLen = 4
 	}
 
 	sequenceNumberLen := 1
-	switch fh.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
+	switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
 	case SEQUENCE_NUMBER_LENGTH_6:
 		sequenceNumberLen = 6
 	case SEQUENCE_NUMBER_LENGTH_4:
@@ -205,39 +210,39 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 
 	// deal with FEC part
 	fecLen := 0
-	if fh.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
+	if ph.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
 		// TODO: ?
 	}
-	if fh.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
+	if ph.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
 		fecLen = 1
 	}
-	if fh.PrivateFlags&FLAG_FEC == FLAG_FEC {
+	if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
 		//TODO: FEC packet
 	}
 
 	// pack to wire
 	wire = make([]byte, 1+connectionIDLen+versionLen+sequenceNumberLen+1+fecLen)
-	wire[0] = byte(fh.PublicFlags)
+	wire[0] = byte(ph.PublicFlags)
 	index := 1
 	for i := 0; i < connectionIDLen; i++ {
-		wire[index+i] = byte(fh.ConnectionID >> byte(8*(connectionIDLen-i-1)))
+		wire[index+i] = byte(ph.ConnectionID >> byte(8*(connectionIDLen-i-1)))
 	}
 	index += connectionIDLen
 
 	for i := 0; i < versionLen; i++ {
-		wire[index+i] = byte(fh.Version >> byte(8*(versionLen-i-1)))
+		wire[index+i] = byte(ph.Version >> byte(8*(versionLen-i-1)))
 	}
 	index += versionLen
 
 	for i := 0; i < sequenceNumberLen; i++ {
-		wire[index+i] = byte(fh.SequenceNumber >> byte(8*(sequenceNumberLen-i-1)))
+		wire[index+i] = byte(ph.SequenceNumber >> byte(8*(sequenceNumberLen-i-1)))
 	}
 	index += sequenceNumberLen
 
-	wire[index] = byte(fh.PrivateFlags)
+	wire[index] = byte(ph.PrivateFlags)
 
 	if fecLen > 0 {
-		wire[index+1] = fh.FEC
+		wire[index+1] = ph.FEC
 	}
 
 	return
@@ -264,7 +269,7 @@ func (fh *FrameHeader) GetWire() (wire []byte, err error) {
 */
 
 type StreamFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type       FrameType
 	StreamID   uint32
 	Offset     uint64
@@ -313,14 +318,14 @@ func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16)
 		frameType |= 0x03
 	}
 
-	//fh := NewFrameHeader()
-	fh := &FrameHeader{} //temporaly
+	//ph := NewPacketHeader()
+	ph := &PacketHeader{} //temporaly
 	streamFrame := &StreamFrame{
-		FrameHeader: fh,
-		Type:        frameType,
-		StreamID:    streamID,
-		Offset:      offset,
-		DataLength:  dataLength,
+		PacketHeader: ph,
+		Type:         frameType,
+		StreamID:     streamID,
+		Offset:       offset,
+		DataLength:   dataLength,
 	}
 	return streamFrame
 }
@@ -459,7 +464,7 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 */
 
 type AckFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type                             FrameType
 	RecievedEntropy                  byte
 	LargestObserved                  uint64
@@ -510,9 +515,9 @@ func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64)
 		frameType |= 0x0c
 	}
 
-	fh := &FrameHeader{} //temporally
+	ph := &PacketHeader{} //temporally
 	ackFrame := &AckFrame{
-		FrameHeader: fh,
+		PacketHeader: ph,
 	}
 	return
 }
@@ -526,16 +531,16 @@ func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64)
 */
 
 type StopWaitingFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type              FrameType
 	SentEntropy       byte
 	LeastUnackedDelta uint64
 }
 
 func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaitingFrame {
-	fh := &FrameHeader{} // temporaly
+	ph := &PacketHeader{} // temporaly
 	stopWaitingFrame := &StopWaitingFrame{
-		FrameHeader:       fh,
+		PacketHeader:      ph,
 		Type:              StopWaitingFrameType,
 		SentEntropy:       sentEntropy,
 		LeastUnackedDelta: leastUnackedDelta,
@@ -595,19 +600,19 @@ func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 */
 
 type WindowUpdateFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type     FrameType
 	StreamID uint32
 	Offset   uint64
 }
 
 func NewWindowUpdateFrame(streamID uint32, offset uint64) *WindowUpdateFrame {
-	fh := &FrameHeader{} //temporaly
+	ph := &PacketHeader{} //temporaly
 	windowUpdateFrame := &WindowUpdateFrame{
-		FrameHeader: fh,
-		Type:        WindowUpdateFrameType,
-		StreamID:    streamID,
-		Offset:      offset,
+		PacketHeader: ph,
+		Type:         WindowUpdateFrameType,
+		StreamID:     streamID,
+		Offset:       offset,
 	}
 	return windowUpdateFrame
 }
@@ -641,17 +646,17 @@ func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
  +--------+--------+--------+--------+--------+
 */
 type BlockedFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type     FrameType
 	StreamID uint32
 }
 
 func NewBlockedFrame(streamID uint32) *BlockedFrame {
-	fh := &FrameHeader{} //temporaly
+	ph := &PacketHeader{} //temporaly
 	blockedFrame := &BlockedFrame{
-		FrameHeader: fh,
-		Type:        BlockedFrameType,
-		StreamID:    streamID,
+		PacketHeader: ph,
+		Type:         BlockedFrameType,
+		StreamID:     streamID,
 	}
 	return blockedFrame
 }
@@ -674,15 +679,15 @@ func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 
 // CongestionFeedback
 type PaddingFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type FrameType
 }
 
 func NewPadding() *PaddingFrame {
-	fh := &FrameHeader{} //temporally
+	ph := &PacketHeader{} //temporally
 	paddingFrame := &PaddingFrame{
-		FrameHeader: fh,
-		Type:        PaddingFrameType,
+		PacketHeader: ph,
+		Type:         PaddingFrameType,
 	}
 	return paddingFrame
 }
@@ -706,7 +711,7 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 */
 
 type RstStreamFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type      FrameType
 	StreamID  uint32
 	Offset    uint64
@@ -714,13 +719,13 @@ type RstStreamFrame struct {
 }
 
 func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QuicErrorCode) *RstStreamFrame {
-	fh := &FrameHeader{} //temporally
+	ph := &PacketHeader{} //temporally
 	rstStreamFrame := &RstStreamFrame{
-		FrameHeader: fh,
-		Type:        RstStreamFrameType,
-		StreamID:    streamID,
-		Offset:      offset,
-		ErrorCode:   errorCode,
+		PacketHeader: ph,
+		Type:         RstStreamFrameType,
+		StreamID:     streamID,
+		Offset:       offset,
+		ErrorCode:    errorCode,
 	}
 	return rstStreamFrame
 }
@@ -751,15 +756,15 @@ func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 }
 
 type PingFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type FrameType
 }
 
 func NewPingFrame() *PingFrame {
-	fh := &FrameHeader{} //temporally
+	ph := &PacketHeader{} //temporally
 	pingFrame := &PingFrame{
-		FrameHeader: fh,
-		Type:        PingFrameType,
+		PacketHeader: ph,
+		Type:         PingFrameType,
 	}
 	return pingFrame
 }
@@ -783,7 +788,7 @@ func (frame *PingFrame) GetWire() (wire []byte, err error) {
 */
 
 type ConnectionCloseFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type               FrameType
 	ErrorCode          QuicErrorCode
 	ReasonPhraseLength uint16
@@ -791,9 +796,9 @@ type ConnectionCloseFrame struct {
 }
 
 func NewConnectionCloseFrame(errorCode QuicErrorCode, reasonPhrase string) *ConnectionCloseFrame {
-	fh := &FrameHeader{} //temporally
+	ph := &PacketHeader{} //temporally
 	connectionCloseFrame := &ConnectionCloseFrame{
-		FrameHeader:        fh,
+		PacketHeader:       ph,
 		Type:               ConnectionCloseFrameType,
 		ErrorCode:          errorCode,
 		ReasonPhraseLength: uint16(len(reasonPhrase)), // TODO: cut if the length is over uint16
@@ -839,7 +844,7 @@ func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 */
 
 type GoAwayFrame struct {
-	*FrameHeader
+	*PacketHeader
 	Type               FrameType
 	ErrorCode          QuicErrorCode
 	LastGoodStreamID   uint32
@@ -848,9 +853,9 @@ type GoAwayFrame struct {
 }
 
 func NewGoAwayFrame(errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
-	fh := &FrameHeader{} // temporally
+	ph := &PacketHeader{} // temporally
 	goAwayFrame := &GoAwayFrame{
-		FrameHeader:        fh,
+		PacketHeader:       ph,
 		Type:               GoAwayFrameType,
 		ErrorCode:          errorCode,
 		LastGoodStreamID:   lastGoodStreamID,
