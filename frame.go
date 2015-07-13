@@ -27,6 +27,11 @@ const (
 
 )
 
+type Frame interface {
+	Parse(data []byte) error
+	GetWire() ([]byte, error)
+}
+
 /*
     0        1       ...               SLEN
 +--------+--------+--------+--------+--------+
