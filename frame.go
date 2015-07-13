@@ -16,6 +16,29 @@ const (
 	CongestionFeedbackFrameType = 0x20
 )
 
+func (frameType FrameType) String() string {
+	names := []string{
+		"PADDING",
+		"RST_STREAM",
+		"CONNECTION_CLOSE",
+		"GOAWAY",
+		"WINDOW_UPDATE",
+		"BLOCKED",
+		"STOP_WAITING",
+		"PING",
+	}
+	switch {
+	case frameType&StreamFrameType == StreamFrameType:
+		return "STREAM"
+	case frameType&AckFrameType == AckFrameType:
+		return "ACK"
+	case frameType&CongestionFeedbackFrameType == CongestionFeedbackFrameType:
+		return "CONGESTION_FEEDBACK"
+	default:
+		return names[int(frameType)]
+	}
+}
+
 type QuicErrorCode uint32
 
 const (
