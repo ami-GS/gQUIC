@@ -142,52 +142,52 @@ func (frame *StreamFrame) Parse(data []byte) (err error) {
 	}
 
 	index := 1
-	switch {
-	case frame.Type&0x03 == 0x00:
+	switch frame.Type & 0x30 {
+	case 0x00:
 		frame.StreamID = uint32(data[1])
 		index += 1
-	case frame.Type&0x03 == 0x01:
+	case 0x01:
 		frame.StreamID = uint32(data[1]<<8 | data[2])
 		index += 2
-	case frame.Type&0x03 == 0x02:
+	case 0x02:
 		frame.StreamID = uint32(data[1]<<16 | data[2]<<8 | data[3])
 		index += 3
-	case frame.Type&0x03 == 0x03:
+	case 0x03:
 		frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 		index += 4
 	}
 
-	switch {
-	case frame.Type&0x1c == 0x00:
+	switch frame.Type & 0x1c {
+	case 0x00:
 		frame.Offset = uint64(data[index])
 		index += 1
-	case frame.Type&0x1c == 0x04:
+	case 0x04:
 		frame.Offset = uint64(data[index]<<8 | data[index+1])
 		index += 2
-	case frame.Type&0x1c == 0x08:
+	case 0x08:
 		frame.Offset = uint64(data[index]<<16 | data[index+1]<<8 | data[index+2])
 		index += 3
-	case frame.Type&0x1c == 0x0c:
+	case 0x0c:
 		for i := 0; i < 4; i++ {
 			frame.Offset |= uint64(data[index+i] << byte(8*(3-i)))
 		}
 		index += 4
-	case frame.Type&0x1c == 0x10:
+	case 0x10:
 		for i := 0; i < 5; i++ {
 			frame.Offset |= uint64(data[index+i] << byte(8*(4-i)))
 		}
 		index += 5
-	case frame.Type&0x1c == 0x14:
+	case 0x14:
 		for i := 0; i < 6; i++ {
 			frame.Offset |= uint64(data[index+i] << byte(8*(5-i)))
 		}
 		index += 6
-	case frame.Type&0x1c == 0x18:
+	case 0x18:
 		for i := 0; i < 7; i++ {
 			frame.Offset |= uint64(data[index+i] << byte(8*(6-i)))
 		}
 		index += 7
-	case frame.Type&0x1c == 0x1c:
+	case 0x1c:
 		for i := 0; i < 8; i++ {
 			frame.Offset |= uint64(data[index+i] << byte(8*(7-i)))
 		}
@@ -359,13 +359,15 @@ func (frame *StopWaitingFrame) Parse(data []byte) (err error) {
 
 	// the same length as the packet header's sequence number
 	length := 1
-	switch {
-	case frame.PublicFlags&0x30 == 0x30:
+	switch frame.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
+	case SEQUENCE_NUMBER_LENGTH_6:
 		length = 6
-	case frame.PublicFlags&0x20 == 0x20:
+	case SEQUENCE_NUMBER_LENGTH_4:
 		length = 4
-	case frame.PublicFlags&0x10 == 0x10:
+	case SEQUENCE_NUMBER_LENGTH_2:
 		length = 2
+	case SEQUENCE_NUMBER_LENGTH_1:
+		length = 1
 	}
 	for i := 0; i < length; i++ {
 		frame.LeastUnackedDelta |= uint64(data[2+i] << byte(8*(length-i-1)))
@@ -377,13 +379,15 @@ func (frame *StopWaitingFrame) Parse(data []byte) (err error) {
 func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 	// shold here be functionized?
 	length := 1
-	switch {
-	case frame.PublicFlags&0x30 == 0x30:
+	switch frame.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
+	case SEQUENCE_NUMBER_LENGTH_6:
 		length = 6
-	case frame.PublicFlags&0x20 == 0x20:
+	case SEQUENCE_NUMBER_LENGTH_4:
 		length = 4
-	case frame.PublicFlags&0x10 == 0x10:
+	case SEQUENCE_NUMBER_LENGTH_2:
 		length = 2
+	case SEQUENCE_NUMBER_LENGTH_1:
+		length = 1
 	}
 
 	wire = make([]byte, 2+length)
