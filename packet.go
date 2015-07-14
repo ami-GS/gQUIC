@@ -221,6 +221,11 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	return
 }
 
+func (ph *PacketHeader) String() (str string) {
+	str = "Packet Header" // temporally
+	return
+}
+
 type VersionNegotiationPacket struct {
 	*PacketHeader
 	Version uint32 //?
@@ -234,6 +239,15 @@ type VersionNegotiationPacket struct {
 type FramePacket struct {
 	*PacketHeader
 	Frames []Frame
+}
+
+func (packet *FramePacket) String() (str string) {
+	str = packet.PacketHeader.String()
+	str += "Frame Packet\n"
+	for _, frame := range Frames {
+		str += frame.String() + "\n"
+	}
+	return
 }
 
 /*

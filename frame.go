@@ -1,5 +1,9 @@
 package quic
 
+import (
+	"fmt"
+)
+
 type FrameType uint8
 
 const (
@@ -51,6 +55,7 @@ const (
 type Frame interface {
 	Parse(data []byte) error
 	GetWire() ([]byte, error)
+	String() string
 }
 
 /*
@@ -236,6 +241,12 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	return
 }
 
+func (frame *StreamFrame) String() (str string) {
+	str = fmt.Sprintf("STREAM\nStreamID : %d, Offset : %d, DataLength : %d",
+		frame.StreamID, frame.Offset, frame.DataLength)
+	return str
+}
+
 /*
       0        1                           N
  +--------+--------+---------------------------------------------------+
@@ -326,6 +337,10 @@ func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64)
 	}
 	return ackFrame
 }
+func (frame *AckFrame) String() (str string) {
+	str = fmt.Sprintf("ACK\n")
+	return str
+}
 
 /*
       0        1        2        3         4        5        6      7
@@ -401,6 +416,12 @@ func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 	return
 }
 
+func (frame *StopWaitingFrame) String() (str string) {
+	str = fmt.Sprintf("STOP WAITING\nSent Entropy : %d, Least unacked delta : %d",
+		frame.SentEntropy, frame.LeastUnackedDelta)
+	return str
+}
+
 /*
      0         1                 4        5                 12
  +--------+--------+-- ... --+-------+--------+-- ... --+-------+
@@ -448,6 +469,12 @@ func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
 	return
 }
 
+func (frame *WindowUpdateFrame) String() (str string) {
+	str = fmt.Sprintf("WINDOW UPDATE\nStreamID : %d, Offset : %d",
+		frame.StreamID, frame.Offset)
+	return str
+}
+
 /*
       0        1        2        3         4
  +--------+--------+--------+--------+--------+
@@ -486,6 +513,11 @@ func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 	return
 }
 
+func (frame *BlockedFrame) String() (str string) {
+	str = fmt.Sprintf("BLOCKED\nStreamID %d", frame.StreamID)
+	return str
+}
+
 // CongestionFeedback
 type PaddingFrame struct {
 	*PacketHeader
@@ -510,6 +542,10 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1)
 	wire[0] = byte(frame.Type)
 	return
+}
+func (frame *PaddingFrame) String() (str string) {
+	str = "PADDING\n"
+	return str
 }
 
 /*
@@ -564,6 +600,12 @@ func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 	return
 }
 
+func (frame *RstStreamFrame) String() (str string) {
+	str = fmt.Sprintf("RST STREAM\nStreamID : %d, Offset : %d, Error code : %d",
+		frame.StreamID, frame.Offset, frame.ErrorCode) // TODO: Error Code should be string
+	return str
+}
+
 type PingFrame struct {
 	*PacketHeader
 	Type FrameType
@@ -586,6 +628,11 @@ func (frame *PingFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1)
 	wire[0] = byte(frame.Type)
 	return
+}
+
+func (frame *PingFrame) String() (str string) {
+	str = fmt.Sprintf("PING\n")
+	return str
 }
 
 /*
@@ -638,6 +685,12 @@ func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 		wire[7+i] = v
 	}
 	return
+}
+
+func (frame *ConnectionCloseFrame) String() (str string) {
+	str = fmt.Sprintf("CONNECTION CLOSE\n Error code : %d, Reason length : %d\nReason : %s",
+		frame.ErrorCode, frame.ReasonPhraseLength, frame.ReasonPhrase)
+	return str
 }
 
 /*
@@ -702,4 +755,10 @@ func (frame *GoAwayFrame) GetWire() (wire []byte, err error) {
 	}
 
 	return
+}
+
+func (frame *GoAwayFrame) String() (str string) {
+	str = fmt.Sprintf("GOAWAY\n Error code : %d, LastGoodStreamID : %d, Reason length : %d\nReason : %s",
+		frame.ErrorCode, frame.LastGoodStreamID, frame.ReasonPhraseLength, frame.ReasonPhrase)
+	return str
 }
