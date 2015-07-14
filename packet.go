@@ -1,6 +1,6 @@
 package quic
 
-const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '1'<<8 | '5') // temporally
+const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
 
 type PublicFlagType byte
 
