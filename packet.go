@@ -241,6 +241,32 @@ type FramePacket struct {
 	Frames []Frame
 }
 
+func NewFramePacket() *FramePacket {
+	ph := &PacketHeader{} //temporally
+	packet := &FramePacket{
+		PacketHeader: ph,
+		Frames:       []Frame{},
+	}
+	return packet
+}
+
+func (packet *FramePacket) Parse(data []byte) (err error) {
+	// TODO : socket instance should be input as argument
+	//        for easily parse each frame
+	/*
+	typeBuffer := make([]byte, 1)
+		net.Read(typeBuffer)
+		switch FrameType(typeBuffer) {
+			case :
+		default:
+			if stream
+			ack
+			~~
+		}
+	*/
+	return
+}
+
 func (packet *FramePacket) String() (str string) {
 	str = packet.PacketHeader.String()
 	str += "Frame Packet\n"
@@ -279,6 +305,7 @@ type PublicResetPacket struct {
 }
 
 func NewPublicResetPacket(tag QuicTag, tagValue uint64) *PublicResetPacket {
+	//ph := NewPacketHeader(over 64 biy connectionID, 0?, PrivateFlags(0)?, 0?)
 	ph := &PacketHeader{} //temporally
 	packet := &PublicResetPacket{
 		PacketHeader: ph,
