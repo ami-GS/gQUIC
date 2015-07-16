@@ -79,14 +79,15 @@ type Frame interface {
 */
 
 type StreamFrame struct {
-	*PacketHeader
+	//*PacketHeader
+	*FramePacket
 	Type       FrameType
 	StreamID   uint32
 	Offset     uint64
 	DataLength uint16
 }
 
-func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16) *StreamFrame {
+func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint64, dataLength uint16) *StreamFrame {
 	var frameType FrameType = StreamFrameType
 	if fin {
 		frameType |= 0x40
@@ -129,13 +130,14 @@ func NewStreamFrame(fin bool, streamID uint32, offset uint64, dataLength uint16)
 	}
 
 	//ph := NewPacketHeader()
-	ph := &PacketHeader{} //temporaly
+	//ph := &PacketHeader{} //temporaly
 	streamFrame := &StreamFrame{
-		PacketHeader: ph,
-		Type:         frameType,
-		StreamID:     streamID,
-		Offset:       offset,
-		DataLength:   dataLength,
+		FramePacket: packet,
+		//	PacketHeader: ph,
+		Type:       frameType,
+		StreamID:   streamID,
+		Offset:     offset,
+		DataLength: dataLength,
 	}
 	return streamFrame
 }
@@ -280,7 +282,8 @@ func (frame *StreamFrame) String() (str string) {
 */
 
 type AckFrame struct {
-	*PacketHeader
+	//*PacketHeader
+	*FramePacket
 	Type                             FrameType
 	RecievedEntropy                  byte
 	LargestObserved                  uint64
@@ -296,7 +299,7 @@ type AckFrame struct {
 	RevivedPacket                    uint64
 }
 
-func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
+func NewAckFrame(packet *FramePacket, hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
 	frameType := AckFrameType
 	// 'n' bit
 	if hasNACK {
@@ -331,9 +334,10 @@ func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64)
 		frameType |= 0x0c
 	}
 
-	ph := &PacketHeader{} //temporally
+	//ph := &PacketHeader{} //temporally
 	ackFrame := &AckFrame{
-		PacketHeader: ph,
+		PacketFrame: packet,
+		//PacketHeader: ph,
 	}
 	return ackFrame
 }
@@ -351,16 +355,18 @@ func (frame *AckFrame) String() (str string) {
 */
 
 type StopWaitingFrame struct {
-	*PacketHeader
+	//*PacketHeader
+	*PacketFrame
 	Type              FrameType
 	SentEntropy       byte
 	LeastUnackedDelta uint64
 }
 
-func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaitingFrame {
+func NewStopWaitingFrame(packet *PacketFrame, sentEntropy byte, leastUnackedDelta uint64) *StopWaitingFrame {
 	ph := &PacketHeader{} // temporaly
 	stopWaitingFrame := &StopWaitingFrame{
-		PacketHeader:      ph,
+		PacketFrame: packet,
+		//PacketHeader:      ph,
 		Type:              StopWaitingFrameType,
 		SentEntropy:       sentEntropy,
 		LeastUnackedDelta: leastUnackedDelta,
@@ -430,19 +436,18 @@ func (frame *StopWaitingFrame) String() (str string) {
 */
 
 type WindowUpdateFrame struct {
-	*PacketHeader
+	*PacketFrame
 	Type     FrameType
 	StreamID uint32
 	Offset   uint64
 }
 
-func NewWindowUpdateFrame(streamID uint32, offset uint64) *WindowUpdateFrame {
-	ph := &PacketHeader{} //temporaly
+func NewWindowUpdateFrame(packet *PacketFrame, streamID uint32, offset uint64) *WindowUpdateFrame {
 	windowUpdateFrame := &WindowUpdateFrame{
-		PacketHeader: ph,
-		Type:         WindowUpdateFrameType,
-		StreamID:     streamID,
-		Offset:       offset,
+		PacketFrame: packet,
+		Type:        WindowUpdateFrameType,
+		StreamID:    streamID,
+		Offset:      offset,
 	}
 	return windowUpdateFrame
 }
@@ -482,17 +487,16 @@ func (frame *WindowUpdateFrame) String() (str string) {
  +--------+--------+--------+--------+--------+
 */
 type BlockedFrame struct {
-	*PacketHeader
+	*PacketFrame
 	Type     FrameType
 	StreamID uint32
 }
 
-func NewBlockedFrame(streamID uint32) *BlockedFrame {
-	ph := &PacketHeader{} //temporaly
+func NewBlockedFrame(packet *PacketFrame, streamID uint32) *BlockedFrame {
 	blockedFrame := &BlockedFrame{
-		PacketHeader: ph,
-		Type:         BlockedFrameType,
-		StreamID:     streamID,
+		PacketFrame: packet,
+		Type:        BlockedFrameType,
+		StreamID:    streamID,
 	}
 	return blockedFrame
 }
@@ -520,15 +524,14 @@ func (frame *BlockedFrame) String() (str string) {
 
 // CongestionFeedback
 type PaddingFrame struct {
-	*PacketHeader
+	*PacketFrame
 	Type FrameType
 }
 
 func NewPadding() *PaddingFrame {
-	ph := &PacketHeader{} //temporally
 	paddingFrame := &PaddingFrame{
-		PacketHeader: ph,
-		Type:         PaddingFrameType,
+		PacketFrame: packet,
+		Type:        PaddingFrameType,
 	}
 	return paddingFrame
 }
@@ -556,21 +559,20 @@ func (frame *PaddingFrame) String() (str string) {
 */
 
 type RstStreamFrame struct {
-	*PacketHeader
+	*PacketFrame
 	Type      FrameType
 	StreamID  uint32
 	Offset    uint64
 	ErrorCode QuicErrorCode
 }
 
-func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QuicErrorCode) *RstStreamFrame {
-	ph := &PacketHeader{} //temporally
+func NewRstStreamFrame(packet *PacketFrame, streamID uint32, offset uint64, errorCode QuicErrorCode) *RstStreamFrame {
 	rstStreamFrame := &RstStreamFrame{
-		PacketHeader: ph,
-		Type:         RstStreamFrameType,
-		StreamID:     streamID,
-		Offset:       offset,
-		ErrorCode:    errorCode,
+		PacketFrame: packet,
+		Type:        RstStreamFrameType,
+		StreamID:    streamID,
+		Offset:      offset,
+		ErrorCode:   errorCode,
 	}
 	return rstStreamFrame
 }
@@ -607,15 +609,14 @@ func (frame *RstStreamFrame) String() (str string) {
 }
 
 type PingFrame struct {
-	*PacketHeader
+	*PacketFrame
 	Type FrameType
 }
 
-func NewPingFrame() *PingFrame {
-	ph := &PacketHeader{} //temporally
+func NewPingFrame(packet *PacketFrame) *PingFrame {
 	pingFrame := &PingFrame{
-		PacketHeader: ph,
-		Type:         PingFrameType,
+		PacketFrame: packet,
+		Type:        PingFrameType,
 	}
 	return pingFrame
 }
@@ -644,17 +645,17 @@ func (frame *PingFrame) String() (str string) {
 */
 
 type ConnectionCloseFrame struct {
-	*PacketHeader
+	*PacketFrame
 	Type               FrameType
 	ErrorCode          QuicErrorCode
 	ReasonPhraseLength uint16
 	ReasonPhrase       string
 }
 
-func NewConnectionCloseFrame(errorCode QuicErrorCode, reasonPhrase string) *ConnectionCloseFrame {
-	ph := &PacketHeader{} //temporally
+func NewConnectionCloseFrame(packet *PacketFrame, errorCode QuicErrorCode, reasonPhrase string) *ConnectionCloseFrame {
+
 	connectionCloseFrame := &ConnectionCloseFrame{
-		PacketHeader:       ph,
+		PacketFrame:        packet,
 		Type:               ConnectionCloseFrameType,
 		ErrorCode:          errorCode,
 		ReasonPhraseLength: uint16(len(reasonPhrase)), // TODO: cut if the length is over uint16
@@ -706,7 +707,7 @@ func (frame *ConnectionCloseFrame) String() (str string) {
 */
 
 type GoAwayFrame struct {
-	*PacketHeader
+	*PacketFrame
 	Type               FrameType
 	ErrorCode          QuicErrorCode
 	LastGoodStreamID   uint32
@@ -714,10 +715,9 @@ type GoAwayFrame struct {
 	ReasonPhrase       string
 }
 
-func NewGoAwayFrame(errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
-	ph := &PacketHeader{} // temporally
+func NewGoAwayFrame(packet *PacketFrame, errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
 	goAwayFrame := &GoAwayFrame{
-		PacketHeader:       ph,
+		PacketFrame:        packet,
 		Type:               GoAwayFrameType,
 		ErrorCode:          errorCode,
 		LastGoodStreamID:   lastGoodStreamID,
