@@ -250,20 +250,39 @@ func NewFramePacket() *FramePacket {
 	return packet
 }
 
-func (packet *FramePacket) Parse(data []byte) (err error) {
-	// TODO : socket instance should be input as argument
-	//        for easily parse each frame
-	/*
-	typeBuffer := make([]byte, 1)
-		net.Read(typeBuffer)
-		switch FrameType(typeBuffer) {
-			case :
+func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
+	var frame Frame
+	for idx < len(data) {
+		switch FrameType(data[idx]) {
+		case PaddingFrameType:
+			frame = &PaddingFrame{}
+		case RstStreamFrameType:
+			frame = &RstStreamFrame{}
+		case ConnectionCloseFrameType:
+			frame = &ConnectionCloseFrame{}
+		case GoAwayFrameType:
+			frame = &GoAwayFrame{}
+		case WindowUpdateFrameType:
+			frame = &WindowUpdateFrame{}
+		case BlockedFrameType:
+			frame = &BlockedFrame{}
+		case StopWaitingFrameType:
+			frame = &StopWaitingFrame{}
+		case PingFrameType:
+			frame = &PingFrame{}
 		default:
-			if stream
-			ack
-			~~
+			if data[idx]&StreamFrameType == StreamFrameType {
+				frame = &StreamFrame{}
+			} else if data[idx]&AckFrameType == AckFrameType {
+				frame = &AckFrame{}
+			} else if data[idx]&CongestionFeedbackFrameType == CongestionFeedbackFrameType {
+				//frame = &CongestionFeedbackFrame{}
+			}
 		}
-	*/
+		nxt, _ := frame.Parse(data[idx:])
+		idx += nxt
+		packet.Frames = append(packet.Frames, frame)
+	}
 	return
 }
 
