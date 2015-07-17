@@ -53,7 +53,7 @@ const (
 )
 
 type Frame interface {
-	Parse(data []byte) error
+	Parse(data []byte) (int, error)
 	GetWire() ([]byte, error)
 	String() string
 }
@@ -138,68 +138,69 @@ func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint6
 	return streamFrame
 }
 
-func (frame *StreamFrame) Parse(data []byte) (err error) {
+func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 	frame.Type = FrameType(data[0])
 	if frame.Type&0x40 == 0x40 {
 		//TODO: fin
 	}
 
-	index := 1
+	length = 1
 	switch frame.Type & 0x30 {
 	case 0x00:
 		frame.StreamID = uint32(data[1])
-		index += 1
+		length += 1
 	case 0x01:
 		frame.StreamID = uint32(data[1]<<8 | data[2])
-		index += 2
+		length += 2
 	case 0x02:
 		frame.StreamID = uint32(data[1]<<16 | data[2]<<8 | data[3])
-		index += 3
+		length += 3
 	case 0x03:
 		frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
-		index += 4
+		length += 4
 	}
 
 	switch frame.Type & 0x1c {
 	case 0x00:
-		frame.Offset = uint64(data[index])
-		index += 1
+		frame.Offset = uint64(data[length])
+		length += 1
 	case 0x04:
-		frame.Offset = uint64(data[index]<<8 | data[index+1])
-		index += 2
+		frame.Offset = uint64(data[length]<<8 | data[length+1])
+		length += 2
 	case 0x08:
-		frame.Offset = uint64(data[index]<<16 | data[index+1]<<8 | data[index+2])
-		index += 3
+		frame.Offset = uint64(data[length]<<16 | data[length+1]<<8 | data[length+2])
+		length += 3
 	case 0x0c:
 		for i := 0; i < 4; i++ {
-			frame.Offset |= uint64(data[index+i] << byte(8*(3-i)))
+			frame.Offset |= uint64(data[length+i] << byte(8*(3-i)))
 		}
-		index += 4
+		length += 4
 	case 0x10:
 		for i := 0; i < 5; i++ {
-			frame.Offset |= uint64(data[index+i] << byte(8*(4-i)))
+			frame.Offset |= uint64(data[length+i] << byte(8*(4-i)))
 		}
-		index += 5
+		length += 5
 	case 0x14:
 		for i := 0; i < 6; i++ {
-			frame.Offset |= uint64(data[index+i] << byte(8*(5-i)))
+			frame.Offset |= uint64(data[length+i] << byte(8*(5-i)))
 		}
-		index += 6
+		length += 6
 	case 0x18:
 		for i := 0; i < 7; i++ {
-			frame.Offset |= uint64(data[index+i] << byte(8*(6-i)))
+			frame.Offset |= uint64(data[length+i] << byte(8*(6-i)))
 		}
-		index += 7
+		length += 7
 	case 0x1c:
 		for i := 0; i < 8; i++ {
-			frame.Offset |= uint64(data[index+i] << byte(8*(7-i)))
+			frame.Offset |= uint64(data[length+i] << byte(8*(7-i)))
 		}
-		index += 8
+		length += 8
 	}
 
 	frame.DataLength = 0 // as is not contained. right?
 	if frame.Type&0x20 == 0x20 {
-		frame.DataLength = uint16(data[index]<<8 | data[index+1])
+		frame.DataLength = uint16(data[length]<<8 | data[length+1])
+		length += 2
 	}
 
 	return
@@ -364,12 +365,11 @@ func NewStopWaitingFrame(packet *FramePacket, sentEntropy byte, leastUnackedDelt
 	return stopWaitingFrame
 }
 
-func (frame *StopWaitingFrame) Parse(data []byte) (err error) {
+func (frame *StopWaitingFrame) Parse(data []byte) (length int, err error) {
 	frame.Type = FrameType(data[0])
 	frame.SentEntropy = data[1]
 
 	// the same length as the packet header's sequence number
-	length := 1
 	switch frame.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
 	case SEQUENCE_NUMBER_LENGTH_6:
 		length = 6
@@ -384,7 +384,7 @@ func (frame *StopWaitingFrame) Parse(data []byte) (err error) {
 		frame.LeastUnackedDelta |= uint64(data[2+i] << byte(8*(length-i-1)))
 	}
 
-	return
+	return length + 1, err
 }
 
 func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
@@ -442,7 +442,8 @@ func NewWindowUpdateFrame(packet *FramePacket, streamID uint32, offset uint64) *
 	return windowUpdateFrame
 }
 
-func (frame *WindowUpdateFrame) Parse(data []byte) (err error) {
+func (frame *WindowUpdateFrame) Parse(data []byte) (length int, err error) {
+	length = 13
 	frame.Type = FrameType(data[0])
 	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	for i := 0; i < 8; i++ {
@@ -491,7 +492,8 @@ func NewBlockedFrame(packet *FramePacket, streamID uint32) *BlockedFrame {
 	return blockedFrame
 }
 
-func (frame *BlockedFrame) Parse(data []byte) (err error) {
+func (frame *BlockedFrame) Parse(data []byte) (length int, err error) {
+	length = 5
 	frame.Type = FrameType(data[0])
 	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	return
@@ -526,7 +528,8 @@ func NewPadding(packet *FramePacket) *PaddingFrame {
 	return paddingFrame
 }
 
-func (frame *PaddingFrame) Parse(data []byte) (err error) {
+func (frame *PaddingFrame) Parse(data []byte) (length int, err error) {
+	length = 1
 	// TODO: do something?
 	return
 }
@@ -567,7 +570,8 @@ func NewRstStreamFrame(packet *FramePacket, streamID uint32, offset uint64, erro
 	return rstStreamFrame
 }
 
-func (frame *RstStreamFrame) Parse(data []byte) (err error) {
+func (frame *RstStreamFrame) Parse(data []byte) (length int, err error) {
+	length = 17
 	frame.Type = FrameType(data[0])
 	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	for i := 0; i < 8; i++ {
@@ -611,7 +615,8 @@ func NewPingFrame(packet *FramePacket) *PingFrame {
 	return pingFrame
 }
 
-func (frame *PingFrame) Parse(data []byte) (err error) {
+func (frame *PingFrame) Parse(data []byte) (length int, err error) {
+	length = 1
 	frame.Type = FrameType(data[0])
 	return
 }
@@ -654,11 +659,12 @@ func NewConnectionCloseFrame(packet *FramePacket, errorCode QuicErrorCode, reaso
 	return connectionCloseFrame
 }
 
-func (frame *ConnectionCloseFrame) Parse(data []byte) (err error) {
+func (frame *ConnectionCloseFrame) Parse(data []byte) (length int, err error) {
 	frame.Type = FrameType(data[0])
 	frame.ErrorCode = QuicErrorCode(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	frame.ReasonPhraseLength = uint16(data[5]<<8 | data[6])
 	frame.ReasonPhrase = string(data[7 : 7+frame.ReasonPhraseLength])
+	length = 7 + int(frame.ReasonPhraseLength)
 	return
 }
 
@@ -717,12 +723,13 @@ func NewGoAwayFrame(packet *FramePacket, errorCode QuicErrorCode, lastGoodStream
 	return goAwayFrame
 }
 
-func (frame *GoAwayFrame) Parse(data []byte) (err error) {
+func (frame *GoAwayFrame) Parse(data []byte) (length int, err error) {
 	frame.Type = FrameType(data[0])
 	frame.ErrorCode = QuicErrorCode(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
 	frame.LastGoodStreamID = uint32(data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
 	frame.ReasonPhraseLength = uint16(data[9]<<8 | data[10])
 	frame.ReasonPhrase = string(data[11 : 11+frame.ReasonPhraseLength])
+	length = 11 + int(frame.ReasonPhraseLength)
 	return
 }
 
