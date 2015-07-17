@@ -199,7 +199,7 @@ func (frame *StreamFrame) Parse(data []byte) (err error) {
 
 	frame.DataLength = 0 // as is not contained. right?
 	if frame.Type&0x20 == 0x20 {
-		frame.DataLength = uint16(data[index]<<8 | data[index])
+		frame.DataLength = uint16(data[index]<<8 | data[index+1])
 	}
 
 	return
