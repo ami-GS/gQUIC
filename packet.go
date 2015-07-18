@@ -313,6 +313,24 @@ type FECPacket struct {
 	Redundancy []byte
 }
 
+func NewFECPacket() *FECPacket {
+	ph := &PacketHeader{} // temporally
+	packet := &FECPacket{
+		PacketHeader: ph,
+		Redundancy:   []byte{}, //temporally
+	}
+	return packet
+}
+
+func (packet *FECPacket) Parse(data []byte) (length int, err error) {
+	packet.Redundancy = data // TODO: clearify here
+	return
+}
+
+func (packet *FECPacket) GetWire() (wire []byte, err error) {
+	return packet.Redundancy // TODO: clearify here
+}
+
 /*
         0        1        2        3        4         8
    +--------+--------+--------+--------+--------+--   --+
