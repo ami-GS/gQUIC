@@ -286,6 +286,14 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 	return
 }
 
+func (packet *FramePacket) GetWire() (wire []byte, err error) {
+	for _, frame := range packet.Frames {
+		wireTmp, _ := frame.GetWire()
+		wire = append(wire, wireTmp...)
+	}
+	return
+}
+
 func (packet *FramePacket) String() (str string) {
 	str = packet.PacketHeader.String()
 	str += "Frame Packet\n"
