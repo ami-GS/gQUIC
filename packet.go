@@ -56,6 +56,7 @@ type PacketHeader struct {
 }
 
 func NewPacketHeader(connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *PacketHeader {
+	// TODO: flags should be passed from New...Packet()
 	var publicFlags PublicFlagType = 0x00
 	switch {
 	case connectionID <= 0:
@@ -69,20 +70,22 @@ func NewPacketHeader(connectionID uint64, version uint32, sequenceNumber uint64,
 		publicFlags |= CONNECTION_ID_LENGTH_8
 	}
 
-	switch {
-	case sequenceNumber <= 0xff:
-		publicFlags |= SEQUENCE_NUMBER_LENGTH_1
-	case sequenceNumber <= 0xffff:
-		publicFlags |= SEQUENCE_NUMBER_LENGTH_2
-	case sequenceNumber <= 0xffffffff:
-		publicFlags |= SEQUENCE_NUMBER_LENGTH_4
-	case sequenceNumber <= 0xffffffffffff:
-		publicFlags |= SEQUENCE_NUMBER_LENGTH_6
-	}
+	if publicFlags&PUBLIC_RESET != PUBLIC_RESET {
+		switch {
+		case sequenceNumber <= 0xff:
+			publicFlags |= SEQUENCE_NUMBER_LENGTH_1
+		case sequenceNumber <= 0xffff:
+			publicFlags |= SEQUENCE_NUMBER_LENGTH_2
+		case sequenceNumber <= 0xffffffff:
+			publicFlags |= SEQUENCE_NUMBER_LENGTH_4
+		case sequenceNumber <= 0xffffffffffff:
+			publicFlags |= SEQUENCE_NUMBER_LENGTH_6
+		}
 
-	// version negotiation packet is still considering?
-	// private flags == FLAG_FEC indicate FEC packet
-	// others indicate frame packet
+		// version negotiation packet is still considering?
+		// private flags == FLAG_FEC indicate FEC packet
+		// others indicate frame packet
+	}
 
 	ph := &PacketHeader{
 		PublicFlags:    publicFlags,
@@ -112,41 +115,40 @@ func (ph *PacketHeader) Parse(data []byte) (err error) {
 	case OMIT_CONNECTION_ID:
 		ph.ConnectionID = 0 // omitted
 		index = 1
+	}
+	if ph.PublicFlags&PUBLIC_RESET != PUBLIC_RESET {
+		if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
+			ph.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
+			index += 4
+		}
 
-	}
+		// TODO: parse sequence number
+		switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
+		case SEQUENCE_NUMBER_LENGTH_6:
+			ph.SequenceNumber = uint64(data[index]<<40 | data[index+1]<<32 | data[index+2]<<24 | data[index+3]<<16 | data[index+4]<<8 | data[index+5])
+			index += 6
+		case SEQUENCE_NUMBER_LENGTH_4:
+			ph.SequenceNumber = uint64(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
+			index += 4
+		case SEQUENCE_NUMBER_LENGTH_2:
+			ph.SequenceNumber = uint64(data[index]<<8 | data[index+1])
+			index += 2
+		case SEQUENCE_NUMBER_LENGTH_1:
+			ph.SequenceNumber = uint64(data[index])
+			index += 1
+		}
 
-	if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-		ph.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
-		index += 4
+		ph.PrivateFlags = PrivateFlagType(data[index])
+		if ph.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
+			// TODO: ?
+		}
+		if ph.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
+			ph.FEC = data[index]
+		}
+		if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
+			//TODO: FEC packet
+		}
 	}
-
-	// TODO: parse sequence number
-	switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
-	case SEQUENCE_NUMBER_LENGTH_6:
-		ph.SequenceNumber = uint64(data[index]<<40 | data[index+1]<<32 | data[index+2]<<24 | data[index+3]<<16 | data[index+4]<<8 | data[index+5])
-		index += 6
-	case SEQUENCE_NUMBER_LENGTH_4:
-		ph.SequenceNumber = uint64(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
-		index += 4
-	case SEQUENCE_NUMBER_LENGTH_2:
-		ph.SequenceNumber = uint64(data[index]<<8 | data[index+1])
-		index += 2
-	case SEQUENCE_NUMBER_LENGTH_1:
-		ph.SequenceNumber = uint64(data[index])
-		index += 1
-	}
-
-	ph.PrivateFlags = PrivateFlagType(data[index])
-	if ph.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
-		// TODO: ?
-	}
-	if ph.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
-		ph.FEC = data[index]
-	}
-	if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
-		//TODO: FEC packet
-	}
-
 	return
 }
 
@@ -350,7 +352,9 @@ type PublicResetPacket struct {
 }
 
 func NewPublicResetPacket(tag QuicTag, tagValue uint64) *PublicResetPacket {
-	//ph := NewPacketHeader(over 64 biy connectionID, 0?, PrivateFlags(0)?, 0?)
+	//ph := NewPacketHeader(over 64 bit connectionID, 0?, PrivateFlags(0)?, 0?)
+	//flag := PUBLIC_RESET | CONNECTION_ID_LENGTH_8
+	//ph = NewPacketHeader(flag, )
 	ph := &PacketHeader{} //temporally
 	packet := &PublicResetPacket{
 		PacketHeader: ph,
