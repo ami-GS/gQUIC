@@ -330,7 +330,7 @@ func (packet *FECPacket) Parse(data []byte) (length int, err error) {
 }
 
 func (packet *FECPacket) GetWire() (wire []byte, err error) {
-	return packet.Redundancy // TODO: clearify here
+	return packet.Redundancy, err // TODO: clearify here
 }
 
 /*
