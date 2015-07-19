@@ -233,6 +233,27 @@ type VersionNegotiationPacket struct {
 	Version uint32 //?
 }
 
+func NewVersionNegotiationPacket(version uint32) *VersionNegotiationPacket {
+	//flag := CONTAIN_QUIC_VERSION
+	// ph := NewPacketHeader(flag,)
+	ph := &PacketHeader{} //temporally
+	packet := &VersionNegotiationPacket{
+		PacketHeader: ph,
+		Version:      version,
+	}
+	return packet
+}
+
+func (packet *VersionNegotiationPacket) Parse(data []byte) (length int, err error) {
+	// TODO: there are no detail on specification stil
+	return
+}
+
+func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
+	// TODO: there are no detail on specification stil
+	return
+}
+
 /*
    +--------+---...---+--------+---...---+
    | Type   | Payload | Type   | Payload |
