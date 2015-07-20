@@ -55,9 +55,8 @@ type PacketHeader struct {
 	FEC            byte
 }
 
-func NewPacketHeader(connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *PacketHeader {
-	// TODO: flags should be passed from New...Packet()
-	var publicFlags PublicFlagType = 0x00
+func NewPacketHeader(publicFlags PublicFlagType, connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *PacketHeader {
+
 	switch {
 	case connectionID <= 0:
 		publicFlags |= OMIT_CONNECTION_ID
@@ -233,10 +232,9 @@ type VersionNegotiationPacket struct {
 	Version uint32 //?
 }
 
-func NewVersionNegotiationPacket(version uint32) *VersionNegotiationPacket {
-	//flag := CONTAIN_QUIC_VERSION
-	// ph := NewPacketHeader(flag,)
-	ph := &PacketHeader{} //temporally
+func NewVersionNegotiationPacket(connectionID, sequenceNumber uint64, version uint32) *VersionNegotiationPacket {
+	var flag PublicFlagType = CONTAIN_QUIC_VERSION
+	ph := NewPacketHeader(flag, connectionID, version, sequenceNumber, 0, 0)
 	packet := &VersionNegotiationPacket{
 		PacketHeader: ph,
 		Version:      version,
@@ -264,8 +262,8 @@ type FramePacket struct {
 	Frames []Frame
 }
 
-func NewFramePacket() *FramePacket {
-	ph := &PacketHeader{} //temporally
+func NewFramePacket(connectionID, sequenceNumber uint64) *FramePacket {
+	ph := NewPacketHeader(0, connectionID, 0, sequenceNumber, 0, 0)
 	packet := &FramePacket{
 		PacketHeader: ph,
 		Frames:       []Frame{},
@@ -336,8 +334,10 @@ type FECPacket struct {
 	Redundancy []byte
 }
 
-func NewFECPacket() *FECPacket {
-	ph := &PacketHeader{} // temporally
+func NewFECPacket(connectionID uint64, sequenceNumber uint64, fec byte) *FECPacket {
+	// TODO: is fec correct?
+	var flag PrivateFlagType = FLAG_FEC
+	ph := NewPacketHeader(0, connectionID, 0, sequenceNumber, flag, fec)
 	packet := &FECPacket{
 		PacketHeader: ph,
 		Redundancy:   []byte{}, //temporally
@@ -372,11 +372,9 @@ type PublicResetPacket struct {
 	TagValueMap uint64 // ?
 }
 
-func NewPublicResetPacket(tag QuicTag, tagValue uint64) *PublicResetPacket {
-	//ph := NewPacketHeader(over 64 bit connectionID, 0?, PrivateFlags(0)?, 0?)
-	//flag := PUBLIC_RESET | CONNECTION_ID_LENGTH_8
-	//ph = NewPacketHeader(flag, )
-	ph := &PacketHeader{} //temporally
+func NewPublicResetPacket(connectionID uint64, tag QuicTag, tagValue uint64) *PublicResetPacket {
+	var flag PublicFlagType = PUBLIC_RESET | CONNECTION_ID_LENGTH_8
+	ph := NewPacketHeader(flag, connectionID, 0, 0, 0, 0)
 	packet := &PublicResetPacket{
 		PacketHeader: ph,
 		Tag:          tag,
