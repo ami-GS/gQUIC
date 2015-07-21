@@ -259,21 +259,21 @@ func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 */
 type FramePacket struct {
 	*PacketHeader
-	Frames []Frame
+	Frames []*Frame
 }
 
 func NewFramePacket(connectionID, sequenceNumber uint64) *FramePacket {
 	ph := NewPacketHeader(0, connectionID, 0, sequenceNumber, 0, 0)
 	packet := &FramePacket{
 		PacketHeader: ph,
-		Frames:       []Frame{},
+		Frames:       []*Frame{},
 	}
 	return packet
 }
 
 func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
-	var frame Frame
 	for idx < len(data) {
+		var frame Frame
 		switch FrameType(data[idx]) {
 		case PaddingFrameType:
 			frame = &PaddingFrame{}
@@ -302,24 +302,28 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 		}
 		nxt, _ := frame.Parse(data[idx:])
 		idx += nxt
-		packet.Frames = append(packet.Frames, frame)
+		packet.Frames = append(packet.Frames, &frame)
 	}
 	return
 }
 
 func (packet *FramePacket) GetWire() (wire []byte, err error) {
 	for _, frame := range packet.Frames {
-		wireTmp, _ := frame.GetWire()
+		wireTmp, _ := (*frame).GetWire()
 		wire = append(wire, wireTmp...)
 	}
 	return
+}
+
+func (packet *FramePacket) PushBack(frame *Frame) {
+	packet.Frames = append(packet.Frames, frame)
 }
 
 func (packet *FramePacket) String() (str string) {
 	str = packet.PacketHeader.String()
 	str += "Frame Packet\n"
 	for _, frame := range packet.Frames {
-		str += frame.String() + "\n"
+		str += (*frame).String() + "\n"
 	}
 	return
 }
