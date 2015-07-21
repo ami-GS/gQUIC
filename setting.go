@@ -10,3 +10,5 @@ const (
 	CFCW         = 'C' + ('F' << 8) + ('C' << 16) + ('W' << 24)
 	// got bored, write every names for future
 )
+
+const MTU = 1500 // TODO: need to check
