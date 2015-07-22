@@ -5,7 +5,7 @@ type Window struct {
 	currentSize int32
 }
 
-func NewWindowSize() (window *Window) {
+func NewWindow() (window *Window) {
 	window = &Window{
 		initialSize: 100, // TODO: set default size
 		currentSize: 100,

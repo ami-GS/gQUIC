@@ -18,7 +18,7 @@ func NewStream(streamID uint32) (stream *Stream) {
 	stream = &Stream{
 		ID:     streamID,
 		State:  OPEN,
-		Window: NewWindowSize(),
+		Window: NewWindow(),
 	}
 	return
 }
