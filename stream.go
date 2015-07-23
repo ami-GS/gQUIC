@@ -22,3 +22,14 @@ func NewStream(streamID uint32) (stream *Stream) {
 	}
 	return
 }
+
+func (stream *Stream) ReadFrame(f Frame) {
+	switch frame := f.(type) {
+	case *StreamFrame:
+	case *AckFrame:
+	case *WindowUpdateFrame:
+	case *BlockedFrame:
+	case *RstStreamFrame:
+
+	}
+}
