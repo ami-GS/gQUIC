@@ -81,56 +81,58 @@ type Frame interface {
 type StreamFrame struct {
 	*FramePacket
 	Type       FrameType
+	Settings   byte
 	StreamID   uint32
 	Offset     uint64
 	DataLength uint16
 }
 
 func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint64, dataLength uint16) *StreamFrame {
-	var frameType FrameType = StreamFrameType
+	var settings byte = 0
 	if fin {
-		frameType |= 0x40
+		settings |= 0x40
 	}
 	if dataLength == 0 { // should other argument be used?
-		frameType |= 0x20
+		settings |= 0x20
 	}
 
 	// CHECK: are these bit length fixed?
 	// 'ooo' bits
 	switch {
 	case offset == 0:
-		frameType |= 0x00
+		settings |= 0x00
 	case offset <= 0xffff:
-		frameType |= 0x04
+		settings |= 0x04
 	case offset <= 0xffffff:
-		frameType |= 0x08
+		settings |= 0x08
 	case offset <= 0xffffffff:
-		frameType |= 0x0c
+		settings |= 0x0c
 	case offset <= 0xffffffffff:
-		frameType |= 0x10
+		settings |= 0x10
 	case offset <= 0xffffffffffff:
-		frameType |= 0x14
+		settings |= 0x14
 	case offset <= 0xffffffffffffff:
-		frameType |= 0x18
+		settings |= 0x18
 	case offset <= 0xffffffffffffffff:
-		frameType |= 0x1c
+		settings |= 0x1c
 	}
 
 	// 'ss' bits
 	switch {
 	case streamID <= 0xff:
-		frameType |= 0x00
+		settings |= 0x00
 	case streamID <= 0xffff:
-		frameType |= 0x01
+		settings |= 0x01
 	case streamID <= 0xffffff:
-		frameType |= 0x02
+		settings |= 0x02
 	case streamID <= 0xffffffff:
-		frameType |= 0x03
+		settings |= 0x03
 	}
 
 	streamFrame := &StreamFrame{
 		FramePacket: packet,
-		Type:        frameType,
+		Type:        StreamFrameType,
+		Settings:    settings,
 		StreamID:    streamID,
 		Offset:      offset,
 		DataLength:  dataLength,
@@ -139,13 +141,14 @@ func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint6
 }
 
 func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
-	frame.Type = FrameType(data[0])
-	if frame.Type&0x40 == 0x40 {
+	frame.Type = StreamFrameType
+	settings := data[0] & 0xef
+	if settings&0x40 == 0x40 {
 		//TODO: fin
 	}
 
 	length = 1
-	switch frame.Type & 0x30 {
+	switch settings & 0x30 {
 	case 0x00:
 		frame.StreamID = uint32(data[1])
 		length += 1
@@ -160,7 +163,7 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 		length += 4
 	}
 
-	switch frame.Type & 0x1c {
+	switch settings & 0x1c {
 	case 0x00:
 		frame.Offset = uint64(data[length])
 		length += 1
@@ -198,7 +201,7 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 	}
 
 	frame.DataLength = 0 // as is not contained. right?
-	if frame.Type&0x20 == 0x20 {
+	if settings&0x20 == 0x20 {
 		frame.DataLength = uint16(data[length]<<8 | data[length+1])
 		length += 2
 	}
@@ -208,19 +211,19 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 
 func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	// data length's length
-	DLEN := int((frame.Type & 0x20 >> 5) * 2)
+	DLEN := int((frame.Settings & 0x20 >> 5) * 2)
 
 	// streamID length
-	SLEN := int((frame.Type & 0x03) + 1)
+	SLEN := int((frame.Settings & 0x03) + 1)
 
 	// offset length
-	OLEN := int((frame.Type & 0x1c >> 2))
+	OLEN := int((frame.Settings & 0x1c >> 2))
 	if OLEN > 0 {
 		OLEN += 1
 	}
 
 	wire = make([]byte, 1+DLEN+SLEN+OLEN)
-	wire[0] = byte(frame.Type)
+	wire[0] = byte(frame.Type) + frame.Settings
 	index := 1
 
 	for i := 0; i < SLEN; i++ {
@@ -281,6 +284,7 @@ func (frame *StreamFrame) String() (str string) {
 type AckFrame struct {
 	*FramePacket
 	Type                             FrameType
+	Settings                         byte
 	RecievedEntropy                  byte
 	LargestObserved                  uint64
 	LargestObservedDeltaTime         float64 // this must be ufloat64?
@@ -296,42 +300,44 @@ type AckFrame struct {
 }
 
 func NewAckFrame(packet *FramePacket, hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
-	frameType := AckFrameType
+	var settings byte = 0
 	// 'n' bit
 	if hasNACK {
-		frameType |= 0x20
+		settings |= 0x20
 	}
 	// 't' bit
 	if isTruncate {
-		frameType |= 0x10
+		settings |= 0x10
 	}
 
 	// 'll' bits
 	switch {
 	case largestObserved <= 0xff:
-		frameType |= 0x00
+		settings |= 0x00
 	case largestObserved <= 0xffff:
-		frameType |= 0x04
+		settings |= 0x04
 	case largestObserved <= 0xffffff:
-		frameType |= 0x08
+		settings |= 0x08
 	case largestObserved <= 0xffffffff:
-		frameType |= 0x0c
+		settings |= 0x0c
 	}
 
 	// 'mm' bits
 	switch {
 	case missingDelta <= 0xff:
-		frameType |= 0x00
+		settings |= 0x00
 	case missingDelta <= 0xffff:
-		frameType |= 0x04
+		settings |= 0x04
 	case missingDelta <= 0xffffff:
-		frameType |= 0x08
+		settings |= 0x08
 	case missingDelta <= 0xffffffff:
-		frameType |= 0x0c
+		settings |= 0x0c
 	}
 
 	ackFrame := &AckFrame{
 		FramePacket: packet,
+		Type:        AckFrameType,
+		Settings:    settings,
 	}
 	return ackFrame
 }
