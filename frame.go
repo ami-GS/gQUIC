@@ -31,12 +31,12 @@ func (frameType FrameType) String() string {
 		"STOP_WAITING",
 		"PING",
 	}
-	switch {
-	case frameType&StreamFrameType == StreamFrameType:
+	switch frameType {
+	case StreamFrameType:
 		return "STREAM"
-	case frameType&AckFrameType == AckFrameType:
+	case AckFrameType:
 		return "ACK"
-	case frameType&CongestionFeedbackFrameType == CongestionFeedbackFrameType:
+	case CongestionFeedbackFrameType:
 		return "CONGESTION_FEEDBACK"
 	default:
 		return names[int(frameType)]
