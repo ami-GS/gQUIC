@@ -41,7 +41,26 @@ func (message *Message) TagContain(tag QuicTag) bool {
 	return false
 }
 
+func (message *Message) SortTags() {
+	// TODO: consider that here should be quick sort
+	tagNum := len(message.Tags)
+	for i := 0; i < tagNum-1; i++ {
+		for j := tagNum - 1; j > i; j-- {
+			if message.Tags[j-1] < message.Tags[j] {
+				tmpT := message.Tags[j]
+				message.Tags[j] = message.Tags[j-1]
+				message.Tags[j-1] = tmpT
+				tmpV := message.Values[j]
+				message.Values[j] = message.Values[j-1]
+				message.Values[j-1] = tmpV
+			}
+		}
+	}
+}
+
 func (message *Message) GetWire() (wire []byte, err error) {
+	message.SortTags()
+
 	valueLen := 0
 	for _, v := range message.Values {
 		valueLen += len(v)
@@ -95,5 +114,7 @@ func (message *Message) Parse(data []byte) (index int, err error) {
 		prevOffset = endOffset
 		index += 8
 	}
+
+	message.SortTags()
 	return
 }
