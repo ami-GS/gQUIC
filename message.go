@@ -6,14 +6,15 @@ type Message struct {
 	Values [][]byte
 }
 
-func NewMessage(msgTag QuicTag) (message *Message) {
+func NewMessage(msgTag QuicTag) *Message {
 	switch msgTag {
 	case CHLO, SHLO, REJ:
-		message = &Message{
+		message := &Message{
 			MsgTag: msgTag,
 			Tags:   []QuicTag{},
 			Values: [][]byte{},
 		}
+		return message
 	}
 	return nil
 }
