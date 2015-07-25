@@ -390,7 +390,7 @@ func (frame *StopWaitingFrame) Parse(data []byte) (length int, err error) {
 		frame.LeastUnackedDelta |= uint64(data[2+i] << byte(8*(length-i-1)))
 	}
 
-	return length + 1, err
+	return length + 2, err
 }
 
 func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
