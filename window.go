@@ -12,3 +12,11 @@ func NewWindow() (window *Window) {
 	}
 	return
 }
+
+func (window *Window) Consume(consumeSize uint32) {
+	window.currentSize -= int32(consumeSize)
+}
+
+func (window *Window) Increase(increaseSize uint32) {
+	window.currentSize += int32(increaseSize)
+}
