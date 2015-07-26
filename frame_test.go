@@ -9,7 +9,7 @@ func TestPaddingFrame(t *testing.T) {
 	data := []byte{0x00}
 	fp := NewFramePacket(0, 0)
 	frame := &PaddingFrame{FramePacket: fp}
-	actualFrame := NewPadding(fp)
+	actualFrame := NewPaddingFrame(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {

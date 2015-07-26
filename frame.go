@@ -526,7 +526,7 @@ type PaddingFrame struct {
 	Type FrameType
 }
 
-func NewPadding(packet *FramePacket) *PaddingFrame {
+func NewPaddingFrame(packet *FramePacket) *PaddingFrame {
 	paddingFrame := &PaddingFrame{
 		FramePacket: packet,
 		Type:        PaddingFrameType,
