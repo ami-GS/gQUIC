@@ -277,26 +277,26 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 		var frame Frame
 		switch FrameType(data[idx]) {
 		case PaddingFrameType:
-			frame = &PaddingFrame{}
+			frame = &PaddingFrame{FramePacket: packet}
 		case RstStreamFrameType:
-			frame = &RstStreamFrame{}
+			frame = &RstStreamFrame{FramePacket: packet}
 		case ConnectionCloseFrameType:
-			frame = &ConnectionCloseFrame{}
+			frame = &ConnectionCloseFrame{FramePacket: packet}
 		case GoAwayFrameType:
-			frame = &GoAwayFrame{}
+			frame = &GoAwayFrame{FramePacket: packet}
 		case WindowUpdateFrameType:
-			frame = &WindowUpdateFrame{}
+			frame = &WindowUpdateFrame{FramePacket: packet}
 		case BlockedFrameType:
-			frame = &BlockedFrame{}
+			frame = &BlockedFrame{FramePacket: packet}
 		case StopWaitingFrameType:
-			frame = &StopWaitingFrame{}
+			frame = &StopWaitingFrame{FramePacket: packet}
 		case PingFrameType:
-			frame = &PingFrame{}
+			frame = &PingFrame{FramePacket: packet}
 		default:
 			if data[idx]&StreamFrameType == StreamFrameType {
-				frame = &StreamFrame{}
+				frame = &StreamFrame{FramePacket: packet}
 			} else if data[idx]&AckFrameType == AckFrameType {
-				frame = &AckFrame{}
+				frame = &AckFrame{FramePacket: packet}
 			} else if data[idx]&CongestionFeedbackFrameType == CongestionFeedbackFrameType {
 				//frame = &CongestionFeedbackFrame{}
 			}
