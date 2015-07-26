@@ -92,7 +92,7 @@ func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint6
 	if fin {
 		settings |= 0x40
 	}
-	if dataLength == 0 { // should other argument be used?
+	if dataLength != 0 { // should other argument be used?
 		settings |= 0x20
 	}
 
@@ -142,13 +142,13 @@ func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint6
 
 func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 	frame.Type = StreamFrameType
-	settings := data[0] & 0xef
-	if settings&0x40 == 0x40 {
+	frame.Settings = data[0] & 0x7f
+	if frame.Settings&0x40 == 0x40 {
 		//TODO: fin
 	}
 
 	length = 1
-	switch settings & 0x30 {
+	switch frame.Settings & 0x03 {
 	case 0x00:
 		frame.StreamID = uint32(data[1])
 		length += 1
@@ -163,10 +163,9 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 		length += 4
 	}
 
-	switch settings & 0x1c {
+	switch frame.Settings & 0x1c {
 	case 0x00:
-		frame.Offset = uint64(data[length])
-		length += 1
+		frame.Offset = 0
 	case 0x04:
 		frame.Offset = uint64(data[length]<<8 | data[length+1])
 		length += 2
@@ -201,7 +200,7 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 	}
 
 	frame.DataLength = 0 // as is not contained. right?
-	if settings&0x20 == 0x20 {
+	if frame.Settings&0x20 == 0x20 {
 		frame.DataLength = uint16(data[length]<<8 | data[length+1])
 		length += 2
 	}
