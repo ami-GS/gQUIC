@@ -5,6 +5,28 @@ import (
 	"testing"
 )
 
+func TestStreamFrameFrame(t *testing.T) {
+	// fin: true, streamID: 1, offset: 1, dataLength: 1
+	data := []byte{0xe4, 0x01, 0x00, 0x01, 0x00, 0x01}
+	fp := NewFramePacket(0, 0)
+	frame := &StreamFrame{FramePacket: fp}
+	actualFrame := NewStreamFrame(fp, true, 1, 1, 1)
+
+	actualLen, _ := frame.Parse(data)
+	if actualLen != len(data) {
+		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	}
+
+	if !reflect.DeepEqual(actualFrame, frame) {
+		t.Errorf("got %v\nwant %v", actualFrame, frame)
+	}
+
+	actualWire, _ := frame.GetWire()
+	if !reflect.DeepEqual(actualWire, data) {
+		t.Errorf("got %v\nwant %v", actualWire, data)
+	}
+}
+
 func TestPaddingFrame(t *testing.T) {
 	data := []byte{0x00}
 	fp := NewFramePacket(0, 0)
