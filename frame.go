@@ -340,6 +340,15 @@ func NewAckFrame(packet *FramePacket, hasNACK, isTruncate bool, largestObserved,
 	}
 	return ackFrame
 }
+
+func (frame *AckFrame) Parse(data []byte) (length int, err error) {
+	return
+}
+
+func (frame *AckFrame) GetWire() (wire []byte, err error) {
+	return
+}
+
 func (frame *AckFrame) String() (str string) {
 	str = fmt.Sprintf("ACK\n")
 	return str
