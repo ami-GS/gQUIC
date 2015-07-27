@@ -73,6 +73,8 @@ func NewPacketHeader(publicFlags PublicFlagType, connectionID uint64, version ui
 		publicFlags |= CONNECTION_ID_LENGTH_8
 	}
 
+	// TODO: currently, SequenceNumber changes in FECPacket.AppendFramePacket,
+	// so that here should be in GetWire(). right?
 	if publicFlags&PUBLIC_RESET != PUBLIC_RESET {
 		switch {
 		case sequenceNumber <= 0xff:
@@ -348,16 +350,20 @@ func (packet *FramePacket) String() (str string) {
 */
 type FECPacket struct {
 	*PacketHeader
+	FECGroup   []*FramePacket
 	Redundancy []byte
 }
 
-func NewFECPacket(connectionID uint64, sequenceNumber uint64, fec byte) *FECPacket {
+func NewFECPacket(firstPacket *FramePacket) *FECPacket {
 	// TODO: is fec correct?
+	// zero origin?
 	var flag PrivateFlagType = FLAG_FEC
-	ph := NewPacketHeader(0, connectionID, 0, sequenceNumber, flag, fec)
+	ph := NewPacketHeader(0, firstPacket.ConnectionID, 0,
+		firstPacket.SequenceNumber+1, flag, 0)
 	packet := &FECPacket{
 		PacketHeader: ph,
-		Redundancy:   []byte{}, //temporally
+		FECGroup:     []*FramePacket{firstPacket},
+		Redundancy:   make([]byte, MTU),
 	}
 	return packet
 }
@@ -369,6 +375,21 @@ func (packet *FECPacket) Parse(data []byte) (length int, err error) {
 
 func (packet *FECPacket) GetWire() (wire []byte, err error) {
 	return packet.Redundancy, err // TODO: clearify here
+}
+
+func (packet *FECPacket) AppendFramePacket(nextPacket *FramePacket) {
+	nextPacket.FEC = len(packet.FECGroup)
+	packet.FECGroup = append(packet.FECGroup, nextPacket)
+	packet.SequenceNumber += 1
+	packet.UpdateRedundancy(nextPacket)
+}
+
+func (packet *FECPacket) UpdateRedundancy(nextPacket *FramePacket) {
+	// TODO: call GetWire() cause bad performance, wire should be buffered
+	wire, _ := nextPacket.GetWire()
+	for i = 0; i < MTU; i++ {
+		packet.Redundancy[i] ^= wire[i]
+	}
 }
 
 /*
