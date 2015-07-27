@@ -1,5 +1,9 @@
 package quic
 
+import (
+//"fmt"
+)
+
 const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
 
 type PublicFlagType byte
@@ -97,58 +101,58 @@ func NewPacketHeader(publicFlags PublicFlagType, connectionID uint64, version ui
 	return ph
 }
 
-func (ph *PacketHeader) Parse(data []byte) (err error) {
-	index := 0
-	ph.PublicFlags = PublicFlagType(data[index])
+func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
+	ph.PublicFlags = PublicFlagType(data[length])
 
 	switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
 	case CONNECTION_ID_LENGTH_8:
 		ph.ConnectionID = uint64(data[1]<<56 | data[2]<<48 | data[3]<<40 | data[4]<<32 | data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
-		index = 9
+		length = 9
 	case CONNECTION_ID_LENGTH_4:
 		ph.ConnectionID = uint64(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
-		index = 5
+		length = 5
 	case CONNECTION_ID_LENGTH_1:
 		ph.ConnectionID = uint64(data[1])
-		index = 2
+		length = 2
 	case OMIT_CONNECTION_ID:
 		ph.ConnectionID = 0 // omitted
-		index = 1
+		length = 1
 	}
 	if ph.PublicFlags&PUBLIC_RESET != PUBLIC_RESET {
 		if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-			ph.Version = uint32(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
-			index += 4
+			ph.Version = uint32(data[length]<<24 | data[length+1]<<16 | data[length+2]<<8 | data[length+3])
+			length += 4
 		}
 
 		// TODO: parse sequence number
 		switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
 		case SEQUENCE_NUMBER_LENGTH_6:
-			ph.SequenceNumber = uint64(data[index]<<40 | data[index+1]<<32 | data[index+2]<<24 | data[index+3]<<16 | data[index+4]<<8 | data[index+5])
-			index += 6
+			ph.SequenceNumber = uint64(data[length]<<40 | data[length+1]<<32 | data[length+2]<<24 | data[length+3]<<16 | data[length+4]<<8 | data[length+5])
+			length += 6
 		case SEQUENCE_NUMBER_LENGTH_4:
-			ph.SequenceNumber = uint64(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
-			index += 4
+			ph.SequenceNumber = uint64(data[length]<<24 | data[length+1]<<16 | data[length+2]<<8 | data[length+3])
+			length += 4
 		case SEQUENCE_NUMBER_LENGTH_2:
-			ph.SequenceNumber = uint64(data[index]<<8 | data[index+1])
-			index += 2
+			ph.SequenceNumber = uint64(data[length]<<8 | data[length+1])
+			length += 2
 		case SEQUENCE_NUMBER_LENGTH_1:
-			ph.SequenceNumber = uint64(data[index])
-			index += 1
+			ph.SequenceNumber = uint64(data[length])
+			length += 1
 		}
 
-		ph.PrivateFlags = PrivateFlagType(data[index])
+		ph.PrivateFlags = PrivateFlagType(data[length])
+		length += 1
 		if ph.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
 			// TODO: ?
 		}
 		if ph.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
-			ph.FEC = data[index]
+			ph.FEC = data[length]
 		}
 		if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
 			//TODO: FEC packet
 		}
 	}
-	return
+	return length + 1, err
 }
 
 func (ph *PacketHeader) GetWire() (wire []byte, err error) {
