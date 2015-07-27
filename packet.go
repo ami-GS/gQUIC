@@ -381,37 +381,29 @@ func (packet *FECPacket) GetWire() (wire []byte, err error) {
 */
 type PublicResetPacket struct {
 	*PacketHeader
-	Tag         QuicTag
-	TagValueMap uint64 // ?
+	Msg *Message
 }
 
-func NewPublicResetPacket(connectionID uint64, tag QuicTag, tagValue uint64) *PublicResetPacket {
+func NewPublicResetPacket(connectionID uint64) *PublicResetPacket {
 	var flag PublicFlagType = PUBLIC_RESET | CONNECTION_ID_LENGTH_8
 	ph := NewPacketHeader(flag, connectionID, 0, 0, 0, 0)
 	packet := &PublicResetPacket{
 		PacketHeader: ph,
-		Tag:          tag,
-		TagValueMap:  tagValue,
+		Msg:          NewMessage(PRST),
 	}
 	return packet
 }
 
 func (packet *PublicResetPacket) Parse(data []byte) (err error) {
-	packet.Tag = QuicTag(data[0]<<24 | data[1]<<16 | data[2]<<8 | data[3])
-	for i := 0; i < 8; i++ {
-		packet.TagValueMap |= uint64(data[4+i] << byte(8*(7-i)))
-	}
+	packet.Msg.Parse(data)
 	return
 }
 
-func (packet *PublicResetPacket) GetWire() (wire []byte, err error) {
+func (packet *PublicResetPacket) GetWire() ([]byte, error) {
 	// wire of Public Flags and Connection ID are extract from PacketHeader
-	wire = make([]byte, 12)
-	for i := 0; i < 4; i++ {
-		wire[i] = byte(packet.Tag >> byte(8*(3-i)))
-	}
-	for i := 0; i < 8; i++ {
-		wire[4+i] = byte(packet.TagValueMap >> byte(8*(7-i)))
-	}
-	return
+	return packet.Msg.GetWire()
+}
+
+func (packet *PublicResetPacket) AppendTagValue(tag QuicTag, value []byte) bool {
+	return packet.Msg.AppendTagValue(tag, value)
 }

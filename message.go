@@ -8,7 +8,7 @@ type Message struct {
 
 func NewMessage(msgTag QuicTag) *Message {
 	switch msgTag {
-	case CHLO, SHLO, REJ:
+	case CHLO, SHLO, REJ, PRST:
 		message := &Message{
 			MsgTag: msgTag,
 			Tags:   []QuicTag{},
@@ -21,7 +21,7 @@ func NewMessage(msgTag QuicTag) *Message {
 
 func (message *Message) AppendTagValue(tag QuicTag, value []byte) bool {
 	switch tag {
-	case CHLO, SHLO, REJ:
+	case CHLO, SHLO, REJ, PRST:
 		return false
 	}
 	if !message.TagContain(tag) {
