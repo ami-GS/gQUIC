@@ -28,8 +28,10 @@ func TestStreamFrameFrame(t *testing.T) {
 }
 
 func TestPaddingFrame(t *testing.T) {
-	data := []byte{0x00}
+	data := []byte{0x00, 0x00, 0x00, 0x00, 0x00}
 	fp := NewFramePacket(0, 0)
+	fp.DataSize = 1945
+	fp.RestSize = 5
 	frame := &PaddingFrame{FramePacket: fp}
 	actualFrame := NewPaddingFrame(fp)
 

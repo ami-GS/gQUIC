@@ -260,7 +260,9 @@ func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 type FramePacket struct {
 	*PacketHeader
 	Frames   []*Frame
+	Wire     []byte
 	DataSize uint16
+	RestSize uint16
 }
 
 func NewFramePacket(connectionID, sequenceNumber uint64) *FramePacket {
@@ -268,6 +270,7 @@ func NewFramePacket(connectionID, sequenceNumber uint64) *FramePacket {
 	packet := &FramePacket{
 		PacketHeader: ph,
 		Frames:       []*Frame{},
+		RestSize:     MTU,
 	}
 	return packet
 }
@@ -308,12 +311,8 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 	return
 }
 
-func (packet *FramePacket) GetWire() (wire []byte, err error) {
-	for _, frame := range packet.Frames {
-		wireTmp, _ := (*frame).GetWire()
-		wire = append(wire, wireTmp...)
-	}
-	return
+func (packet *FramePacket) GetWire() []byte {
+	return packet.Wire
 }
 
 func (packet *FramePacket) PushBack(frame *Frame) bool {
@@ -321,7 +320,9 @@ func (packet *FramePacket) PushBack(frame *Frame) bool {
 	dataSize := uint16(len(wire))
 	if packet.DataSize+dataSize <= MTU {
 		packet.Frames = append(packet.Frames, frame)
+		packet.Wire = append(packet.Wire, wire...)
 		packet.DataSize += dataSize
+		packet.RestSize -= dataSize
 		return true
 	}
 	return false

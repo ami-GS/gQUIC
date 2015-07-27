@@ -543,14 +543,13 @@ func NewPaddingFrame(packet *FramePacket) *PaddingFrame {
 }
 
 func (frame *PaddingFrame) Parse(data []byte) (length int, err error) {
-	length = 1
-	// TODO: do something?
+	length = len(data)
 	return
 }
 
 func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
-	wire = make([]byte, 1)
-	wire[0] = byte(frame.Type)
+	// Frame Type is 0x00, no need to substitute
+	wire = make([]byte, frame.RestSize)
 	return
 }
 func (frame *PaddingFrame) String() (str string) {
