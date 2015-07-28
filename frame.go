@@ -254,8 +254,8 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *StreamFrame) String() (str string) {
-	str = fmt.Sprintf("STREAM\nStreamID : %d, Offset : %d, DataLength : %d",
-		frame.StreamID, frame.Offset, frame.DataLength)
+	str = fmt.Sprintf("STREAM\n\tStreamID : %d, Offset : %d, DataLength : %d, Data: %v",
+		frame.StreamID, frame.Offset, len(frame.Data), frame.Data)
 	return str
 }
 
@@ -361,7 +361,7 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *AckFrame) String() (str string) {
-	str = fmt.Sprintf("ACK\n")
+	str = fmt.Sprintf("ACK\n\t")
 	return str
 }
 
@@ -438,7 +438,7 @@ func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *StopWaitingFrame) String() (str string) {
-	str = fmt.Sprintf("STOP WAITING\nSent Entropy : %d, Least unacked delta : %d",
+	str = fmt.Sprintf("STOP WAITING\n\tSent Entropy : %d, Least unacked delta : %d",
 		frame.SentEntropy, frame.LeastUnackedDelta)
 	return str
 }
@@ -491,7 +491,7 @@ func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *WindowUpdateFrame) String() (str string) {
-	str = fmt.Sprintf("WINDOW UPDATE\nStreamID : %d, Offset : %d",
+	str = fmt.Sprintf("WINDOW UPDATE\n\tStreamID : %d, Offset : %d",
 		frame.StreamID, frame.Offset)
 	return str
 }
@@ -535,7 +535,7 @@ func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *BlockedFrame) String() (str string) {
-	str = fmt.Sprintf("BLOCKED\nStreamID %d", frame.StreamID)
+	str = fmt.Sprintf("BLOCKED\n\tStreamID %d", frame.StreamID)
 	return str
 }
 
@@ -564,7 +564,7 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 	return
 }
 func (frame *PaddingFrame) String() (str string) {
-	str = "PADDING\n"
+	str = "PADDING\n\t"
 	return str
 }
 
@@ -621,7 +621,7 @@ func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *RstStreamFrame) String() (str string) {
-	str = fmt.Sprintf("RST STREAM\nStreamID : %d, Offset : %d, Error code : %d",
+	str = fmt.Sprintf("RST STREAM\n\tStreamID : %d, Offset : %d, Error code : %d",
 		frame.StreamID, frame.Offset, frame.ErrorCode) // TODO: Error Code should be string
 	return str
 }
@@ -651,7 +651,7 @@ func (frame *PingFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *PingFrame) String() (str string) {
-	str = fmt.Sprintf("PING\n")
+	str = fmt.Sprintf("PING\n\t")
 	return str
 }
 
@@ -709,7 +709,7 @@ func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *ConnectionCloseFrame) String() (str string) {
-	str = fmt.Sprintf("CONNECTION CLOSE\n Error code : %d, Reason length : %d\nReason : %s",
+	str = fmt.Sprintf("CONNECTION CLOSE\n\tError code : %d, Reason length : %d\nReason : %s",
 		frame.ErrorCode, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
 }
@@ -779,7 +779,7 @@ func (frame *GoAwayFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *GoAwayFrame) String() (str string) {
-	str = fmt.Sprintf("GOAWAY\n Error code : %d, LastGoodStreamID : %d, Reason length : %d\nReason : %s",
+	str = fmt.Sprintf("GOAWAY\n\tError code : %d, LastGoodStreamID : %d, Reason length : %d\nReason : %s",
 		frame.ErrorCode, frame.LastGoodStreamID, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
 }

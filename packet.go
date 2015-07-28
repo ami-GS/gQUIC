@@ -340,7 +340,7 @@ func (packet *FramePacket) String() (str string) {
 	str = packet.PacketHeader.String()
 	str += "Frame Packet\n"
 	for _, frame := range packet.Frames {
-		str += (*frame).String() + "\n"
+		str += "\t" + (*frame).String() + "\n"
 	}
 	return
 }
