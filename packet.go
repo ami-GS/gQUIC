@@ -359,13 +359,19 @@ type FECPacket struct {
 func NewFECPacket(firstPacket *FramePacket) *FECPacket {
 	// TODO: is fec correct?
 	// zero origin?
+	// I guess byte length of sequence number in header should be fixed
 	var flag PrivateFlagType = FLAG_FEC
 	ph := NewPacketHeader(0, firstPacket.ConnectionID, 0,
 		firstPacket.SequenceNumber+1, flag, 0)
+	// TODO: bad performance same as below in UpdateRedundancy()
+	// and suspicious because length of sequence Number might change.
+	hWire, _ := ph.GetWire()
+	redundancyLen := MTU - len(hWire)
+
 	packet := &FECPacket{
 		PacketHeader: ph,
 		FECGroup:     []*FramePacket{firstPacket},
-		Redundancy:   make([]byte, MTU),
+		Redundancy:   make([]byte, redundancyLen),
 	}
 	return packet
 }
@@ -381,16 +387,17 @@ func (packet *FECPacket) GetWire() (wire []byte, err error) {
 }
 
 func (packet *FECPacket) AppendFramePacket(nextPacket *FramePacket) {
-	nextPacket.FEC = len(packet.FECGroup)
+	nextPacket.FEC = byte(len(packet.FECGroup))
 	packet.FECGroup = append(packet.FECGroup, nextPacket)
-	packet.SequenceNumber += 1
+	packet.SequenceNumber += 1 //suspicious
 	packet.UpdateRedundancy(nextPacket)
 }
 
 func (packet *FECPacket) UpdateRedundancy(nextPacket *FramePacket) {
 	// TODO: call GetWire() cause bad performance, wire should be buffered
 	wire, _ := nextPacket.GetWire()
-	for i = 0; i < MTU; i++ {
+	// TODO: check: len of wire and Redunduncy might same
+	for i := 0; i < len(wire); i++ {
 		packet.Redundancy[i] ^= wire[i]
 	}
 }
