@@ -255,7 +255,8 @@ func (packet *VersionNegotiationPacket) Parse(data []byte) (length int, err erro
 
 func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	// TODO: there are no detail on specification stil
-	return
+	hWire, _ := packet.PacketHeader.GetWire()
+	return append(hWire, wire...), err
 }
 
 /*
@@ -317,8 +318,9 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 	return
 }
 
-func (packet *FramePacket) GetWire() []byte {
-	return packet.Wire
+func (packet *FramePacket) GetWire() ([]byte, error) {
+	hWire, err := packet.PacketHeader.GetWire()
+	return append(hWire, packet.Wire...), err // temporally
 }
 
 func (packet *FramePacket) PushBack(frame *Frame) bool {
@@ -374,7 +376,8 @@ func (packet *FECPacket) Parse(data []byte) (length int, err error) {
 }
 
 func (packet *FECPacket) GetWire() (wire []byte, err error) {
-	return packet.Redundancy, err // TODO: clearify here
+	hWire, err := packet.PacketHeader.GetWire()
+	return append(hWire, packet.Redundancy...), err
 }
 
 func (packet *FECPacket) AppendFramePacket(nextPacket *FramePacket) {
@@ -426,7 +429,9 @@ func (packet *PublicResetPacket) Parse(data []byte) (err error) {
 
 func (packet *PublicResetPacket) GetWire() ([]byte, error) {
 	// wire of Public Flags and Connection ID are extract from PacketHeader
-	return packet.Msg.GetWire()
+	hWire, err := packet.PacketHeader.GetWire()
+	msgWire, err := packet.Msg.GetWire()
+	return append(hWire, msgWire...), err
 }
 
 func (packet *PublicResetPacket) AppendTagValue(tag QuicTag, value []byte) bool {
