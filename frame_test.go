@@ -7,10 +7,12 @@ import (
 
 func TestStreamFrameFrame(t *testing.T) {
 	// fin: true, streamID: 1, offset: 1, dataLength: 1
-	data := []byte{0xe4, 0x01, 0x00, 0x01, 0x00, 0x01}
+	data := []byte{0xe4, 0x01, 0x00, 0x01, 0x00, 0x05}
+	testD := []byte("aiueo")
+	data = append(data, testD...)
 	fp := NewFramePacket(0, 0)
 	frame := &StreamFrame{FramePacket: fp}
-	actualFrame := NewStreamFrame(fp, true, 1, 1, 1)
+	actualFrame := NewStreamFrame(fp, true, 1, 1, testD)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {

@@ -78,21 +78,23 @@ type Frame interface {
 +------------+--------------+
 */
 
+// TODO: is Data connected just after Data length?
+
 type StreamFrame struct {
 	*FramePacket
-	Type       FrameType
-	Settings   byte
-	StreamID   uint32
-	Offset     uint64
-	DataLength uint16
+	Type     FrameType
+	Settings byte
+	StreamID uint32
+	Offset   uint64
+	Data     []byte
 }
 
-func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint64, dataLength uint16) *StreamFrame {
+func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint64, data []byte) *StreamFrame {
 	var settings byte = 0
 	if fin {
 		settings |= 0x40
 	}
-	if dataLength != 0 { // should other argument be used?
+	if len(data) != 0 { // should other argument be used?
 		settings |= 0x20
 	}
 
@@ -135,7 +137,7 @@ func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint6
 		Settings:    settings,
 		StreamID:    streamID,
 		Offset:      offset,
-		DataLength:  dataLength,
+		Data:        data,
 	}
 	return streamFrame
 }
@@ -199,11 +201,13 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 		length += 8
 	}
 
-	frame.DataLength = 0 // as is not contained. right?
+	var dataLength uint16 // as is not contained. right?
 	if frame.Settings&0x20 == 0x20 {
-		frame.DataLength = uint16(data[length]<<8 | data[length+1])
+		dataLength = uint16(data[length]<<8 | data[length+1])
 		length += 2
 	}
+	frame.Data = data[length : length+int(dataLength)]
+	length += int(dataLength)
 
 	return
 }
@@ -221,7 +225,8 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 		OLEN += 1
 	}
 
-	wire = make([]byte, 1+DLEN+SLEN+OLEN)
+	dataLength := len(frame.Data)
+	wire = make([]byte, 1+DLEN+SLEN+OLEN+dataLength)
 	wire[0] = byte(frame.Type) + frame.Settings
 	index := 1
 
@@ -236,9 +241,15 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	index += OLEN
 
 	if DLEN > 0 {
-		wire[index] = byte(frame.DataLength >> 8)
-		wire[index+1] = byte(frame.DataLength)
+		wire[index] = byte(dataLength >> 8)
+		wire[index+1] = byte(dataLength)
+		index += 2
 	}
+
+	for i := 0; i < dataLength; i++ {
+		wire[index+i] = frame.Data[i]
+	}
+
 	return
 }
 
