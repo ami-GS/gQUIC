@@ -88,4 +88,43 @@ const (
 	// got bored, write every names for future
 )
 
+func (tag QuicTag) String() string {
+	m := map[QuicTag]string{
+		CHLO: "CHLO",
+		SHLO: "SHLO",
+		REJ:  "REJ",
+		SFCW: "SFCW",
+		CFCW: "CFCW",
+		VER:  "VER",
+		SNI:  "SNI",
+		STK:  "STK",
+		PDMD: "PDMD",
+		CCS:  "CCS",
+		CCRT: "CCRT",
+		SCFG: "SCFG",
+		SNO:  "SNO",
+		ff54: "ff54",
+		PROF: "PROF",
+		SCID: "SCID",
+		KEXS: "KEXS",
+		AEAD: "AEAD",
+		PUBS: "PUBS",
+		ORBT: "ORBT",
+		EXPY: "EXPY",
+		AESG: "AESG",
+		S20P: "S20P",
+		C255: "C255",
+		P256: "P256",
+		NONC: "NONC",
+		CETV: "CETV",
+		CIDK: "CIDK",
+		CIDS: "CIDS",
+		PRST: "PRST",
+		RNON: "RNON",
+		RSEQ: "RSEQ",
+		CADR: "CADR",
+	}
+	return m[tag]
+}
+
 const MTU = 1500 // TODO: need to check
