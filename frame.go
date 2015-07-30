@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"encoding/binary"
 	"fmt"
 )
 
@@ -155,13 +156,13 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 		frame.StreamID = uint32(data[1])
 		length += 1
 	case 0x01:
-		frame.StreamID = uint32(data[1]<<8 | data[2])
+		frame.StreamID = uint32(data[1])<<8 | uint32(data[2])
 		length += 2
 	case 0x02:
-		frame.StreamID = uint32(data[1]<<16 | data[2]<<8 | data[3])
+		frame.StreamID = uint32(data[1])<<16 | uint32(data[2])<<8 | uint32(data[3])
 		length += 3
 	case 0x03:
-		frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+		frame.StreamID = binary.BigEndian.Uint32(data[1:5])
 		length += 4
 	}
 
@@ -169,41 +170,39 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 	case 0x00:
 		frame.Offset = 0
 	case 0x04:
-		frame.Offset = uint64(data[length]<<8 | data[length+1])
+		frame.Offset = uint64(data[length])<<8 | uint64(data[length+1])
 		length += 2
 	case 0x08:
-		frame.Offset = uint64(data[length]<<16 | data[length+1]<<8 | data[length+2])
+		frame.Offset = uint64(data[length])<<16 | uint64(data[length+1])<<8 | uint64(data[length+2])
 		length += 3
 	case 0x0c:
 		for i := 0; i < 4; i++ {
-			frame.Offset |= uint64(data[length+i] << byte(8*(3-i)))
+			frame.Offset |= uint64(data[length+i]) << byte(8*(3-i))
 		}
 		length += 4
 	case 0x10:
 		for i := 0; i < 5; i++ {
-			frame.Offset |= uint64(data[length+i] << byte(8*(4-i)))
+			frame.Offset |= uint64(data[length+i]) << byte(8*(4-i))
 		}
 		length += 5
 	case 0x14:
 		for i := 0; i < 6; i++ {
-			frame.Offset |= uint64(data[length+i] << byte(8*(5-i)))
+			frame.Offset |= uint64(data[length+i]) << byte(8*(5-i))
 		}
 		length += 6
 	case 0x18:
 		for i := 0; i < 7; i++ {
-			frame.Offset |= uint64(data[length+i] << byte(8*(6-i)))
+			frame.Offset |= uint64(data[length+i]) << byte(8*(6-i))
 		}
 		length += 7
 	case 0x1c:
-		for i := 0; i < 8; i++ {
-			frame.Offset |= uint64(data[length+i] << byte(8*(7-i)))
-		}
+		frame.Offset |= binary.BigEndian.Uint64(data[length:])
 		length += 8
 	}
 
 	var dataLength uint16 // as is not contained. right?
 	if frame.Settings&0x20 == 0x20 {
-		dataLength = uint16(data[length]<<8 | data[length+1])
+		dataLength = binary.BigEndian.Uint16(data[length:])
 		length += 2
 	}
 	frame.Data = data[length : length+int(dataLength)]
@@ -405,6 +404,7 @@ func (frame *StopWaitingFrame) Parse(data []byte) (length int, err error) {
 	case SEQUENCE_NUMBER_LENGTH_1:
 		length = 1
 	}
+
 	for i := 0; i < length; i++ {
 		frame.LeastUnackedDelta |= uint64(data[2+i] << byte(8*(length-i-1)))
 	}
@@ -470,22 +470,16 @@ func NewWindowUpdateFrame(packet *FramePacket, streamID uint32, offset uint64) *
 func (frame *WindowUpdateFrame) Parse(data []byte) (length int, err error) {
 	length = 13
 	frame.Type = FrameType(data[0])
-	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
-	for i := 0; i < 8; i++ {
-		frame.Offset |= uint64(data[5+i] << byte(8*(7-i)))
-	}
+	frame.StreamID = binary.BigEndian.Uint32(data[1:])
+	frame.Offset = binary.BigEndian.Uint64(data[5:])
 	return
 }
 
 func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 13)
 	wire[0] = byte(frame.Type)
-	for i := 0; i < 4; i++ {
-		wire[1+i] = byte(frame.StreamID >> byte(8*(3-i)))
-	}
-	for i := 0; i < 8; i++ {
-		wire[5+i] = byte(frame.Offset >> byte(8*(7-i)))
-	}
+	binary.BigEndian.PutUint32(wire[1:], frame.StreamID)
+	binary.BigEndian.PutUint64(wire[5:], frame.Offset)
 
 	return
 }
@@ -520,16 +514,14 @@ func NewBlockedFrame(packet *FramePacket, streamID uint32) *BlockedFrame {
 func (frame *BlockedFrame) Parse(data []byte) (length int, err error) {
 	length = 5
 	frame.Type = FrameType(data[0])
-	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+	frame.StreamID = binary.BigEndian.Uint32(data[1:])
 	return
 }
 
 func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 5)
 	wire[0] = byte(frame.Type)
-	for i := 0; i < 4; i++ {
-		wire[1+i] = byte(frame.StreamID >> byte(8*(3-i)))
-	}
+	binary.BigEndian.PutUint32(wire[1:], frame.StreamID)
 
 	return
 }
@@ -597,26 +589,18 @@ func NewRstStreamFrame(packet *FramePacket, streamID uint32, offset uint64, erro
 func (frame *RstStreamFrame) Parse(data []byte) (length int, err error) {
 	length = 17
 	frame.Type = FrameType(data[0])
-	frame.StreamID = uint32(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
-	for i := 0; i < 8; i++ {
-		frame.Offset |= uint64(data[5+i] << byte(8*(7-i)))
-	}
-	frame.ErrorCode = QuicErrorCode(data[13]<<24 | data[14]<<16 | data[15]<<8 | data[16])
+	frame.StreamID = binary.BigEndian.Uint32(data[1:])
+	frame.Offset = binary.BigEndian.Uint64(data[5:])
+	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[13:]))
 	return
 }
 
 func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 17)
 	wire[0] = byte(frame.Type)
-	for i := 0; i < 4; i++ {
-		wire[1+i] = byte(frame.StreamID >> byte(8*(3-i)))
-	}
-	for i := 0; i < 8; i++ {
-		wire[5+i] = byte(frame.Offset >> byte(8*(7-i)))
-	}
-	for i := 0; i < 4; i++ {
-		wire[13+i] = byte(frame.ErrorCode >> byte(8*(3-i)))
-	}
+	binary.BigEndian.PutUint32(wire[1:], frame.StreamID)
+	binary.BigEndian.PutUint64(wire[5:], frame.Offset)
+	binary.BigEndian.PutUint32(wire[13:], uint32(frame.ErrorCode))
 	return
 }
 
@@ -685,8 +669,8 @@ func NewConnectionCloseFrame(packet *FramePacket, errorCode QuicErrorCode, reaso
 
 func (frame *ConnectionCloseFrame) Parse(data []byte) (length int, err error) {
 	frame.Type = FrameType(data[0])
-	frame.ErrorCode = QuicErrorCode(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
-	frame.ReasonPhraseLength = uint16(data[5]<<8 | data[6])
+	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[1:]))
+	frame.ReasonPhraseLength = binary.BigEndian.Uint16(data[5:])
 	frame.ReasonPhrase = string(data[7 : 7+frame.ReasonPhraseLength])
 	length = 7 + int(frame.ReasonPhraseLength)
 	return
@@ -695,11 +679,8 @@ func (frame *ConnectionCloseFrame) Parse(data []byte) (length int, err error) {
 func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 7+frame.ReasonPhraseLength)
 	wire[0] = byte(frame.Type)
-	for i := 0; i < 4; i++ {
-		wire[1+i] = byte(frame.ErrorCode >> byte(8*(3-i)))
-	}
-	wire[5] = byte(frame.ReasonPhraseLength >> 8)
-	wire[6] = byte(frame.ReasonPhraseLength)
+	binary.BigEndian.PutUint32(wire[1:], uint32(frame.ErrorCode))
+	binary.BigEndian.PutUint16(wire[5:], frame.ReasonPhraseLength)
 
 	byteString := []byte(frame.ReasonPhrase)
 	for i, v := range byteString {
@@ -749,9 +730,9 @@ func NewGoAwayFrame(packet *FramePacket, errorCode QuicErrorCode, lastGoodStream
 
 func (frame *GoAwayFrame) Parse(data []byte) (length int, err error) {
 	frame.Type = FrameType(data[0])
-	frame.ErrorCode = QuicErrorCode(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
-	frame.LastGoodStreamID = uint32(data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
-	frame.ReasonPhraseLength = uint16(data[9]<<8 | data[10])
+	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[1:]))
+	frame.LastGoodStreamID = binary.BigEndian.Uint32(data[5:])
+	frame.ReasonPhraseLength = binary.BigEndian.Uint16(data[9:])
 	frame.ReasonPhrase = string(data[11 : 11+frame.ReasonPhraseLength])
 	length = 11 + int(frame.ReasonPhraseLength)
 	return
@@ -760,15 +741,9 @@ func (frame *GoAwayFrame) Parse(data []byte) (length int, err error) {
 func (frame *GoAwayFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 11+frame.ReasonPhraseLength)
 	wire[0] = byte(frame.Type)
-	for i := 0; i < 4; i++ {
-		wire[1+i] = byte(frame.ErrorCode >> byte(8*(3-i)))
-	}
-	for i := 0; i < 4; i++ {
-		wire[5+i] = byte(frame.LastGoodStreamID >> byte(8*(3-i)))
-	}
-
-	wire[9] = byte(frame.ReasonPhraseLength >> 8)
-	wire[10] = byte(frame.ReasonPhraseLength)
+	binary.BigEndian.PutUint32(wire[1:], uint32(frame.ErrorCode))
+	binary.BigEndian.PutUint32(wire[5:], frame.LastGoodStreamID)
+	binary.BigEndian.PutUint16(wire[9:], frame.ReasonPhraseLength)
 
 	byteString := []byte(frame.ReasonPhrase)
 	for i, v := range byteString {
