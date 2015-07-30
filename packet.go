@@ -1,7 +1,8 @@
 package quic
 
 import (
-//"fmt"
+	"encoding/binary"
+	//"fmt"
 )
 
 const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
@@ -108,10 +109,10 @@ func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 
 	switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
 	case CONNECTION_ID_LENGTH_8:
-		ph.ConnectionID = uint64(data[1]<<56 | data[2]<<48 | data[3]<<40 | data[4]<<32 | data[5]<<24 | data[6]<<16 | data[7]<<8 | data[8])
+		ph.ConnectionID = binary.BigEndian.Uint64(data[1:])
 		length = 9
 	case CONNECTION_ID_LENGTH_4:
-		ph.ConnectionID = uint64(data[1]<<24 | data[2]<<16 | data[3]<<8 | data[4])
+		ph.ConnectionID = uint64(data[1])<<24 | uint64(data[2])<<16 | uint64(data[3])<<8 | uint64(data[4])
 		length = 5
 	case CONNECTION_ID_LENGTH_1:
 		ph.ConnectionID = uint64(data[1])
@@ -122,20 +123,20 @@ func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 	}
 	if ph.PublicFlags&PUBLIC_RESET != PUBLIC_RESET {
 		if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-			ph.Version = uint32(data[length]<<24 | data[length+1]<<16 | data[length+2]<<8 | data[length+3])
+			ph.Version = binary.BigEndian.Uint32(data[length:])
 			length += 4
 		}
 
 		// TODO: parse sequence number
 		switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
 		case SEQUENCE_NUMBER_LENGTH_6:
-			ph.SequenceNumber = uint64(data[length]<<40 | data[length+1]<<32 | data[length+2]<<24 | data[length+3]<<16 | data[length+4]<<8 | data[length+5])
+			ph.SequenceNumber = binary.BigEndian.Uint64(data[length:])
 			length += 6
 		case SEQUENCE_NUMBER_LENGTH_4:
-			ph.SequenceNumber = uint64(data[length]<<24 | data[length+1]<<16 | data[length+2]<<8 | data[length+3])
+			ph.SequenceNumber = uint64(data[length])<<24 | uint64(data[length+1])<<16 | uint64(data[length+2])<<8 | uint64(data[length+3])
 			length += 4
 		case SEQUENCE_NUMBER_LENGTH_2:
-			ph.SequenceNumber = uint64(data[length]<<8 | data[length+1])
+			ph.SequenceNumber = uint64(data[length])<<8 | uint64(data[length+1])
 			length += 2
 		case SEQUENCE_NUMBER_LENGTH_1:
 			ph.SequenceNumber = uint64(data[length])
@@ -209,10 +210,10 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	}
 	index += connectionIDLen
 
-	for i := 0; i < versionLen; i++ {
-		wire[index+i] = byte(ph.Version >> byte(8*(versionLen-i-1)))
+	if versionLen > 0 {
+		binary.BigEndian.PutUint32(wire[index:], ph.Version)
+		index += versionLen
 	}
-	index += versionLen
 
 	for i := 0; i < sequenceNumberLen; i++ {
 		wire[index+i] = byte(ph.SequenceNumber >> byte(8*(sequenceNumberLen-i-1)))
