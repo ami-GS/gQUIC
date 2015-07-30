@@ -1,5 +1,11 @@
 package quic
 
+import (
+	"encoding/binary"
+	//"fmt"
+	//	"reflect"
+)
+
 type Message struct {
 	MsgTag QuicTag
 	Tags   []QuicTag
@@ -68,22 +74,16 @@ func (message *Message) GetWire() (wire []byte, err error) {
 	tagNum := len(message.Tags)
 	wire = make([]byte, 8+tagNum*8+valueLen)
 
-	for i := 0; i < 4; i++ {
-		wire[i] = byte(message.MsgTag >> byte(8*(3-i)))
-	}
-	for i := 0; i < 2; i++ {
-		wire[4+i] = byte(tagNum >> byte(8*(1-i)))
-	}
+	binary.BigEndian.PutUint32(wire, uint32(message.MsgTag))
+	binary.BigEndian.PutUint16(wire[4:], uint16(tagNum))
 	// padding 0x0000
 
 	index := 8
-	endOffset := 0
+	var endOffset uint32 = 0
 	for i, tag := range message.Tags {
-		endOffset += len(message.Values[i])
-		for j := 0; j < 4; j++ {
-			wire[index+j] = byte(tag >> byte(8*(3-j)))
-			wire[index+4+j] = byte(endOffset >> byte(8*(3-j)))
-		}
+		endOffset += uint32(len(message.Values[i]))
+		binary.BigEndian.PutUint32(wire[index:], uint32(tag))
+		binary.BigEndian.PutUint32(wire[index+4:], endOffset)
 		index += 8
 	}
 	for _, value := range message.Values {
@@ -97,23 +97,23 @@ func (message *Message) GetWire() (wire []byte, err error) {
 }
 
 func (message *Message) Parse(data []byte) (index int, err error) {
-	message.MsgTag = QuicTag(data[0]<<24 | data[1]<<16 | data[2]<<8 | data[3])
-	numPairs := uint16(data[4]<<8 | data[5])
+	message.MsgTag = QuicTag(binary.BigEndian.Uint32(data[0:4]))
+	numPairs := binary.BigEndian.Uint16(data[4:6])
 	message.Tags = make([]QuicTag, numPairs)
 	message.Values = make([][]byte, numPairs)
 	var valueFrom uint32 = 8 + uint32(numPairs)*8
 	index = 8
-
-	var prevOffset uint32 = 0
+	var prevOffset, endOffset uint32
 	for i := 0; i < int(numPairs); i++ {
-		message.Tags[i] = QuicTag(data[index]<<24 | data[index+1]<<16 | data[index+2]<<8 | data[index+3])
-		endOffset := uint32(data[index+4]<<24 | data[index+5]<<16 | data[index+6]<<8 | data[index+7])
+		message.Tags[i] = QuicTag(binary.BigEndian.Uint32(data[index : index+4]))
+		endOffset = binary.BigEndian.Uint32(data[index+4:])
 		message.Values[i] = make([]byte, endOffset-prevOffset)
-		message.Values[i] = data[valueFrom:endOffset]
+		message.Values[i] = data[valueFrom : valueFrom+endOffset-prevOffset]
 		valueFrom += endOffset
 		prevOffset = endOffset
 		index += 8
 	}
+	index += int(endOffset)
 
 	message.SortTags()
 	return
