@@ -173,7 +173,7 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	}
 
 	versionLen := 0
-	if ph.PublicFlags&0x01 > 0 {
+	if ph.PublicFlags&CONTAIN_QUIC_VERSION > 0 {
 		versionLen = 4
 	}
 
