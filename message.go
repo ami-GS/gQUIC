@@ -2,7 +2,7 @@ package quic
 
 import (
 	"encoding/binary"
-	//"fmt"
+	"fmt"
 	//	"reflect"
 )
 
@@ -117,4 +117,12 @@ func (message *Message) Parse(data []byte) (index int, err error) {
 
 	message.SortTags()
 	return
+}
+
+func (message *Message) String() string {
+	str := fmt.Sprintf("Message tag:%s\n", message.MsgTag.String())
+	for i, m := range message.Tags {
+		str += fmt.Sprintf("\t%s:%v\n", m.String(), message.Values[i])
+	}
+	return str
 }
