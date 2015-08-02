@@ -145,6 +145,15 @@ func NewPacketHeader(packetType PacketType, connectionID uint64, version uint32,
 
 func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 	ph.PublicFlags = PublicFlagType(data[length])
+	switch ph.PublicFlags & 0x03 {
+	case CONTAIN_QUIC_VERSION:
+		ph.Type = VersionNegotiationPacketType
+	case PUBLIC_RESET:
+		ph.Type = PublicResetPacketType
+	default:
+		ph.Type = FramePacketType
+		// NOTICE: FECPacketType is evaluated later
+	}
 
 	switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
 	case CONNECTION_ID_LENGTH_8:
@@ -160,8 +169,13 @@ func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 		ph.ConnectionID = 0 // omitted
 		length = 1
 	}
-	if ph.PublicFlags&PUBLIC_RESET != PUBLIC_RESET {
-		if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
+
+	if ph.Type == PublicResetPacketType {
+		// Public Reset Packet doesn't use sequence Number and private flags,
+		// but the packet has these two bytes
+		length += 2
+	} else {
+		if ph.Type == VersionNegotiationPacketType {
 			ph.Version = binary.BigEndian.Uint32(data[length:])
 			length += 4
 		}
@@ -192,6 +206,7 @@ func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 			length += 1
 		}
 		if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
+			ph.Type = FECPacketType
 			//TODO: FEC packet
 		}
 	}
