@@ -215,33 +215,33 @@ func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 
 func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	// confirm variable length
-	connectionIDLen := 0
+	cIDLen := 0
 	switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
 	case CONNECTION_ID_LENGTH_8:
-		connectionIDLen = 8
+		cIDLen = 8
 	case CONNECTION_ID_LENGTH_4:
-		connectionIDLen = 4
+		cIDLen = 4
 	case CONNECTION_ID_LENGTH_1:
-		connectionIDLen = 1
+		cIDLen = 1
 	case OMIT_CONNECTION_ID:
 		//pass
 	}
 
-	versionLen := 0
+	vLen := 0
 	if ph.Type == VersionNegotiationPacketType {
-		versionLen = 4
+		vLen = 4
 	}
 
-	sequenceNumberLen := 0
+	sNumLen := 0
 	switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
 	case SEQUENCE_NUMBER_LENGTH_6:
-		sequenceNumberLen = 6
+		sNumLen = 6
 	case SEQUENCE_NUMBER_LENGTH_4:
-		sequenceNumberLen = 4
+		sNumLen = 4
 	case SEQUENCE_NUMBER_LENGTH_2:
-		sequenceNumberLen = 2
+		sNumLen = 2
 	case SEQUENCE_NUMBER_LENGTH_1:
-		sequenceNumberLen = 1
+		sNumLen = 1
 	}
 
 	// deal with FEC part
@@ -257,23 +257,23 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	}
 
 	// pack to wire
-	wire = make([]byte, 1+connectionIDLen+versionLen+sequenceNumberLen+1+fecLen)
+	wire = make([]byte, 1+cIDLen+vLen+sNumLen+1+fecLen)
 	wire[0] = byte(ph.PublicFlags)
 	index := 1
-	for i := 0; i < connectionIDLen; i++ {
-		wire[index+i] = byte(ph.ConnectionID >> byte(8*(connectionIDLen-i-1)))
+	for i := 0; i < cIDLen; i++ {
+		wire[index+i] = byte(ph.ConnectionID >> byte(8*(cIDLen-i-1)))
 	}
-	index += connectionIDLen
+	index += cIDLen
 
-	if versionLen > 0 {
+	if vLen > 0 {
 		binary.BigEndian.PutUint32(wire[index:], ph.Version)
-		index += versionLen
+		index += vLen
 	}
 
-	for i := 0; i < sequenceNumberLen; i++ {
-		wire[index+i] = byte(ph.SequenceNumber >> byte(8*(sequenceNumberLen-i-1)))
+	for i := 0; i < sNumLen; i++ {
+		wire[index+i] = byte(ph.SequenceNumber >> byte(8*(sNumLen-i-1)))
 	}
-	index += sequenceNumberLen
+	index += sNumLen
 
 	wire[index] = byte(ph.PrivateFlags)
 
