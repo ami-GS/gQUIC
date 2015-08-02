@@ -7,6 +7,25 @@ import (
 
 const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
 
+type PacketType byte
+
+const (
+	VersionNegotiationPacketType PacketType = iota
+	FramePacketType
+	FECPacketType
+	PublicResetPacketType
+)
+
+func (pType PacketType) String() string {
+	t := []string{
+		"Version Negotiation",
+		"Frame",
+		"FEC",
+		"Public Reset",
+	}
+	return t[int(pType)]
+}
+
 type PublicFlagType byte
 
 const (
@@ -52,6 +71,7 @@ const (
 */
 
 type PacketHeader struct {
+	Type           PacketType
 	PublicFlags    PublicFlagType
 	ConnectionID   uint64
 	Version        uint32
