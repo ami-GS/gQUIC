@@ -80,23 +80,39 @@ type PacketHeader struct {
 	FEC            byte
 }
 
-func NewPacketHeader(publicFlags PublicFlagType, connectionID uint64, version uint32, sequenceNumber uint64, privateFlags PrivateFlagType, fec byte) *PacketHeader {
+func NewPacketHeader(packetType PacketType, connectionID uint64, version uint32, sequenceNumber uint64, fec byte) *PacketHeader {
 
-	switch {
-	case connectionID <= 0:
-		publicFlags |= OMIT_CONNECTION_ID
-	case connectionID <= 0xff:
-		publicFlags |= CONNECTION_ID_LENGTH_1
-	case connectionID <= 0xffffffff:
-		publicFlags |= CONNECTION_ID_LENGTH_4
-	case connectionID <= 0xffffffffffffffff:
-		// This indicate public reset packet
+	var publicFlags PublicFlagType
+	var privateFlags PrivateFlagType
+	switch packetType {
+	case PublicResetPacketType:
+		publicFlags |= PUBLIC_RESET
+	case VersionNegotiationPacketType:
+		publicFlags |= CONTAIN_QUIC_VERSION
+	case FECPacketType:
+		privateFlags |= FLAG_FEC
+	case FramePacketType:
+		// do nothing
+	}
+
+	if packetType != PublicResetPacketType {
+		switch {
+		case connectionID <= 0:
+			publicFlags |= OMIT_CONNECTION_ID
+		case connectionID <= 0xff:
+			publicFlags |= CONNECTION_ID_LENGTH_1
+		case connectionID <= 0xffffffff:
+			publicFlags |= CONNECTION_ID_LENGTH_4
+		case connectionID <= 0xffffffffffffffff:
+			publicFlags |= CONNECTION_ID_LENGTH_8
+		}
+	} else {
 		publicFlags |= CONNECTION_ID_LENGTH_8
 	}
 
 	// TODO: currently, SequenceNumber changes in FECPacket.AppendFramePacket,
 	// so that here should be in GetWire(). right?
-	if publicFlags&PUBLIC_RESET != PUBLIC_RESET {
+	if packetType == FramePacketType {
 		switch {
 		case sequenceNumber <= 0xff:
 			publicFlags |= SEQUENCE_NUMBER_LENGTH_1
@@ -111,9 +127,12 @@ func NewPacketHeader(publicFlags PublicFlagType, connectionID uint64, version ui
 		// version negotiation packet is still considering?
 		// private flags == FLAG_FEC indicate FEC packet
 		// others indicate frame packet
+	} else {
+		publicFlags |= SEQUENCE_NUMBER_LENGTH_1
 	}
 
 	ph := &PacketHeader{
+		Type:           packetType,
 		PublicFlags:    publicFlags,
 		ConnectionID:   connectionID,
 		Version:        version,
@@ -170,12 +189,13 @@ func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 		}
 		if ph.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
 			ph.FEC = data[length]
+			length += 1
 		}
 		if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
 			//TODO: FEC packet
 		}
 	}
-	return length + 1, err
+	return length, err
 }
 
 func (ph *PacketHeader) GetWire() (wire []byte, err error) {
@@ -193,11 +213,11 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	}
 
 	versionLen := 0
-	if ph.PublicFlags&CONTAIN_QUIC_VERSION > 0 {
+	if ph.Type == VersionNegotiationPacketType {
 		versionLen = 4
 	}
 
-	sequenceNumberLen := 1
+	sequenceNumberLen := 0
 	switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
 	case SEQUENCE_NUMBER_LENGTH_6:
 		sequenceNumberLen = 6
@@ -206,7 +226,7 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	case SEQUENCE_NUMBER_LENGTH_2:
 		sequenceNumberLen = 2
 	case SEQUENCE_NUMBER_LENGTH_1:
-		//pass
+		sequenceNumberLen = 1
 	}
 
 	// deal with FEC part
@@ -260,8 +280,7 @@ type VersionNegotiationPacket struct {
 }
 
 func NewVersionNegotiationPacket(connectionID, sequenceNumber uint64, version uint32) *VersionNegotiationPacket {
-	var flag PublicFlagType = CONTAIN_QUIC_VERSION
-	ph := NewPacketHeader(flag, connectionID, version, sequenceNumber, 0, 0)
+	ph := NewPacketHeader(VersionNegotiationPacketType, connectionID, version, sequenceNumber, 0)
 	packet := &VersionNegotiationPacket{
 		PacketHeader: ph,
 		Version:      version,
@@ -294,7 +313,7 @@ type FramePacket struct {
 }
 
 func NewFramePacket(connectionID, sequenceNumber uint64) *FramePacket {
-	ph := NewPacketHeader(0, connectionID, 0, sequenceNumber, 0, 0)
+	ph := NewPacketHeader(FramePacketType, connectionID, 0, sequenceNumber, 0)
 	packet := &FramePacket{
 		PacketHeader: ph,
 		Frames:       []*Frame{},
@@ -381,9 +400,8 @@ func NewFECPacket(firstPacket *FramePacket) *FECPacket {
 	// TODO: is fec correct?
 	// zero origin?
 	// I guess byte length of sequence number in header should be fixed
-	var flag PrivateFlagType = FLAG_FEC
-	ph := NewPacketHeader(0, firstPacket.ConnectionID, 0,
-		firstPacket.SequenceNumber+1, flag, 0)
+	ph := NewPacketHeader(FECPacketType, firstPacket.ConnectionID, 0,
+		firstPacket.SequenceNumber+1, 0)
 	// TODO: bad performance same as below in UpdateRedundancy()
 	// and suspicious because length of sequence Number might change.
 	hWire, _ := ph.GetWire()
@@ -441,8 +459,7 @@ type PublicResetPacket struct {
 }
 
 func NewPublicResetPacket(connectionID uint64) *PublicResetPacket {
-	var flag PublicFlagType = PUBLIC_RESET | CONNECTION_ID_LENGTH_8
-	ph := NewPacketHeader(flag, connectionID, 0, 0, 0, 0)
+	ph := NewPacketHeader(PublicResetPacketType, connectionID, 0, 0, 0)
 	packet := &PublicResetPacket{
 		PacketHeader: ph,
 		Msg:          NewMessage(PRST),
