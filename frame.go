@@ -240,8 +240,7 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	index += OLEN
 
 	if DLEN > 0 {
-		wire[index] = byte(dataLength >> 8)
-		wire[index+1] = byte(dataLength)
+		binary.BigEndian.PutUint16(wire[index:], uint16(dataLength))
 		index += 2
 	}
 
