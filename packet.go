@@ -338,7 +338,12 @@ func NewFramePacket(connectionID, sequenceNumber uint64) *FramePacket {
 }
 
 func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
-	for idx < len(data) {
+	packet.Wire = data
+	dataLen := len(data)
+	packet.DataSize += uint16(dataLen)
+	packet.RestSize -= uint16(dataLen)
+
+	for idx < dataLen {
 		var frame Frame
 		switch FrameType(data[idx]) {
 		case PaddingFrameType:
@@ -375,6 +380,12 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 
 func (packet *FramePacket) GetWire() ([]byte, error) {
 	hWire, err := packet.PacketHeader.GetWire()
+	if len(packet.Wire) == 0 {
+		for _, f := range packet.Frames {
+			wire, _ := (*f).GetWire()
+			packet.Wire = append(packet.Wire, wire...)
+		}
+	}
 	return append(hWire, packet.Wire...), err // temporally
 }
 
