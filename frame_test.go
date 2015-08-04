@@ -12,7 +12,8 @@ func TestStreamFrameFrame(t *testing.T) {
 	data = append(data, testD...)
 	fp := NewFramePacket(0, 0)
 	frame := &StreamFrame{FramePacket: fp}
-	actualFrame := NewStreamFrame(fp, true, 1, 1, testD)
+	actualFrame := NewStreamFrame(true, 1, 1, testD)
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {
@@ -35,7 +36,8 @@ func TestPaddingFrame(t *testing.T) {
 	fp.DataSize = 1945
 	fp.RestSize = 5
 	frame := &PaddingFrame{FramePacket: fp}
-	actualFrame := NewPaddingFrame(fp)
+	actualFrame := NewPaddingFrame()
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {
@@ -58,7 +60,8 @@ func TestRstStreamFrame(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00}
 	fp := NewFramePacket(0, 0)
 	frame := &RstStreamFrame{FramePacket: fp}
-	actualFrame := NewRstStreamFrame(fp, 1, 1, NO_ERROR)
+	actualFrame := NewRstStreamFrame(1, 1, NO_ERROR)
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {
@@ -79,7 +82,8 @@ func TestPingFrame(t *testing.T) {
 	data := []byte{0x07}
 	fp := NewFramePacket(0, 0)
 	frame := &PingFrame{FramePacket: fp}
-	actualFrame := NewPingFrame(fp)
+	actualFrame := NewPingFrame()
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {
@@ -103,7 +107,8 @@ func TestConnectionCloseFrame(t *testing.T) {
 	data = append(data, []byte(reason)...)
 	fp := NewFramePacket(0, 0)
 	frame := &ConnectionCloseFrame{FramePacket: fp}
-	actualFrame := NewConnectionCloseFrame(fp, NO_ERROR, reason)
+	actualFrame := NewConnectionCloseFrame(NO_ERROR, reason)
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {
@@ -128,7 +133,8 @@ func TestGoAwayFrame(t *testing.T) {
 	data = append(data, []byte(reason)...)
 	fp := NewFramePacket(0, 0)
 	frame := &GoAwayFrame{FramePacket: fp}
-	actualFrame := NewGoAwayFrame(fp, NO_ERROR, 1, reason)
+	actualFrame := NewGoAwayFrame(NO_ERROR, 1, reason)
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {
@@ -152,7 +158,8 @@ func TestWindowUpdateFrame(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
 	fp := NewFramePacket(0, 0)
 	frame := &WindowUpdateFrame{FramePacket: fp}
-	actualFrame := NewWindowUpdateFrame(fp, 1, 1)
+	actualFrame := NewWindowUpdateFrame(1, 1)
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {
@@ -175,7 +182,8 @@ func TestBlockedFrame(t *testing.T) {
 	data := []byte{0x05, 0x00, 0x00, 0x00, 0x01}
 	fp := NewFramePacket(0, 0)
 	frame := &BlockedFrame{FramePacket: fp}
-	actualFrame := NewBlockedFrame(fp, 1)
+	actualFrame := NewBlockedFrame(1)
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {
@@ -198,7 +206,8 @@ func TestStopWaitingFrame(t *testing.T) {
 	data := []byte{0x06, 0x01, 0x01}
 	fp := NewFramePacket(0, 0)
 	frame := &StopWaitingFrame{FramePacket: fp}
-	actualFrame := NewStopWaitingFrame(fp, 1, 1)
+	actualFrame := NewStopWaitingFrame(1, 1)
+	actualFrame.SetPacket(fp)
 
 	actualLen, _ := frame.Parse(data)
 	if actualLen != len(data) {

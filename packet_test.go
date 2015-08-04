@@ -40,8 +40,8 @@ func TestFramePacket(t *testing.T) {
 	ph := NewPacketHeader(FramePacketType, 1, 0, 1, 0)
 	packet := &FramePacket{PacketHeader: ph, RestSize: MTU}
 	actualPacket := NewFramePacket(1, 1)
-	actualPacket.PushBack(NewStreamFrame(actualPacket, true, 1, 1, []byte("aiueo")))
-	actualPacket.PushBack(NewWindowUpdateFrame(actualPacket, 1, 1))
+	actualPacket.PushBack(NewStreamFrame(true, 1, 1, []byte("aiueo")))
+	actualPacket.PushBack(NewWindowUpdateFrame(1, 1))
 	actualLen, _ := packet.Parse(data[4:])
 	actualWire, _ := packet.GetWire()
 

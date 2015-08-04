@@ -392,11 +392,13 @@ func (packet *FramePacket) GetWire() ([]byte, error) {
 func (packet *FramePacket) PushBack(frame Frame) bool {
 	wire, _ := frame.GetWire()
 	dataSize := uint16(len(wire))
+
 	if packet.DataSize+dataSize <= MTU {
 		packet.Frames = append(packet.Frames, &frame)
 		packet.Wire = append(packet.Wire, wire...)
 		packet.DataSize += dataSize
 		packet.RestSize -= dataSize
+		frame.SetPacket(packet) // TODO: is this cool?
 		return true
 	}
 	return false

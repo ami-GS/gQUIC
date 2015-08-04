@@ -56,6 +56,7 @@ const (
 type Frame interface {
 	Parse(data []byte) (int, error)
 	GetWire() ([]byte, error)
+	SetPacket(*FramePacket)
 	String() string
 }
 
@@ -90,7 +91,7 @@ type StreamFrame struct {
 	Data     []byte
 }
 
-func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint64, data []byte) *StreamFrame {
+func NewStreamFrame(fin bool, streamID uint32, offset uint64, data []byte) *StreamFrame {
 	var settings byte = 0
 	if fin {
 		settings |= 0x40
@@ -133,12 +134,11 @@ func NewStreamFrame(packet *FramePacket, fin bool, streamID uint32, offset uint6
 	}
 
 	streamFrame := &StreamFrame{
-		FramePacket: packet,
-		Type:        StreamFrameType,
-		Settings:    settings,
-		StreamID:    streamID,
-		Offset:      offset,
-		Data:        data,
+		Type:     StreamFrameType,
+		Settings: settings,
+		StreamID: streamID,
+		Offset:   offset,
+		Data:     data,
 	}
 	return streamFrame
 }
@@ -257,6 +257,10 @@ func (frame *StreamFrame) String() (str string) {
 	return str
 }
 
+func (frame *StreamFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 /*
       0        1                           N
  +--------+--------+---------------------------------------------------+
@@ -307,7 +311,7 @@ type AckFrame struct {
 	RevivedPacket                    uint64
 }
 
-func NewAckFrame(packet *FramePacket, hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
+func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
 	var settings byte = 0
 	// 'n' bit
 	if hasNACK {
@@ -343,9 +347,8 @@ func NewAckFrame(packet *FramePacket, hasNACK, isTruncate bool, largestObserved,
 	}
 
 	ackFrame := &AckFrame{
-		FramePacket: packet,
-		Type:        AckFrameType,
-		Settings:    settings,
+		Type:     AckFrameType,
+		Settings: settings,
 	}
 	return ackFrame
 }
@@ -363,6 +366,10 @@ func (frame *AckFrame) String() (str string) {
 	return str
 }
 
+func (frame *AckFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 /*
       0        1        2        3         4        5        6      7
  +--------+--------+--------+--------+--------+--------+-------+-------+
@@ -378,9 +385,8 @@ type StopWaitingFrame struct {
 	LeastUnackedDelta uint64
 }
 
-func NewStopWaitingFrame(packet *FramePacket, sentEntropy byte, leastUnackedDelta uint64) *StopWaitingFrame {
+func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaitingFrame {
 	stopWaitingFrame := &StopWaitingFrame{
-		FramePacket:       packet,
 		Type:              StopWaitingFrameType,
 		SentEntropy:       sentEntropy,
 		LeastUnackedDelta: leastUnackedDelta,
@@ -442,6 +448,10 @@ func (frame *StopWaitingFrame) String() (str string) {
 	return str
 }
 
+func (frame *StopWaitingFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 /*
      0         1                 4        5                 12
  +--------+--------+-- ... --+-------+--------+-- ... --+-------+
@@ -456,12 +466,11 @@ type WindowUpdateFrame struct {
 	Offset   uint64
 }
 
-func NewWindowUpdateFrame(packet *FramePacket, streamID uint32, offset uint64) *WindowUpdateFrame {
+func NewWindowUpdateFrame(streamID uint32, offset uint64) *WindowUpdateFrame {
 	windowUpdateFrame := &WindowUpdateFrame{
-		FramePacket: packet,
-		Type:        WindowUpdateFrameType,
-		StreamID:    streamID,
-		Offset:      offset,
+		Type:     WindowUpdateFrameType,
+		StreamID: streamID,
+		Offset:   offset,
 	}
 	return windowUpdateFrame
 }
@@ -489,6 +498,10 @@ func (frame *WindowUpdateFrame) String() (str string) {
 	return str
 }
 
+func (frame *WindowUpdateFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 /*
       0        1        2        3         4
  +--------+--------+--------+--------+--------+
@@ -501,11 +514,10 @@ type BlockedFrame struct {
 	StreamID uint32
 }
 
-func NewBlockedFrame(packet *FramePacket, streamID uint32) *BlockedFrame {
+func NewBlockedFrame(streamID uint32) *BlockedFrame {
 	blockedFrame := &BlockedFrame{
-		FramePacket: packet,
-		Type:        BlockedFrameType,
-		StreamID:    streamID,
+		Type:     BlockedFrameType,
+		StreamID: streamID,
 	}
 	return blockedFrame
 }
@@ -530,16 +542,19 @@ func (frame *BlockedFrame) String() (str string) {
 	return str
 }
 
+func (frame *BlockedFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 // CongestionFeedback
 type PaddingFrame struct {
 	*FramePacket
 	Type FrameType
 }
 
-func NewPaddingFrame(packet *FramePacket) *PaddingFrame {
+func NewPaddingFrame() *PaddingFrame {
 	paddingFrame := &PaddingFrame{
-		FramePacket: packet,
-		Type:        PaddingFrameType,
+		Type: PaddingFrameType,
 	}
 	return paddingFrame
 }
@@ -559,6 +574,10 @@ func (frame *PaddingFrame) String() (str string) {
 	return str
 }
 
+func (frame *PaddingFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 /*
      0        1            4      5              12     8             16
 +-------+--------+-- ... ----+--------+-- ... ------+-------+-- ... ------+
@@ -574,13 +593,12 @@ type RstStreamFrame struct {
 	ErrorCode QuicErrorCode
 }
 
-func NewRstStreamFrame(packet *FramePacket, streamID uint32, offset uint64, errorCode QuicErrorCode) *RstStreamFrame {
+func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QuicErrorCode) *RstStreamFrame {
 	rstStreamFrame := &RstStreamFrame{
-		FramePacket: packet,
-		Type:        RstStreamFrameType,
-		StreamID:    streamID,
-		Offset:      offset,
-		ErrorCode:   errorCode,
+		Type:      RstStreamFrameType,
+		StreamID:  streamID,
+		Offset:    offset,
+		ErrorCode: errorCode,
 	}
 	return rstStreamFrame
 }
@@ -609,15 +627,18 @@ func (frame *RstStreamFrame) String() (str string) {
 	return str
 }
 
+func (frame *RstStreamFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 type PingFrame struct {
 	*FramePacket
 	Type FrameType
 }
 
-func NewPingFrame(packet *FramePacket) *PingFrame {
+func NewPingFrame() *PingFrame {
 	pingFrame := &PingFrame{
-		FramePacket: packet,
-		Type:        PingFrameType,
+		Type: PingFrameType,
 	}
 	return pingFrame
 }
@@ -638,6 +659,10 @@ func (frame *PingFrame) String() (str string) {
 	return str
 }
 
+func (frame *PingFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 /*
         0        1             4        5        6       7
    +--------+--------+-- ... -----+--------+--------+--------+----- ...
@@ -654,10 +679,9 @@ type ConnectionCloseFrame struct {
 	ReasonPhrase       string
 }
 
-func NewConnectionCloseFrame(packet *FramePacket, errorCode QuicErrorCode, reasonPhrase string) *ConnectionCloseFrame {
+func NewConnectionCloseFrame(errorCode QuicErrorCode, reasonPhrase string) *ConnectionCloseFrame {
 
 	connectionCloseFrame := &ConnectionCloseFrame{
-		FramePacket:        packet,
 		Type:               ConnectionCloseFrameType,
 		ErrorCode:          errorCode,
 		ReasonPhraseLength: uint16(len(reasonPhrase)), // TODO: cut if the length is over uint16
@@ -694,6 +718,10 @@ func (frame *ConnectionCloseFrame) String() (str string) {
 	return str
 }
 
+func (frame *ConnectionCloseFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
+}
+
 /*
         0        1             4      5       6       7      8
    +--------+--------+-- ... -----+-------+-------+-------+------+
@@ -715,9 +743,8 @@ type GoAwayFrame struct {
 	ReasonPhrase       string
 }
 
-func NewGoAwayFrame(packet *FramePacket, errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
+func NewGoAwayFrame(errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
 	goAwayFrame := &GoAwayFrame{
-		FramePacket:        packet,
 		Type:               GoAwayFrameType,
 		ErrorCode:          errorCode,
 		LastGoodStreamID:   lastGoodStreamID,
@@ -756,4 +783,7 @@ func (frame *GoAwayFrame) String() (str string) {
 	str = fmt.Sprintf("GOAWAY\n\tError code : %d, LastGoodStreamID : %d, Reason length : %d\nReason : %s",
 		frame.ErrorCode, frame.LastGoodStreamID, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
+}
+func (frame *GoAwayFrame) SetPacket(packet *FramePacket) {
+	frame.FramePacket = packet
 }
