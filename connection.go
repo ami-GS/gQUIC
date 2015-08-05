@@ -22,3 +22,15 @@ func NewConnection(socket *net.Conn) (conn *Conn) {
 func (conn *Conn) NewStream(streamID uint32) {
 	conn.Streams[streamID] = NewStream(streamID, conn.Socket)
 }
+
+func (conn *Conn) ReadPacket(p Packet) {
+	switch packet := p.(type) {
+	case *VersionNegotiationPacket:
+	case *FramePacket:
+		for _, f := range packet.Frames {
+			(*f).GetWire() // temporally
+		}
+	case *FECPacket:
+	case *PublicResetPacket:
+	}
+}

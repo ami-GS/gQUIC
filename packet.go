@@ -7,6 +7,12 @@ import (
 
 const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
 
+type Packet interface {
+	Parse([]byte) (int, error) // TODO: Does (length int) return MTU? no need?
+	GetWire() ([]byte, error)
+	String() string
+}
+
 type PacketType byte
 
 const (
@@ -314,6 +320,10 @@ func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	return append(hWire, wire...), err
 }
 
+func (packet *VersionNegotiationPacket) String() string {
+	return "" // TODO
+}
+
 /*
    +--------+---...---+--------+---...---+
    | Type   | Payload | Type   | Payload |
@@ -469,6 +479,10 @@ func (packet *FECPacket) UpdateRedundancy(nextPacket *FramePacket) {
 	}
 }
 
+func (packet *FECPacket) String() string {
+	return "" //TODO
+}
+
 /*
         0        1        2        3        4         8
    +--------+--------+--------+--------+--------+--   --+
@@ -495,7 +509,7 @@ func NewPublicResetPacket(connectionID uint64) *PublicResetPacket {
 	return packet
 }
 
-func (packet *PublicResetPacket) Parse(data []byte) (err error) {
+func (packet *PublicResetPacket) Parse(data []byte) (length int, err error) {
 	packet.Msg.Parse(data)
 	return
 }
@@ -505,6 +519,10 @@ func (packet *PublicResetPacket) GetWire() ([]byte, error) {
 	hWire, err := packet.PacketHeader.GetWire()
 	msgWire, err := packet.Msg.GetWire()
 	return append(hWire, msgWire...), err
+}
+
+func (pakcet *PublicResetPacket) String() string {
+	return "" //TODO
 }
 
 func (packet *PublicResetPacket) AppendTagValue(tag QuicTag, value []byte) bool {
