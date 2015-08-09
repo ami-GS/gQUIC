@@ -176,11 +176,7 @@ func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 		length = 1
 	}
 
-	if ph.Type == PublicResetPacketType {
-		// Public Reset Packet doesn't use sequence Number and private flags,
-		// but the packet has these two bytes
-		length += 2
-	} else {
+	if ph.Type != PublicResetPacketType {
 		if ph.Type == VersionNegotiationPacketType {
 			ph.Version = binary.BigEndian.Uint32(data[length:])
 			length += 4
@@ -239,15 +235,17 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	}
 
 	sNumLen := 0
-	switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
-	case SEQUENCE_NUMBER_LENGTH_6:
-		sNumLen = 6
-	case SEQUENCE_NUMBER_LENGTH_4:
-		sNumLen = 4
-	case SEQUENCE_NUMBER_LENGTH_2:
-		sNumLen = 2
-	case SEQUENCE_NUMBER_LENGTH_1:
-		sNumLen = 1
+	if ph.Type != PublicResetPacketType {
+		switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
+		case SEQUENCE_NUMBER_LENGTH_6:
+			sNumLen = 6
+		case SEQUENCE_NUMBER_LENGTH_4:
+			sNumLen = 4
+		case SEQUENCE_NUMBER_LENGTH_2:
+			sNumLen = 2
+		case SEQUENCE_NUMBER_LENGTH_1:
+			sNumLen = 1
+		}
 	}
 
 	// deal with FEC part
