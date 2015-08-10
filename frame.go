@@ -355,6 +355,79 @@ func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64)
 }
 
 func (frame *AckFrame) Parse(data []byte) (length int, err error) {
+	frame.Type = AckFrameType
+	frame.Settings = data[0] & 0x3f
+	frame.ReceivedEntropy = data[1]
+	length = 2
+	largestObservedLen := 0
+	if frame.Settings&0x10 == 0x10 {
+		// TODO:istruncate
+	}
+	switch frame.Settings & 0x0c {
+	case 0x00:
+		largestObservedLen = 1
+	case 0x04:
+		largestObservedLen = 2
+	case 0x08:
+		largestObservedLen = 4
+	case 0x0c:
+		largestObservedLen = 6
+	}
+	for i := 0; i < largestObservedLen; i++ {
+		frame.LargestObserved |= uint64(data[length]) << byte(8*(largestObservedLen-i-1))
+		length += 1
+	}
+
+	misPacketSeqNumDeltaLen := 0
+	switch frame.Settings & 0x03 {
+	case 0x00:
+		misPacketSeqNumDeltaLen = 1
+	case 0x01:
+		misPacketSeqNumDeltaLen = 2
+	case 0x02:
+		misPacketSeqNumDeltaLen = 4
+	case 0x03:
+		misPacketSeqNumDeltaLen = 6
+	}
+
+	length += largestObservedLen
+	frame.LargestObservedDeltaTime = binary.BigEndian.Uint16(data[length:])
+	frame.NumTimestamp = data[length+2]
+	frame.DeltaSinceLargestObserved = data[length+3]
+	frame.TimeSinceLargestObserved = binary.BigEndian.Uint32(data[length+4:])
+	length += 8
+
+	frame.DeltaSincePreviousLargestObserved_N = make([]byte, frame.NumTimestamp)
+	frame.TimeSincePreviousTimestamp_N = make([]uint16, frame.NumTimestamp)
+	for i := 0; i < int(frame.NumTimestamp); i++ {
+		frame.DeltaSincePreviousLargestObserved_N[i] = data[length]
+		frame.TimeSincePreviousTimestamp_N[i] = binary.BigEndian.Uint16(data[length+1:])
+		length += 3
+	}
+	if frame.Settings&0x20 == 0x20 {
+		frame.NumRanges = data[length]
+		length += 1
+		frame.MissingPacketSequenceNumberDelta = make([]uint64, frame.NumRanges)
+		frame.RangeLength = make([]byte, frame.NumRanges)
+		for i := 0; i < int(frame.NumRanges); i++ {
+			for j := 0; j < misPacketSeqNumDeltaLen; j++ {
+				frame.MissingPacketSequenceNumberDelta[i] |= uint64(data[length]) << byte(8*(misPacketSeqNumDeltaLen-j-1))
+				length += 1
+			}
+			frame.RangeLength[i] = data[length]
+			length += 1
+		}
+		frame.NumRevived = data[length]
+		length += 1
+		frame.RevivedPacketSequenceNumber = make([]uint64, frame.NumRevived)
+		for i := 0; i < int(frame.NumRevived); i++ {
+			for j := 0; j < largestObservedLen; j++ {
+				frame.RevivedPacketSequenceNumber[i] |= uint64(data[length]) << byte(8*(largestObservedLen-j-1))
+				length += 1
+			}
+		}
+	}
+
 	return
 }
 
