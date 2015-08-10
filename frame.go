@@ -295,20 +295,21 @@ func (frame *StreamFrame) SetPacket(packet *FramePacket) {
 
 type AckFrame struct {
 	*FramePacket
-	Type                             FrameType
-	Settings                         byte
-	RecievedEntropy                  byte
-	LargestObserved                  uint64
-	LargestObservedDeltaTime         float64 // this must be ufloat64?
-	NumTimestamp                     byte
-	DeltaLargestObserved             byte
-	TimeSinceLargestObserved         uint32
-	TimeSincePreviousTimestamp       uint16
-	NumRages                         byte
-	MissingPacketSequenceNumberDelta []byte //suspicious
-	RangeLength                      byte
-	NumberRevived                    byte
-	RevivedPacket                    uint64
+	Type                                FrameType
+	Settings                            byte
+	ReceivedEntropy                     byte
+	LargestObserved                     uint64
+	LargestObservedDeltaTime            uint16 // actual type is ufloat16
+	NumTimestamp                        byte
+	DeltaSinceLargestObserved           byte
+	TimeSinceLargestObserved            uint32
+	DeltaSincePreviousLargestObserved_N []byte
+	TimeSincePreviousTimestamp_N        []uint16
+	NumRanges                           byte
+	MissingPacketSequenceNumberDelta    []uint64 //suspicious
+	RangeLength                         []byte
+	NumRevived                          byte
+	RevivedPacketSequenceNumber         []uint64
 }
 
 func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
