@@ -60,6 +60,36 @@ type Frame interface {
 	String() string
 }
 
+func NewFrame(fType byte) (frame Frame) {
+	switch FrameType(fType) {
+	case PaddingFrameType:
+		frame = &PaddingFrame{}
+	case RstStreamFrameType:
+		frame = &RstStreamFrame{}
+	case ConnectionCloseFrameType:
+		frame = &ConnectionCloseFrame{}
+	case GoAwayFrameType:
+		frame = &GoAwayFrame{}
+	case WindowUpdateFrameType:
+		frame = &WindowUpdateFrame{}
+	case BlockedFrameType:
+		frame = &BlockedFrame{}
+	case StopWaitingFrameType:
+		frame = &StopWaitingFrame{}
+	case PingFrameType:
+		frame = &PingFrame{}
+	default:
+		if fType&StreamFrameType == StreamFrameType {
+			frame = &StreamFrame{}
+		} else if fType&AckFrameType == AckFrameType {
+			frame = &AckFrame{}
+		} else if fType&CongestionFeedbackFrameType == CongestionFeedbackFrameType {
+			//frame = &CongestionFeedbackFrame{}
+		}
+	}
+	return frame
+}
+
 /*
     0        1       ...               SLEN
 +--------+--------+--------+--------+--------+
