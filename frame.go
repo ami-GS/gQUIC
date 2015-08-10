@@ -432,6 +432,78 @@ func (frame *AckFrame) Parse(data []byte) (length int, err error) {
 }
 
 func (frame *AckFrame) GetWire() (wire []byte, err error) {
+	if frame.Settings&0x20 == 0x20 {
+		// TODO:deal with truncated frame
+	}
+
+	largestObservedLen := 0
+	switch frame.Settings & 0x0c {
+	case 0x00:
+		largestObservedLen = 1
+	case 0x04:
+		largestObservedLen = 2
+	case 0x08:
+		largestObservedLen = 4
+	case 0x0c:
+		largestObservedLen = 6
+	}
+
+	misPacketSeqNumDeltaLen := 0
+	switch frame.Settings & 0x30 {
+	case 0x00:
+		misPacketSeqNumDeltaLen = 1
+	case 0x01:
+		misPacketSeqNumDeltaLen = 2
+	case 0x02:
+		misPacketSeqNumDeltaLen = 4
+	case 0x03:
+		misPacketSeqNumDeltaLen = 6
+	}
+
+	hasNACK := 0
+	if frame.Settings&0x10 == 0x10 {
+		hasNACK = 1
+	}
+
+	wire = make([]byte, 1+1+largestObservedLen+2+1+1+4+int(frame.NumTimestamp)*3+hasNACK*2+int(frame.NumRanges)*(misPacketSeqNumDeltaLen+1)+int(frame.NumRevived)*largestObservedLen)
+	wire[0] = byte(frame.Type) + frame.Settings
+	wire[1] = frame.ReceivedEntropy
+	length := 2
+	for i := 0; i < largestObservedLen; i++ {
+		wire[i+length] = byte(frame.LargestObserved >> byte(8*(largestObservedLen-i-1)))
+	}
+	length += largestObservedLen
+	binary.BigEndian.PutUint16(wire[length:], frame.LargestObservedDeltaTime)
+	wire[length+2] = frame.NumTimestamp
+	wire[length+3] = frame.DeltaSinceLargestObserved
+	binary.BigEndian.PutUint32(wire[length+4:], frame.TimeSinceLargestObserved)
+	length += 8
+	for i := 0; i < int(frame.NumTimestamp); i++ {
+		wire[length+i] = frame.DeltaSincePreviousLargestObserved_N[i]
+		binary.BigEndian.PutUint16(wire[length+i+1:], frame.TimeSincePreviousTimestamp_N[i])
+		length += 3
+	}
+
+	if hasNACK == 1 {
+		wire[length] = frame.NumRanges
+		length += 1
+		for i := 0; i < int(frame.NumRanges); i++ {
+			for j := 0; j < misPacketSeqNumDeltaLen; j++ {
+				wire[length+j] = byte(frame.MissingPacketSequenceNumberDelta[i] >> byte(8*(misPacketSeqNumDeltaLen-j-1)))
+			}
+			wire[length+misPacketSeqNumDeltaLen] = frame.RangeLength[i]
+			length += 1
+		}
+		wire[length] = frame.NumRevived
+		length += 1
+		for i := 0; i < int(frame.NumRevived); i++ {
+			for j := 0; j < largestObservedLen; j++ {
+				wire[length+j] = byte(frame.RevivedPacketSequenceNumber[i] >> byte(8*(largestObservedLen-j-1)))
+			}
+			length += largestObservedLen
+		}
+	}
+
 	return
 }
 
