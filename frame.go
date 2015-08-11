@@ -60,8 +60,8 @@ type Frame interface {
 	String() string
 }
 
-func NewFrame(fType byte) (frame Frame) {
-	switch FrameType(fType) {
+func NewFrame(fType FrameType) (frame Frame) {
+	switch fType {
 	case PaddingFrameType:
 		frame = &PaddingFrame{}
 	case RstStreamFrameType:

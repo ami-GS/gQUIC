@@ -352,7 +352,7 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 	packet.RestSize -= uint16(dataLen)
 
 	for idx < dataLen {
-		var frame Frame = NewFrame(data[idx])
+		var frame Frame = NewFrame(FrameType(data[idx]))
 		frame.SetPacket(packet)
 		nxt, _ := frame.Parse(data[idx:])
 		packet.Frames = append(packet.Frames, &frame)
