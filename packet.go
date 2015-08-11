@@ -13,6 +13,20 @@ type Packet interface {
 	String() string
 }
 
+func NewPacket(ph *PacketHeader) (packet Packet) {
+	switch ph.Type {
+	case VersionNegotiationPacketType:
+		packet = &VersionNegotiationPacket{PacketHeader: ph}
+	case FramePacketType:
+		packet = &FramePacket{PacketHeader: ph}
+	case FECPacketType:
+		packet = &FECPacket{PacketHeader: ph}
+	case PublicResetPacketType:
+		packet = &PublicResetPacket{PacketHeader: ph}
+	}
+	return
+}
+
 type PacketType byte
 
 const (
