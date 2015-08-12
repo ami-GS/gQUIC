@@ -116,6 +116,7 @@ type StreamFrame struct {
 	*FramePacket
 	Type     FrameType
 	Settings byte
+	Fin      bool
 	StreamID uint32
 	Offset   uint64
 	Data     []byte
@@ -166,6 +167,7 @@ func NewStreamFrame(fin bool, streamID uint32, offset uint64, data []byte) *Stre
 	streamFrame := &StreamFrame{
 		Type:     StreamFrameType,
 		Settings: settings,
+		Fin:      fin,
 		StreamID: streamID,
 		Offset:   offset,
 		Data:     data,
@@ -177,6 +179,7 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 	frame.Type = StreamFrameType
 	frame.Settings = data[0] & 0x7f
 	if frame.Settings&0x40 == 0x40 {
+		frame.Fin = true
 		//TODO: fin
 	}
 
