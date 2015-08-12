@@ -32,7 +32,6 @@ func NewStream(streamID uint32, socket *net.Conn) (stream *Stream) {
 func (stream *Stream) ReadFrame(f Frame) {
 	switch frame := f.(type) {
 	case *StreamFrame:
-	case *AckFrame:
 	case *WindowUpdateFrame:
 	case *BlockedFrame:
 	case *RstStreamFrame:

@@ -28,7 +28,19 @@ func (conn *Conn) ReadPacket(p Packet) {
 	case *VersionNegotiationPacket:
 	case *FramePacket:
 		for _, f := range packet.Frames {
-			(*f).GetWire() // temporally
+			switch (*f).(type) {
+			case *AckFrame:
+			case *StopWaitingFrame:
+			//case *CongestionFeedBackFrame:
+			case *PingFrame:
+				// Ack the packet containing this frame
+			case *ConnectionCloseFrame:
+				// close connection -> close streams -> send GoAwayFrame
+			case *GoAwayFrame:
+				// will not accept any frame on this connection
+			case *StreamFrame, *WindowUpdateFrame, *BlockedFrame, *RstStreamFrame:
+				//conn.Streams[f.StreamID].ReadFrame(f)
+			}
 		}
 	case *FECPacket:
 	case *PublicResetPacket:
