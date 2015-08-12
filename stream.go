@@ -32,9 +32,12 @@ func NewStream(streamID uint32, socket *net.Conn) (stream *Stream) {
 func (stream *Stream) ReadFrame(f Frame) {
 	switch frame := f.(type) {
 	case *StreamFrame:
+		if frame.Fin == true {
+			// Normal termination
+		}
 	case *WindowUpdateFrame:
 	case *BlockedFrame:
 	case *RstStreamFrame:
-
+		// Abrupt termination
 	}
 }

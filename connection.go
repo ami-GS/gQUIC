@@ -44,5 +44,6 @@ func (conn *Conn) ReadPacket(p Packet) {
 		}
 	case *FECPacket:
 	case *PublicResetPacket:
+		// Abrubt termination
 	}
 }
