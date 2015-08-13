@@ -328,21 +328,21 @@ func (frame *StreamFrame) SetPacket(packet *FramePacket) {
 
 type AckFrame struct {
 	*FramePacket
-	Type                                FrameType
-	Settings                            byte
-	ReceivedEntropy                     byte
-	LargestObserved                     uint64
-	LargestObservedDeltaTime            uint16 // actual type is ufloat16
-	NumTimestamp                        byte
-	DeltaSinceLargestObserved           byte
-	TimeSinceLargestObserved            uint32
-	DeltaSincePreviousLargestObserved_N []byte
-	TimeSincePreviousTimestamp_N        []uint16
-	NumRanges                           byte
-	MissingPacketSequenceNumberDelta    []uint64 //suspicious
-	RangeLength                         []byte
-	NumRevived                          byte
-	RevivedPacketSequenceNumber         []uint64
+	Type                              FrameType
+	Settings                          byte
+	ReceivedEntropy                   byte
+	LargestObserved                   uint64
+	LargestObservedDeltaTime          uint16 // actual type is ufloat16
+	NumTimestamp                      byte
+	DeltaSinceLargestObserved         byte
+	TimeSinceLargestObserved          uint32
+	DeltaSincePreviousLargestObserved []byte
+	TimeSincePreviousTimestamp        []uint16
+	NumRanges                         byte
+	MissingPacketSequenceNumberDelta  []uint64 //suspicious
+	RangeLength                       []byte
+	NumRevived                        byte
+	RevivedPacketSequenceNumber       []uint64
 }
 
 func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
@@ -392,49 +392,49 @@ func (frame *AckFrame) Parse(data []byte) (length int, err error) {
 	frame.Settings = data[0] & 0x3f
 	frame.ReceivedEntropy = data[1]
 	length = 2
-	largestObservedLen := 0
+	lOLen := 0
 	if frame.Settings&0x10 == 0x10 {
 		// TODO:istruncate
 	}
 	switch frame.Settings & 0x0c {
 	case 0x00:
-		largestObservedLen = 1
+		lOLen = 1
 	case 0x04:
-		largestObservedLen = 2
+		lOLen = 2
 	case 0x08:
-		largestObservedLen = 4
+		lOLen = 4
 	case 0x0c:
-		largestObservedLen = 6
+		lOLen = 6
 	}
-	for i := 0; i < largestObservedLen; i++ {
-		frame.LargestObserved |= uint64(data[length]) << byte(8*(largestObservedLen-i-1))
+	for i := 0; i < lOLen; i++ {
+		frame.LargestObserved |= uint64(data[length]) << byte(8*(lOLen-i-1))
 		length += 1
 	}
 
-	misPacketSeqNumDeltaLen := 0
+	mPSeqNumDLen := 0
 	switch frame.Settings & 0x03 {
 	case 0x00:
-		misPacketSeqNumDeltaLen = 1
+		mPSeqNumDLen = 1
 	case 0x01:
-		misPacketSeqNumDeltaLen = 2
+		mPSeqNumDLen = 2
 	case 0x02:
-		misPacketSeqNumDeltaLen = 4
+		mPSeqNumDLen = 4
 	case 0x03:
-		misPacketSeqNumDeltaLen = 6
+		mPSeqNumDLen = 6
 	}
 
-	length += largestObservedLen
+	length += lOLen
 	frame.LargestObservedDeltaTime = binary.BigEndian.Uint16(data[length:])
 	frame.NumTimestamp = data[length+2]
 	frame.DeltaSinceLargestObserved = data[length+3]
 	frame.TimeSinceLargestObserved = binary.BigEndian.Uint32(data[length+4:])
 	length += 8
 
-	frame.DeltaSincePreviousLargestObserved_N = make([]byte, frame.NumTimestamp)
-	frame.TimeSincePreviousTimestamp_N = make([]uint16, frame.NumTimestamp)
+	frame.DeltaSincePreviousLargestObserved = make([]byte, frame.NumTimestamp)
+	frame.TimeSincePreviousTimestamp = make([]uint16, frame.NumTimestamp)
 	for i := 0; i < int(frame.NumTimestamp); i++ {
-		frame.DeltaSincePreviousLargestObserved_N[i] = data[length]
-		frame.TimeSincePreviousTimestamp_N[i] = binary.BigEndian.Uint16(data[length+1:])
+		frame.DeltaSincePreviousLargestObserved[i] = data[length]
+		frame.TimeSincePreviousTimestamp[i] = binary.BigEndian.Uint16(data[length+1:])
 		length += 3
 	}
 	if frame.Settings&0x20 == 0x20 {
@@ -443,8 +443,8 @@ func (frame *AckFrame) Parse(data []byte) (length int, err error) {
 		frame.MissingPacketSequenceNumberDelta = make([]uint64, frame.NumRanges)
 		frame.RangeLength = make([]byte, frame.NumRanges)
 		for i := 0; i < int(frame.NumRanges); i++ {
-			for j := 0; j < misPacketSeqNumDeltaLen; j++ {
-				frame.MissingPacketSequenceNumberDelta[i] |= uint64(data[length]) << byte(8*(misPacketSeqNumDeltaLen-j-1))
+			for j := 0; j < mPSeqNumDLen; j++ {
+				frame.MissingPacketSequenceNumberDelta[i] |= uint64(data[length]) << byte(8*(mPSeqNumDLen-j-1))
 				length += 1
 			}
 			frame.RangeLength[i] = data[length]
@@ -454,8 +454,8 @@ func (frame *AckFrame) Parse(data []byte) (length int, err error) {
 		length += 1
 		frame.RevivedPacketSequenceNumber = make([]uint64, frame.NumRevived)
 		for i := 0; i < int(frame.NumRevived); i++ {
-			for j := 0; j < largestObservedLen; j++ {
-				frame.RevivedPacketSequenceNumber[i] |= uint64(data[length]) << byte(8*(largestObservedLen-j-1))
+			for j := 0; j < lOLen; j++ {
+				frame.RevivedPacketSequenceNumber[i] |= uint64(data[length]) << byte(8*(lOLen-j-1))
 				length += 1
 			}
 		}
@@ -469,28 +469,28 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		// TODO:deal with truncated frame
 	}
 
-	largestObservedLen := 0
+	lOLen := 0
 	switch frame.Settings & 0x0c {
 	case 0x00:
-		largestObservedLen = 1
+		lOLen = 1
 	case 0x04:
-		largestObservedLen = 2
+		lOLen = 2
 	case 0x08:
-		largestObservedLen = 4
+		lOLen = 4
 	case 0x0c:
-		largestObservedLen = 6
+		lOLen = 6
 	}
 
-	misPacketSeqNumDeltaLen := 0
+	mPSeqNumDLen := 0
 	switch frame.Settings & 0x30 {
 	case 0x00:
-		misPacketSeqNumDeltaLen = 1
+		mPSeqNumDLen = 1
 	case 0x01:
-		misPacketSeqNumDeltaLen = 2
+		mPSeqNumDLen = 2
 	case 0x02:
-		misPacketSeqNumDeltaLen = 4
+		mPSeqNumDLen = 4
 	case 0x03:
-		misPacketSeqNumDeltaLen = 6
+		mPSeqNumDLen = 6
 	}
 
 	hasNACK := 0
@@ -498,22 +498,22 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		hasNACK = 1
 	}
 
-	wire = make([]byte, 1+1+largestObservedLen+2+1+1+4+int(frame.NumTimestamp)*3+hasNACK*2+int(frame.NumRanges)*(misPacketSeqNumDeltaLen+1)+int(frame.NumRevived)*largestObservedLen)
+	wire = make([]byte, 1+1+lOLen+2+1+1+4+int(frame.NumTimestamp)*3+hasNACK*2+int(frame.NumRanges)*(mPSeqNumDLen+1)+int(frame.NumRevived)*lOLen)
 	wire[0] = byte(frame.Type) + frame.Settings
 	wire[1] = frame.ReceivedEntropy
 	length := 2
-	for i := 0; i < largestObservedLen; i++ {
-		wire[i+length] = byte(frame.LargestObserved >> byte(8*(largestObservedLen-i-1)))
+	for i := 0; i < lOLen; i++ {
+		wire[i+length] = byte(frame.LargestObserved >> byte(8*(lOLen-i-1)))
 	}
-	length += largestObservedLen
+	length += lOLen
 	binary.BigEndian.PutUint16(wire[length:], frame.LargestObservedDeltaTime)
 	wire[length+2] = frame.NumTimestamp
 	wire[length+3] = frame.DeltaSinceLargestObserved
 	binary.BigEndian.PutUint32(wire[length+4:], frame.TimeSinceLargestObserved)
 	length += 8
 	for i := 0; i < int(frame.NumTimestamp); i++ {
-		wire[length+i] = frame.DeltaSincePreviousLargestObserved_N[i]
-		binary.BigEndian.PutUint16(wire[length+i+1:], frame.TimeSincePreviousTimestamp_N[i])
+		wire[length+i] = frame.DeltaSincePreviousLargestObserved[i]
+		binary.BigEndian.PutUint16(wire[length+i+1:], frame.TimeSincePreviousTimestamp[i])
 		length += 3
 	}
 
@@ -521,19 +521,19 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		wire[length] = frame.NumRanges
 		length += 1
 		for i := 0; i < int(frame.NumRanges); i++ {
-			for j := 0; j < misPacketSeqNumDeltaLen; j++ {
-				wire[length+j] = byte(frame.MissingPacketSequenceNumberDelta[i] >> byte(8*(misPacketSeqNumDeltaLen-j-1)))
+			for j := 0; j < mPSeqNumDLen; j++ {
+				wire[length+j] = byte(frame.MissingPacketSequenceNumberDelta[i] >> byte(8*(mPSeqNumDLen-j-1)))
 			}
-			wire[length+misPacketSeqNumDeltaLen] = frame.RangeLength[i]
+			wire[length+mPSeqNumDLen] = frame.RangeLength[i]
 			length += 1
 		}
 		wire[length] = frame.NumRevived
 		length += 1
 		for i := 0; i < int(frame.NumRevived); i++ {
-			for j := 0; j < largestObservedLen; j++ {
-				wire[length+j] = byte(frame.RevivedPacketSequenceNumber[i] >> byte(8*(largestObservedLen-j-1)))
+			for j := 0; j < lOLen; j++ {
+				wire[length+j] = byte(frame.RevivedPacketSequenceNumber[i] >> byte(8*(lOLen-j-1)))
 			}
-			length += largestObservedLen
+			length += lOLen
 		}
 	}
 
