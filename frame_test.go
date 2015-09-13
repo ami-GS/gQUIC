@@ -7,26 +7,40 @@ import (
 
 func TestStreamFrameFrame(t *testing.T) {
 	// fin: true, streamID: 1, offset: 1, dataLength: 1
-	data := []byte{0xe4, 0x01, 0x00, 0x01, 0x00, 0x05}
+	//data := []byte{0xe4, 0x01, 0x00, 0x01, 0x00, 0x05}
+	data := [][]byte{
+		// fin: true, streamID: 1, offset: 1, dataLength: 1
+		[]byte{0xe4, 0x01, 0x00, 0x01, 0x00, 0x05},
+		// fin: false, streamID: 256, offset 0, dataLength: 1
+		[]byte{0xa1, 0x01, 0x00, 0x00, 0x05},
+	}
+
 	testD := []byte("aiueo")
-	data = append(data, testD...)
 	fp := NewFramePacket(0, 0)
-	frame := &StreamFrame{FramePacket: fp}
-	actualFrame := NewStreamFrame(true, 1, 1, testD)
-	actualFrame.SetPacket(fp)
-
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	actualFrames := []*StreamFrame{
+		NewStreamFrame(true, 1, 1, testD),
+		NewStreamFrame(false, 256, 0, testD),
 	}
+	for i, d := range data {
+		d := append(d, testD...)
+		frame := &StreamFrame{FramePacket: fp}
+		actualFrame := actualFrames[i]
+		actualFrame.SetPacket(fp)
 
-	if !reflect.DeepEqual(actualFrame, frame) {
-		t.Errorf("got %v\nwant %v", actualFrame, frame)
-	}
+		actualLen, _ := frame.Parse(d)
+		if actualLen != len(d) {
+			t.Errorf("got %v\nwant %v", actualLen, len(d))
+		}
 
-	actualWire, _ := frame.GetWire()
-	if !reflect.DeepEqual(actualWire, data) {
-		t.Errorf("got %v\nwant %v", actualWire, data)
+		if !reflect.DeepEqual(actualFrame, frame) {
+			t.Errorf("got %v\nwant %v", actualFrame, frame)
+		}
+
+		actualWire, _ := frame.GetWire()
+		if !reflect.DeepEqual(actualWire, d) {
+			t.Errorf("got %v\nwant %v", actualWire, d)
+		}
+
 	}
 }
 
