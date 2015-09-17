@@ -216,25 +216,39 @@ func TestBlockedFrame(t *testing.T) {
 }
 
 func TestStopWaitingFrame(t *testing.T) {
-	// Sent Entropy: 1, least unacked delta: 1
-	data := []byte{0x06, 0x01, 0x01}
+	data := [][]byte{
+		// Sent Entropy: 1, least unacked delta: 1
+		[]byte{0x06, 0x01, 0x01},
+		// Sent Entropy: 0, least unacked delta: 257
+		[]byte{0x06, 0x00, 0x01, 0x01},
+	}
 	fp := NewFramePacket(0, 0)
-	frame := &StopWaitingFrame{FramePacket: fp}
-	actualFrame := NewStopWaitingFrame(1, 1)
-	actualFrame.SetPacket(fp)
-
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	actualFrames := []*StopWaitingFrame{
+		NewStopWaitingFrame(1, 1),
+		NewStopWaitingFrame(0, 257),
 	}
 
-	if !reflect.DeepEqual(actualFrame, frame) {
-		t.Errorf("got %v\nwant %v", actualFrame, frame)
-	}
+	for i, d := range data {
+		if i == 1 {
+			fp.PacketHeader.PublicFlags |= SEQUENCE_NUMBER_LENGTH_2
+		}
+		frame := &StopWaitingFrame{FramePacket: fp}
+		actualFrame := actualFrames[i]
+		actualFrame.SetPacket(fp)
 
-	actualWire, _ := frame.GetWire()
-	if !reflect.DeepEqual(actualWire, data) {
-		t.Errorf("got %v\nwant %v", actualWire, data)
+		actualLen, _ := frame.Parse(d)
+		if actualLen != len(d) {
+			t.Errorf("got %v\nwant %v", actualLen, len(data))
+		}
+
+		if !reflect.DeepEqual(actualFrame, frame) {
+			t.Errorf("got %v\nwant %v", actualFrame, frame)
+		}
+
+		actualWire, _ := frame.GetWire()
+		if !reflect.DeepEqual(actualWire, d) {
+			t.Errorf("got %v\nwant %v", actualWire, d)
+		}
 	}
 
 }
