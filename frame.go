@@ -883,11 +883,7 @@ func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 	wire[0] = byte(frame.Type)
 	binary.BigEndian.PutUint32(wire[1:], uint32(frame.ErrorCode))
 	binary.BigEndian.PutUint16(wire[5:], frame.ReasonPhraseLength)
-
-	byteString := []byte(frame.ReasonPhrase)
-	for i, v := range byteString {
-		wire[7+i] = v
-	}
+	copy(wire[7:], []byte(frame.ReasonPhrase))
 	return
 }
 
@@ -949,12 +945,7 @@ func (frame *GoAwayFrame) GetWire() (wire []byte, err error) {
 	binary.BigEndian.PutUint32(wire[1:], uint32(frame.ErrorCode))
 	binary.BigEndian.PutUint32(wire[5:], frame.LastGoodStreamID)
 	binary.BigEndian.PutUint16(wire[9:], frame.ReasonPhraseLength)
-
-	byteString := []byte(frame.ReasonPhrase)
-	for i, v := range byteString {
-		wire[11+i] = v
-	}
-
+	copy(wire[11:], []byte(frame.ReasonPhrase))
 	return
 }
 
