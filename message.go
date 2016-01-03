@@ -214,11 +214,8 @@ func (message *Message) GetWire() (wire []byte, err error) {
 		index += 8
 	}
 	for _, value := range message.Values {
-		valLen := len(value)
-		for j := 0; j < valLen; j++ {
-			wire[index+j] = value[j]
-		}
-		index += valLen
+		copy(wire[index:], value)
+		index += len(value)
 	}
 	return
 }

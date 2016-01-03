@@ -277,9 +277,7 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 		index += 2
 	}
 
-	for i := 0; i < dataLength; i++ {
-		wire[index+i] = frame.Data[i]
-	}
+	copy(wire[index:], frame.Data)
 
 	return
 }
