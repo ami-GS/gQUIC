@@ -10,9 +10,8 @@ func TestPacketHeader(t *testing.T) {
 	data := []byte{0x05, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00}
 	//
 	actualHeader := NewPacketHeader(VersionNegotiationPacketType, 1, 1, 1, 0)
-	header := &PacketHeader{}
 
-	actualLen, _ := header.Parse(data)
+	header, actualLen, _ := ParsePacketHeader(data)
 	if actualLen != len(data) {
 		t.Errorf("got %v\nwant %v", actualLen, len(data))
 	}
