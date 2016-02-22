@@ -217,8 +217,10 @@ func NewPacketHeader(packetType PacketType, connectionID uint64, version uint32,
 	return ph
 }
 
-func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
-	ph.PublicFlags = PublicFlagType(data[length])
+func ParsePacketHeader(data []byte) (ph *PacketHeader, length int, err error) {
+	ph = &PacketHeader{
+		PublicFlags: PublicFlagType(data[0]),
+	}
 	switch ph.PublicFlags & 0x03 {
 	case CONTAIN_QUIC_VERSION:
 		ph.Type = VersionNegotiationPacketType
@@ -280,7 +282,7 @@ func (ph *PacketHeader) Parse(data []byte) (length int, err error) {
 			//TODO: FEC packet
 		}
 	}
-	return length, err
+	return ph, length, err
 }
 
 func (ph *PacketHeader) GetWire() (wire []byte, err error) {
@@ -378,9 +380,8 @@ func ParseVersionNegotiationPacket(ph *PacketHeader, data []byte) (Packet, int) 
 	packet := &VersionNegotiationPacket{
 		PacketHeader: ph,
 	}
-	length, _ := ph.Parse(data)
 	// TODO: there are no detail on specification stil
-	return packet, length
+	return packet, len(data)
 }
 
 func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
@@ -423,8 +424,8 @@ func ParseFramePacket(ph *PacketHeader, data []byte) (Packet, int) {
 		DataSize:     uint16(len(data)),
 		RestSize:     MTU - uint16(len(data)),
 	}
-	idx, _ := ph.Parse(data)
-	dataLen := len(data[idx:])
+	idx := 0
+	dataLen := len(data)
 	for idx < dataLen {
 		f := FrameParserMap[FrameType(data[idx])]
 		if f == nil {
@@ -512,9 +513,8 @@ func ParseFECPacket(ph *PacketHeader, data []byte) (Packet, int) {
 		PacketHeader: ph,
 		Redundancy:   data, // TODO: clearify here
 	}
-	length, _ := ph.Parse(data)
 	// TODO: not cool now
-	return packet, length + len(data[length:])
+	return packet, len(data)
 }
 
 func (packet *FECPacket) GetWire() (wire []byte, err error) {
@@ -573,9 +573,8 @@ func ParsePublicResetPacket(ph *PacketHeader, data []byte) (Packet, int) {
 		PacketHeader: ph,
 		//Msg: // TODO: what todo here?
 	}
-	length, _ := ph.Parse(data)
 	//packet.Msg.Parse(data)
-	return packet, length
+	return packet, len(data)
 }
 
 func (packet *PublicResetPacket) GetWire() ([]byte, error) {

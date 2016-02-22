@@ -37,15 +37,20 @@ func TestFramePacket(t *testing.T) {
 		0x04, 0x00, 0x00, 0x00, 0x01, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
 	}
+	actual_ph, idx, _ := ParsePacketHeader(data)
+	packet, actualLen := PacketParserMap[actual_ph.Type](actual_ph, data[idx:])
 	ph := NewPacketHeader(FramePacketType, 1, 0, 1, 0)
-	packet := &FramePacket{PacketHeader: ph, RestSize: MTU}
 	actualPacket := NewFramePacket(1, 1)
-	actualPacket.PushBack(NewStreamFrame(true, 1, 1, []byte("aiueo")))
-	actualPacket.PushBack(NewWindowUpdateFrame(1, 1))
-	actualLen, _ := packet.Parse(data[4:])
+	actualPacket.PacketHeader = ph
+	f1 := NewStreamFrame(true, 1, 1, []byte("aiueo"))
+	f1.FramePacket = actualPacket
+	f2 := NewWindowUpdateFrame(1, 1)
+	f2.FramePacket = actualPacket
+	actualPacket.PushBack(f1)
+	actualPacket.PushBack(f2)
 	actualWire, _ := packet.GetWire()
 
-	if actualLen != len(data)-4 {
+	if actualLen+4 != len(data) {
 		t.Errorf("got %v\nwant %v", actualLen, len(data))
 	}
 
