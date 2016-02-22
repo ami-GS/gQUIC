@@ -2,7 +2,7 @@ package quic
 
 import (
 	"encoding/binary"
-	//"fmt"
+	"fmt"
 )
 
 const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
@@ -64,6 +64,38 @@ const (
 	RESERVED                                   = 0xc0
 )
 
+func (f PublicFlagType) String() string {
+	str := ""
+	if f&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
+		str += "CONTAIN_QUIC_VERSION\n"
+	}
+	if f&PUBLIC_RESET == PUBLIC_RESET {
+		str += "PUBLIC_RESET\n"
+	}
+	switch f & CONNECTION_ID_LENGTH_MASK {
+	case CONNECTION_ID_LENGTH_8:
+		str += "CONNECTION_ID_LENGTH_8\n"
+	case CONNECTION_ID_LENGTH_4:
+		str += "CONNECTION_ID_LENGTH_4\n"
+	case CONNECTION_ID_LENGTH_1:
+		str += "CONNECTION_ID_LENGTH_1\n"
+	}
+	if f&OMIT_CONNECTION_ID == OMIT_CONNECTION_ID {
+		str += "OMIT_CONNECTION_ID\n"
+	}
+	switch f & SEQUENCE_NUMBER_LENGTH_MASK {
+	case SEQUENCE_NUMBER_LENGTH_6:
+		str += "SEQUENCE_NUMBER_LENGTH_6\n"
+	case SEQUENCE_NUMBER_LENGTH_4:
+		str += "SEQUENCE_NUMBER_LENGTH_4\n"
+	case SEQUENCE_NUMBER_LENGTH_2:
+		str += "SEQUENCE_NUMBER_LENGTH_2\n"
+	case SEQUENCE_NUMBER_LENGTH_1:
+		str += "SEQUENCE_NUMBER_LENGTH_1\n"
+	}
+	return str
+}
+
 type PrivateFlagType byte
 
 const (
@@ -71,6 +103,20 @@ const (
 	FLAG_FEC_GROUP                 = 0x02
 	FLAG_FEC                       = 0x04
 )
+
+func (f PrivateFlagType) String() string {
+	str := ""
+	if f&FLAG_ENTROPY == FLAG_ENTROPY {
+		str += "FLAG_ENTROPY\n"
+	}
+	if f&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
+		str += "FLAG_FEC_GROUP\n"
+	}
+	if f&FLAG_FEC == FLAG_FEC {
+		str += "FLAG_FEC\n"
+	}
+	return str
+}
 
 // Packet Header
 /*
@@ -302,9 +348,8 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	return
 }
 
-func (ph *PacketHeader) String() (str string) {
-	str = "Packet Header" // temporally
-	return
+func (ph *PacketHeader) String() string {
+	return fmt.Sprintf("Type=%s, PublicFlags={%s}, ConnectionID=%d, Version=%d, SequenceNumber=%d, PrivateFlags={%s}, FEC=%d\n", ph.Type.String(), ph.PublicFlags.String(), ph.ConnectionID, ph.Version, ph.SequenceNumber, ph.PrivateFlags.String(), ph.FEC)
 }
 
 type VersionNegotiationPacket struct {
@@ -333,7 +378,7 @@ func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 }
 
 func (packet *VersionNegotiationPacket) String() string {
-	return "" // TODO
+	return packet.PacketHeader.String() // TODO
 }
 
 /*
@@ -411,7 +456,6 @@ func (packet *FramePacket) PushBack(frame Frame) bool {
 
 func (packet *FramePacket) String() (str string) {
 	str = packet.PacketHeader.String()
-	str += "Frame Packet\n"
 	for _, frame := range packet.Frames {
 		str += "\t" + (*frame).String() + "\n"
 	}
@@ -475,7 +519,7 @@ func (packet *FECPacket) UpdateRedundancy(nextPacket *FramePacket) {
 }
 
 func (packet *FECPacket) String() string {
-	return "" //TODO
+	return packet.PacketHeader.String() //TODO
 }
 
 /*
@@ -516,8 +560,8 @@ func (packet *PublicResetPacket) GetWire() ([]byte, error) {
 	return append(hWire, msgWire...), err
 }
 
-func (pakcet *PublicResetPacket) String() string {
-	return "" //TODO
+func (packet *PublicResetPacket) String() string {
+	return packet.PacketHeader.String() //TODO
 }
 
 func (packet *PublicResetPacket) AppendTagValue(tag QuicTag, value []byte) bool {
