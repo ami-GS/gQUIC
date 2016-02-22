@@ -54,40 +54,24 @@ const (
 )
 
 type Frame interface {
-	Parse(data []byte) (int, error)
 	GetWire() ([]byte, error)
-	SetPacket(*FramePacket)
 	String() string
 }
 
-func NewFrame(fType FrameType) (frame Frame) {
-	switch fType {
-	case PaddingFrameType:
-		frame = &PaddingFrame{}
-	case RstStreamFrameType:
-		frame = &RstStreamFrame{}
-	case ConnectionCloseFrameType:
-		frame = &ConnectionCloseFrame{}
-	case GoAwayFrameType:
-		frame = &GoAwayFrame{}
-	case WindowUpdateFrameType:
-		frame = &WindowUpdateFrame{}
-	case BlockedFrameType:
-		frame = &BlockedFrame{}
-	case StopWaitingFrameType:
-		frame = &StopWaitingFrame{}
-	case PingFrameType:
-		frame = &PingFrame{}
-	default:
-		if fType&StreamFrameType == StreamFrameType {
-			frame = &StreamFrame{}
-		} else if fType&AckFrameType == AckFrameType {
-			frame = &AckFrame{}
-		} else if fType&CongestionFeedbackFrameType == CongestionFeedbackFrameType {
-			//frame = &CongestionFeedbackFrame{}
-		}
-	}
-	return frame
+type FrameParser func(fp *FramePacket, data []byte) (Frame, int)
+
+var FrameParserMap = map[FrameType]FrameParser{
+	PaddingFrameType:            ParsePaddingFrame,
+	RstStreamFrameType:          ParseRstStreamFrame,
+	ConnectionCloseFrameType:    ParseConnectionCloseFrame,
+	GoAwayFrameType:             ParseGoAwayFrame,
+	WindowUpdateFrameType:       ParseWindowUpdateFrame,
+	BlockedFrameType:            ParseBlockedFrame,
+	StopWaitingFrameType:        ParseStopWaitingFrame,
+	PingFrameType:               ParsePingFrame,
+	StreamFrameType:             ParseStreamFrame,
+	AckFrameType:                ParseAckFrame,
+	CongestionFeedbackFrameType: ParseCongestionFeedbackFrame,
 }
 
 /*
@@ -175,15 +159,18 @@ func NewStreamFrame(fin bool, streamID uint32, offset uint64, data []byte) *Stre
 	return streamFrame
 }
 
-func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
-	frame.Type = StreamFrameType
-	frame.Settings = data[0] & 0x7f
+func ParseStreamFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &StreamFrame{
+		FramePacket: fp,
+		Type:        StreamFrameType,
+		Settings:    data[0] & 0x7f,
+	}
 	if frame.Settings&0x40 == 0x40 {
 		frame.Fin = true
 		//TODO: fin
 	}
 
-	length = 1
+	length := 1
 	switch frame.Settings & 0x03 {
 	case 0x00:
 		frame.StreamID = uint32(data[1])
@@ -241,7 +228,7 @@ func (frame *StreamFrame) Parse(data []byte) (length int, err error) {
 	frame.Data = data[length : length+int(dataLength)]
 	length += int(dataLength)
 
-	return
+	return frame, length
 }
 
 func (frame *StreamFrame) GetWire() (wire []byte, err error) {
@@ -286,10 +273,6 @@ func (frame *StreamFrame) String() (str string) {
 	str = fmt.Sprintf("STREAM\n\tStreamID : %d, Offset : %d, DataLength : %d, Data: %v",
 		frame.StreamID, frame.Offset, len(frame.Data), frame.Data)
 	return str
-}
-
-func (frame *StreamFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
 }
 
 /*
@@ -385,11 +368,14 @@ func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64)
 	return ackFrame
 }
 
-func (frame *AckFrame) Parse(data []byte) (length int, err error) {
-	frame.Type = AckFrameType
-	frame.Settings = data[0] & 0x3f
-	frame.ReceivedEntropy = data[1]
-	length = 2
+func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &AckFrame{
+		FramePacket:     fp,
+		Type:            AckFrameType,
+		Settings:        data[0] & 0x3f,
+		ReceivedEntropy: data[1],
+	}
+	length := 2
 	lOLen := 0
 	if frame.Settings&0x10 == 0x10 {
 		// TODO:istruncate
@@ -459,7 +445,7 @@ func (frame *AckFrame) Parse(data []byte) (length int, err error) {
 		}
 	}
 
-	return
+	return frame, length
 }
 
 func (frame *AckFrame) GetWire() (wire []byte, err error) {
@@ -543,10 +529,6 @@ func (frame *AckFrame) String() (str string) {
 	return str
 }
 
-func (frame *AckFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
-}
-
 /*
       0        1        2        3         4        5        6      7
  +--------+--------+--------+--------+--------+--------+-------+-------+
@@ -571,10 +553,14 @@ func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaitin
 	return stopWaitingFrame
 }
 
-func (frame *StopWaitingFrame) Parse(data []byte) (length int, err error) {
-	frame.Type = FrameType(data[0])
-	frame.SentEntropy = data[1]
+func ParseStopWaitingFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &StopWaitingFrame{
+		FramePacket: fp,
+		Type:        StopWaitingFrameType,
+		SentEntropy: data[1],
+	}
 
+	length := 0
 	// the same length as the packet header's sequence number
 	switch frame.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
 	case SEQUENCE_NUMBER_LENGTH_6:
@@ -588,10 +574,10 @@ func (frame *StopWaitingFrame) Parse(data []byte) (length int, err error) {
 	}
 
 	for i := 0; i < length; i++ {
-		frame.LeastUnackedDelta |= uint64(data[2+i] << byte(8*(length-i-1)))
+		frame.LeastUnackedDelta |= uint64(data[2+i]) << byte(8*(length-i-1))
 	}
 
-	return length + 2, err
+	return frame, length + 2
 }
 
 func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
@@ -625,10 +611,6 @@ func (frame *StopWaitingFrame) String() (str string) {
 	return str
 }
 
-func (frame *StopWaitingFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
-}
-
 /*
      0         1                 4        5                 12
  +--------+--------+-- ... --+-------+--------+-- ... --+-------+
@@ -652,12 +634,14 @@ func NewWindowUpdateFrame(streamID uint32, offset uint64) *WindowUpdateFrame {
 	return windowUpdateFrame
 }
 
-func (frame *WindowUpdateFrame) Parse(data []byte) (length int, err error) {
-	length = 13
-	frame.Type = FrameType(data[0])
+func ParseWindowUpdateFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &WindowUpdateFrame{
+		FramePacket: fp,
+		Type:        WindowUpdateFrameType,
+	}
 	frame.StreamID = binary.BigEndian.Uint32(data[1:])
 	frame.Offset = binary.BigEndian.Uint64(data[5:])
-	return
+	return frame, 13
 }
 
 func (frame *WindowUpdateFrame) GetWire() (wire []byte, err error) {
@@ -673,10 +657,6 @@ func (frame *WindowUpdateFrame) String() (str string) {
 	str = fmt.Sprintf("WINDOW UPDATE\n\tStreamID : %d, Offset : %d",
 		frame.StreamID, frame.Offset)
 	return str
-}
-
-func (frame *WindowUpdateFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
 }
 
 /*
@@ -699,11 +679,13 @@ func NewBlockedFrame(streamID uint32) *BlockedFrame {
 	return blockedFrame
 }
 
-func (frame *BlockedFrame) Parse(data []byte) (length int, err error) {
-	length = 5
-	frame.Type = FrameType(data[0])
+func ParseBlockedFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &BlockedFrame{
+		FramePacket: fp,
+		Type:        BlockedFrameType,
+	}
 	frame.StreamID = binary.BigEndian.Uint32(data[1:])
-	return
+	return frame, 5
 }
 
 func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
@@ -719,11 +701,11 @@ func (frame *BlockedFrame) String() (str string) {
 	return str
 }
 
-func (frame *BlockedFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
+// CongestionFeedback
+func ParseCongestionFeedbackFrame(fp *FramePacket, data []uint8) (Frame, int) {
+	return nil, 0
 }
 
-// CongestionFeedback
 type PaddingFrame struct {
 	*FramePacket
 	Type FrameType
@@ -736,9 +718,12 @@ func NewPaddingFrame() *PaddingFrame {
 	return paddingFrame
 }
 
-func (frame *PaddingFrame) Parse(data []byte) (length int, err error) {
-	length = len(data)
-	return
+func ParsePaddingFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &PaddingFrame{
+		FramePacket: fp,
+		Type:        PaddingFrameType,
+	}
+	return frame, len(data)
 }
 
 func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
@@ -749,10 +734,6 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 func (frame *PaddingFrame) String() (str string) {
 	str = "PADDING\n\t"
 	return str
-}
-
-func (frame *PaddingFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
 }
 
 /*
@@ -780,13 +761,15 @@ func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QuicErrorCode) 
 	return rstStreamFrame
 }
 
-func (frame *RstStreamFrame) Parse(data []byte) (length int, err error) {
-	length = 17
-	frame.Type = FrameType(data[0])
+func ParseRstStreamFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &RstStreamFrame{
+		FramePacket: fp,
+		Type:        RstStreamFrameType,
+	}
 	frame.StreamID = binary.BigEndian.Uint32(data[1:])
 	frame.Offset = binary.BigEndian.Uint64(data[5:])
 	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[13:]))
-	return
+	return frame, 17
 }
 
 func (frame *RstStreamFrame) GetWire() (wire []byte, err error) {
@@ -804,10 +787,6 @@ func (frame *RstStreamFrame) String() (str string) {
 	return str
 }
 
-func (frame *RstStreamFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
-}
-
 type PingFrame struct {
 	*FramePacket
 	Type FrameType
@@ -820,10 +799,12 @@ func NewPingFrame() *PingFrame {
 	return pingFrame
 }
 
-func (frame *PingFrame) Parse(data []byte) (length int, err error) {
-	length = 1
-	frame.Type = FrameType(data[0])
-	return
+func ParsePingFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &PingFrame{
+		FramePacket: fp,
+		Type:        PingFrameType,
+	}
+	return frame, 1
 }
 func (frame *PingFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1)
@@ -834,10 +815,6 @@ func (frame *PingFrame) GetWire() (wire []byte, err error) {
 func (frame *PingFrame) String() (str string) {
 	str = fmt.Sprintf("PING\n\t")
 	return str
-}
-
-func (frame *PingFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
 }
 
 /*
@@ -867,13 +844,15 @@ func NewConnectionCloseFrame(errorCode QuicErrorCode, reasonPhrase string) *Conn
 	return connectionCloseFrame
 }
 
-func (frame *ConnectionCloseFrame) Parse(data []byte) (length int, err error) {
-	frame.Type = FrameType(data[0])
+func ParseConnectionCloseFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &ConnectionCloseFrame{
+		FramePacket: fp,
+		Type:        ConnectionCloseFrameType,
+	}
 	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[1:]))
 	frame.ReasonPhraseLength = binary.BigEndian.Uint16(data[5:])
 	frame.ReasonPhrase = string(data[7 : 7+frame.ReasonPhraseLength])
-	length = 7 + int(frame.ReasonPhraseLength)
-	return
+	return frame, 7 + int(frame.ReasonPhraseLength)
 }
 
 func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
@@ -889,10 +868,6 @@ func (frame *ConnectionCloseFrame) String() (str string) {
 	str = fmt.Sprintf("CONNECTION CLOSE\n\tError code : %d, Reason length : %d\nReason : %s",
 		frame.ErrorCode, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
-}
-
-func (frame *ConnectionCloseFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
 }
 
 /*
@@ -927,14 +902,16 @@ func NewGoAwayFrame(errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhra
 	return goAwayFrame
 }
 
-func (frame *GoAwayFrame) Parse(data []byte) (length int, err error) {
-	frame.Type = FrameType(data[0])
+func ParseGoAwayFrame(fp *FramePacket, data []byte) (Frame, int) {
+	frame := &GoAwayFrame{
+		FramePacket: fp,
+		Type:        GoAwayFrameType,
+	}
 	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[1:]))
 	frame.LastGoodStreamID = binary.BigEndian.Uint32(data[5:])
 	frame.ReasonPhraseLength = binary.BigEndian.Uint16(data[9:])
 	frame.ReasonPhrase = string(data[11 : 11+frame.ReasonPhraseLength])
-	length = 11 + int(frame.ReasonPhraseLength)
-	return
+	return frame, 11 + int(frame.ReasonPhraseLength)
 }
 
 func (frame *GoAwayFrame) GetWire() (wire []byte, err error) {
@@ -951,7 +928,4 @@ func (frame *GoAwayFrame) String() (str string) {
 	str = fmt.Sprintf("GOAWAY\n\tError code : %d, LastGoodStreamID : %d, Reason length : %d\nReason : %s",
 		frame.ErrorCode, frame.LastGoodStreamID, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
-}
-func (frame *GoAwayFrame) SetPacket(packet *FramePacket) {
-	frame.FramePacket = packet
 }

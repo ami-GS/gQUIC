@@ -23,13 +23,13 @@ func TestStreamFrameFrame(t *testing.T) {
 	}
 	for i, d := range data {
 		d := append(d, testD...)
-		frame := &StreamFrame{FramePacket: fp}
+		frame, _ := FrameParserMap[FrameType(d[0]&StreamFrameType)](fp, d)
 		actualFrame := actualFrames[i]
-		actualFrame.SetPacket(fp)
+		actualFrame.FramePacket = fp
 
-		actualLen, _ := frame.Parse(d)
-		if actualLen != len(d) {
-			t.Errorf("got %v\nwant %v", actualLen, len(d))
+		wire, _ := actualFrame.GetWire()
+		if len(wire) != len(d) {
+			t.Errorf("got %v\nwant %v", len(wire), len(d))
 		}
 
 		if !reflect.DeepEqual(actualFrame, frame) {
@@ -49,13 +49,14 @@ func TestPaddingFrame(t *testing.T) {
 	fp := NewFramePacket(0, 0)
 	fp.DataSize = 1945
 	fp.RestSize = 5
-	frame := &PaddingFrame{FramePacket: fp}
-	actualFrame := NewPaddingFrame()
-	actualFrame.SetPacket(fp)
 
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
+	actualFrame := NewPaddingFrame()
+	actualFrame.FramePacket = fp
+
+	wire, _ := actualFrame.GetWire()
+	if len(wire) != len(data) {
+		t.Errorf("got %v\nwant %v", len(wire), len(data))
 	}
 
 	if !reflect.DeepEqual(actualFrame, frame) {
@@ -66,6 +67,7 @@ func TestPaddingFrame(t *testing.T) {
 	if !reflect.DeepEqual(actualWire, data) {
 		t.Errorf("got %v\nwant %v", actualWire, data)
 	}
+
 }
 
 func TestRstStreamFrame(t *testing.T) {
@@ -73,13 +75,14 @@ func TestRstStreamFrame(t *testing.T) {
 	data := []byte{0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00}
 	fp := NewFramePacket(0, 0)
-	frame := &RstStreamFrame{FramePacket: fp}
-	actualFrame := NewRstStreamFrame(1, 1, NO_ERROR)
-	actualFrame.SetPacket(fp)
 
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
+	actualFrame := NewRstStreamFrame(1, 1, NO_ERROR)
+	actualFrame.FramePacket = fp
+
+	wire, _ := actualFrame.GetWire()
+	if len(wire) != len(data) {
+		t.Errorf("got %v\nwant %v", len(wire), len(data))
 	}
 
 	if !reflect.DeepEqual(actualFrame, frame) {
@@ -95,13 +98,14 @@ func TestRstStreamFrame(t *testing.T) {
 func TestPingFrame(t *testing.T) {
 	data := []byte{0x07}
 	fp := NewFramePacket(0, 0)
-	frame := &PingFrame{FramePacket: fp}
-	actualFrame := NewPingFrame()
-	actualFrame.SetPacket(fp)
 
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
+	actualFrame := NewPingFrame()
+	actualFrame.FramePacket = fp
+
+	wire, _ := actualFrame.GetWire()
+	if len(wire) != len(data) {
+		t.Errorf("got %v\nwant %v", len(wire), len(data))
 	}
 
 	if !reflect.DeepEqual(actualFrame, frame) {
@@ -120,13 +124,13 @@ func TestConnectionCloseFrame(t *testing.T) {
 	reason := "This is reason"
 	data = append(data, []byte(reason)...)
 	fp := NewFramePacket(0, 0)
-	frame := &ConnectionCloseFrame{FramePacket: fp}
+	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewConnectionCloseFrame(NO_ERROR, reason)
-	actualFrame.SetPacket(fp)
+	actualFrame.FramePacket = fp
 
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	wire, _ := actualFrame.GetWire()
+	if len(wire) != len(data) {
+		t.Errorf("got %v\nwant %v", len(wire), len(data))
 	}
 
 	if !reflect.DeepEqual(actualFrame, frame) {
@@ -137,7 +141,6 @@ func TestConnectionCloseFrame(t *testing.T) {
 	if !reflect.DeepEqual(actualWire, data) {
 		t.Errorf("got %v\nwant %v", actualWire, data)
 	}
-
 }
 
 func TestGoAwayFrame(t *testing.T) {
@@ -146,13 +149,13 @@ func TestGoAwayFrame(t *testing.T) {
 	reason := "This is reason"
 	data = append(data, []byte(reason)...)
 	fp := NewFramePacket(0, 0)
-	frame := &GoAwayFrame{FramePacket: fp}
+	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewGoAwayFrame(NO_ERROR, 1, reason)
-	actualFrame.SetPacket(fp)
+	actualFrame.FramePacket = fp
 
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	wire, _ := actualFrame.GetWire()
+	if len(wire) != len(data) {
+		t.Errorf("got %v\nwant %v", len(wire), len(data))
 	}
 
 	if !reflect.DeepEqual(actualFrame, frame) {
@@ -171,13 +174,13 @@ func TestWindowUpdateFrame(t *testing.T) {
 	data := []byte{0x04, 0x00, 0x00, 0x00, 0x01, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
 	fp := NewFramePacket(0, 0)
-	frame := &WindowUpdateFrame{FramePacket: fp}
+	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewWindowUpdateFrame(1, 1)
-	actualFrame.SetPacket(fp)
+	actualFrame.FramePacket = fp
 
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	wire, _ := actualFrame.GetWire()
+	if len(wire) != len(data) {
+		t.Errorf("got %v\nwant %v", len(wire), len(data))
 	}
 
 	if !reflect.DeepEqual(actualFrame, frame) {
@@ -195,13 +198,13 @@ func TestBlockedFrame(t *testing.T) {
 	// streamID: 1
 	data := []byte{0x05, 0x00, 0x00, 0x00, 0x01}
 	fp := NewFramePacket(0, 0)
-	frame := &BlockedFrame{FramePacket: fp}
+	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewBlockedFrame(1)
-	actualFrame.SetPacket(fp)
+	actualFrame.FramePacket = fp
 
-	actualLen, _ := frame.Parse(data)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
+	wire, _ := actualFrame.GetWire()
+	if len(wire) != len(data) {
+		t.Errorf("got %v\nwant %v", len(wire), len(data))
 	}
 
 	if !reflect.DeepEqual(actualFrame, frame) {
@@ -212,7 +215,6 @@ func TestBlockedFrame(t *testing.T) {
 	if !reflect.DeepEqual(actualWire, data) {
 		t.Errorf("got %v\nwant %v", actualWire, data)
 	}
-
 }
 
 func TestStopWaitingFrame(t *testing.T) {
@@ -232,16 +234,17 @@ func TestStopWaitingFrame(t *testing.T) {
 		if i == 1 {
 			fp.PacketHeader.PublicFlags |= SEQUENCE_NUMBER_LENGTH_2
 		}
-		frame := &StopWaitingFrame{FramePacket: fp}
+		frame, _ := FrameParserMap[FrameType(d[0])](fp, d)
 		actualFrame := actualFrames[i]
-		actualFrame.SetPacket(fp)
+		actualFrame.FramePacket = fp
 
-		actualLen, _ := frame.Parse(d)
-		if actualLen != len(d) {
-			t.Errorf("got %v\nwant %v", actualLen, len(data))
+		wire, _ := actualFrame.GetWire()
+		if len(wire) != len(d) {
+			t.Errorf("got %v\nwant %v", len(wire), len(d))
 		}
 
 		if !reflect.DeepEqual(actualFrame, frame) {
+			t.Errorf(actualFrame.String())
 			t.Errorf("got %v\nwant %v", actualFrame, frame)
 		}
 
@@ -250,5 +253,4 @@ func TestStopWaitingFrame(t *testing.T) {
 			t.Errorf("got %v\nwant %v", actualWire, d)
 		}
 	}
-
 }

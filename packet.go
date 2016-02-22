@@ -366,9 +366,17 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 	packet.RestSize -= uint16(dataLen)
 
 	for idx < dataLen {
-		var frame Frame = NewFrame(FrameType(data[idx]))
-		frame.SetPacket(packet)
-		nxt, _ := frame.Parse(data[idx:])
+		f := FrameParserMap[FrameType(data[idx])]
+		if f == nil {
+			if data[idx]&StreamFrameType == StreamFrameType {
+				f = FrameParserMap[FrameType(data[idx]&0x80)]
+			} else if data[idx]&AckFrameType == AckFrameType {
+				f = FrameParserMap[FrameType(data[idx]&0x40)]
+			} else if data[idx]&CongestionFeedbackFrameType == CongestionFeedbackFrameType {
+				f = FrameParserMap[FrameType(data[idx]&0x20)]
+			}
+		}
+		frame, nxt := f(packet, data[idx:])
 		packet.Frames = append(packet.Frames, &frame)
 		idx += nxt
 	}
@@ -395,7 +403,7 @@ func (packet *FramePacket) PushBack(frame Frame) bool {
 		packet.Wire = append(packet.Wire, wire...)
 		packet.DataSize += dataSize
 		packet.RestSize -= dataSize
-		frame.SetPacket(packet) // TODO: is this cool?
+		//frame.SetPacket(packet) // TODO: is this cool?
 		return true
 	}
 	return false
