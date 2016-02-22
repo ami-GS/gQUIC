@@ -8,9 +8,17 @@ import (
 const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
 
 type Packet interface {
-	Parse([]byte) (int, error) // TODO: Does (length int) return MTU? no need?
 	GetWire() ([]byte, error)
 	String() string
+}
+
+type PacketParser func(ph *PacketHeader, data []byte) (Packet, int)
+
+var PacketParserMap = map[PacketType]PacketParser{
+	VersionNegotiationPacketType: ParseVersionNegotiationPacket,
+	FramePacketType:              ParseFramePacket,
+	FECPacketType:                ParseFECPacket,
+	PublicResetPacketType:        ParsePublicResetPacket,
 }
 
 func NewPacket(ph *PacketHeader) (packet Packet) {
@@ -366,9 +374,13 @@ func NewVersionNegotiationPacket(connectionID, sequenceNumber uint64, version ui
 	return packet
 }
 
-func (packet *VersionNegotiationPacket) Parse(data []byte) (length int, err error) {
+func ParseVersionNegotiationPacket(ph *PacketHeader, data []byte) (Packet, int) {
+	packet := &VersionNegotiationPacket{
+		PacketHeader: ph,
+	}
+	length, _ := ph.Parse(data)
 	// TODO: there are no detail on specification stil
-	return
+	return packet, length
 }
 
 func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
@@ -404,12 +416,15 @@ func NewFramePacket(connectionID, sequenceNumber uint64) *FramePacket {
 	return packet
 }
 
-func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
-	packet.Wire = data
-	dataLen := len(data)
-	packet.DataSize += uint16(dataLen)
-	packet.RestSize -= uint16(dataLen)
-
+func ParseFramePacket(ph *PacketHeader, data []byte) (Packet, int) {
+	packet := &FramePacket{
+		PacketHeader: ph,
+		Wire:         data,
+		DataSize:     uint16(len(data)),
+		RestSize:     MTU - uint16(len(data)),
+	}
+	idx, _ := ph.Parse(data)
+	dataLen := len(data[idx:])
 	for idx < dataLen {
 		f := FrameParserMap[FrameType(data[idx])]
 		if f == nil {
@@ -425,7 +440,7 @@ func (packet *FramePacket) Parse(data []byte) (idx int, err error) {
 		packet.Frames = append(packet.Frames, &frame)
 		idx += nxt
 	}
-	return
+	return packet, idx
 }
 
 func (packet *FramePacket) GetWire() ([]byte, error) {
@@ -492,9 +507,14 @@ func NewFECPacket(firstPacket *FramePacket) *FECPacket {
 	return packet
 }
 
-func (packet *FECPacket) Parse(data []byte) (length int, err error) {
-	packet.Redundancy = data // TODO: clearify here
-	return
+func ParseFECPacket(ph *PacketHeader, data []byte) (Packet, int) {
+	packet := &FECPacket{
+		PacketHeader: ph,
+		Redundancy:   data, // TODO: clearify here
+	}
+	length, _ := ph.Parse(data)
+	// TODO: not cool now
+	return packet, length + len(data[length:])
 }
 
 func (packet *FECPacket) GetWire() (wire []byte, err error) {
@@ -548,9 +568,14 @@ func NewPublicResetPacket(connectionID uint64) *PublicResetPacket {
 	return packet
 }
 
-func (packet *PublicResetPacket) Parse(data []byte) (length int, err error) {
-	packet.Msg.Parse(data)
-	return
+func ParsePublicResetPacket(ph *PacketHeader, data []byte) (Packet, int) {
+	packet := &PublicResetPacket{
+		PacketHeader: ph,
+		//Msg: // TODO: what todo here?
+	}
+	length, _ := ph.Parse(data)
+	//packet.Msg.Parse(data)
+	return packet, length
 }
 
 func (packet *PublicResetPacket) GetWire() ([]byte, error) {
