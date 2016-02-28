@@ -7,11 +7,11 @@ import (
 
 func TestPacketHeader(t *testing.T) {
 	// pubFlag:5 ConnID: 1, version: 1, seqNum:1, privateFlag:0, fec:1
-	data := []byte{0x05, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00}
+	data := []byte{0x05, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01}
 	//
 	actualHeader := NewPacketHeader(VersionNegotiationPacketType, 1, 1, 1, 0)
 
-	header, actualLen, _ := ParsePacketHeader(data)
+	header, actualLen, _ := ParsePacketHeader(data, true)
 	if actualLen != len(data) {
 		t.Errorf("got %v\nwant %v", actualLen, len(data))
 	}
@@ -36,7 +36,7 @@ func TestFramePacket(t *testing.T) {
 		0x04, 0x00, 0x00, 0x00, 0x01, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
 	}
-	actual_ph, idx, _ := ParsePacketHeader(data)
+	actual_ph, idx, _ := ParsePacketHeader(data, false)
 	packet, actualLen := PacketParserMap[actual_ph.Type](actual_ph, data[idx:])
 	ph := NewPacketHeader(FramePacketType, 1, 0, 1, 0)
 	actualPacket := NewFramePacket(1, 1)

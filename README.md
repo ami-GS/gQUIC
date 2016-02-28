@@ -1,6 +1,6 @@
 # gQUIC
 QUIC(Quick UDP Internet Connection) implementation in go
-[draft 01](http://tools.ietf.org/html/draft-tsvwg-quic-protocol-01 "draft 01")
+[draft 02](http://tools.ietf.org/html/draft-tsvwg-quic-protocol-02 "draft 02")
 
 #### TODO
 * Entropy accumulation

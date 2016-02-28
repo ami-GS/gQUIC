@@ -141,6 +141,7 @@ type PacketHeader struct {
 	ConnectionID   uint64
 	Version        uint32
 	SequenceNumber uint64
+	RegularPacket  bool
 	PrivateFlags   PrivateFlagType
 	FEC            byte
 }
@@ -149,15 +150,19 @@ func NewPacketHeader(packetType PacketType, connectionID uint64, version uint32,
 
 	var publicFlags PublicFlagType
 	var privateFlags PrivateFlagType
+	regularPacket := false
 	switch packetType {
 	case PublicResetPacketType:
 		publicFlags |= PUBLIC_RESET
 	case VersionNegotiationPacketType:
 		publicFlags |= CONTAIN_QUIC_VERSION
-	case FECPacketType:
-		privateFlags |= FLAG_FEC
-	case FramePacketType:
-		// do nothing
+	default:
+		regularPacket = true
+		if packetType == FECPacketType {
+			privateFlags |= FLAG_FEC
+		} else {
+			// do nothing
+		}
 	}
 
 	if packetType != PublicResetPacketType {
@@ -202,24 +207,30 @@ func NewPacketHeader(packetType PacketType, connectionID uint64, version uint32,
 		ConnectionID:   connectionID,
 		Version:        version,
 		SequenceNumber: sequenceNumber,
+		RegularPacket:  regularPacket,
 		PrivateFlags:   privateFlags,
 		FEC:            fec,
 	}
 	return ph
 }
 
-func ParsePacketHeader(data []byte) (ph *PacketHeader, length int, err error) {
+func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length int, err error) {
 	ph = &PacketHeader{
-		PublicFlags: PublicFlagType(data[0]),
+		PublicFlags:   PublicFlagType(data[0]),
+		RegularPacket: false,
 	}
-	switch ph.PublicFlags & 0x03 {
-	case CONTAIN_QUIC_VERSION:
-		ph.Type = VersionNegotiationPacketType
-	case PUBLIC_RESET:
+
+	if ph.PublicFlags&PUBLIC_RESET == PUBLIC_RESET {
 		ph.Type = PublicResetPacketType
-	default:
-		ph.Type = FramePacketType
-		// NOTICE: FECPacketType is evaluated later
+	} else if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
+		if fromServer {
+			ph.Type = VersionNegotiationPacketType
+		} else {
+			// Regular Packet with QUIC Version present in header
+			ph.RegularPacket = true
+		}
+	} else {
+		ph.RegularPacket = true // Regular Packet
 	}
 
 	switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
@@ -238,7 +249,7 @@ func ParsePacketHeader(data []byte) (ph *PacketHeader, length int, err error) {
 	}
 
 	if ph.Type != PublicResetPacketType {
-		if ph.Type == VersionNegotiationPacketType {
+		if !ph.RegularPacket && ph.Type == VersionNegotiationPacketType {
 			ph.Version = binary.BigEndian.Uint32(data[length:])
 			length += 4
 		}
@@ -258,7 +269,9 @@ func ParsePacketHeader(data []byte) (ph *PacketHeader, length int, err error) {
 			ph.SequenceNumber = uint64(data[length])
 			length += 1
 		}
+	}
 
+	if ph.RegularPacket {
 		ph.PrivateFlags = PrivateFlagType(data[length])
 		length += 1
 		if ph.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
@@ -271,6 +284,8 @@ func ParsePacketHeader(data []byte) (ph *PacketHeader, length int, err error) {
 		if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
 			ph.Type = FECPacketType
 			//TODO: FEC packet
+		} else {
+			ph.Type = FramePacketType
 		}
 	}
 	return ph, length, err
@@ -309,20 +324,15 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 		}
 	}
 
-	// deal with FEC part
-	fecLen := 0
-	if ph.PrivateFlags&FLAG_ENTROPY == FLAG_ENTROPY {
-		// TODO: ?
-	}
-	if ph.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
-		fecLen = 1
-	}
-	if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
-		//TODO: FEC packet
-	}
-
 	// pack to wire
-	wire = make([]byte, 1+cIDLen+vLen+sNumLen+1+fecLen)
+	privateLen := 0
+	if ph.RegularPacket {
+		privateLen += 1
+		if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
+			privateLen += 1
+		}
+	}
+	wire = make([]byte, 1+cIDLen+vLen+sNumLen+privateLen)
 	wire[0] = byte(ph.PublicFlags)
 	index := 1
 	for i := 0; i < cIDLen; i++ {
@@ -340,10 +350,11 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	}
 	index += sNumLen
 
-	wire[index] = byte(ph.PrivateFlags)
-
-	if fecLen > 0 {
-		wire[index+1] = ph.FEC
+	if ph.RegularPacket {
+		wire[index] = byte(ph.PrivateFlags)
+		if ph.PrivateFlags&FLAG_FEC == FLAG_FEC {
+			wire[index+1] = ph.FEC
+		}
 	}
 
 	return
