@@ -165,7 +165,7 @@ func NewPacketHeader(packetType PacketType, connectionID uint64, version uint32,
 		}
 	}
 
-	if packetType != PublicResetPacketType {
+	if regularPacket {
 		switch {
 		case connectionID <= 0:
 			publicFlags |= OMIT_CONNECTION_ID
@@ -233,19 +233,24 @@ func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length i
 		ph.RegularPacket = true // Regular Packet
 	}
 
-	switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
-	case CONNECTION_ID_LENGTH_8:
+	if ph.RegularPacket {
+		switch ph.PublicFlags & CONNECTION_ID_LENGTH_MASK {
+		case CONNECTION_ID_LENGTH_8:
+			ph.ConnectionID = binary.BigEndian.Uint64(data[1:])
+			length = 9
+		case CONNECTION_ID_LENGTH_4:
+			ph.ConnectionID = uint64(data[1])<<24 | uint64(data[2])<<16 | uint64(data[3])<<8 | uint64(data[4])
+			length = 5
+		case CONNECTION_ID_LENGTH_1:
+			ph.ConnectionID = uint64(data[1])
+			length = 2
+		case OMIT_CONNECTION_ID:
+			ph.ConnectionID = 0 // omitted
+			length = 1
+		}
+	} else {
 		ph.ConnectionID = binary.BigEndian.Uint64(data[1:])
 		length = 9
-	case CONNECTION_ID_LENGTH_4:
-		ph.ConnectionID = uint64(data[1])<<24 | uint64(data[2])<<16 | uint64(data[3])<<8 | uint64(data[4])
-		length = 5
-	case CONNECTION_ID_LENGTH_1:
-		ph.ConnectionID = uint64(data[1])
-		length = 2
-	case OMIT_CONNECTION_ID:
-		ph.ConnectionID = 0 // omitted
-		length = 1
 	}
 
 	if ph.Type != PublicResetPacketType {
