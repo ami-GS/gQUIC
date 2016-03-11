@@ -232,7 +232,7 @@ func TestStopWaitingFrame(t *testing.T) {
 
 	for i, d := range data {
 		if i == 1 {
-			fp.PacketHeader.PublicFlags |= SEQUENCE_NUMBER_LENGTH_2
+			fp.PacketHeader.PublicFlags |= PACKET_NUMBER_LENGTH_2
 		}
 		frame, _ := FrameParserMap[FrameType(d[0])](fp, d)
 		actualFrame := actualFrames[i]

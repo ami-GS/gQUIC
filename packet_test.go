@@ -28,7 +28,7 @@ func TestPacketHeader(t *testing.T) {
 
 func TestFramePacket(t *testing.T) {
 	data := []byte{
-		//header, pubFlag:4, connID:1, seqNum:1, priFlag:0
+		//header, pubFlag:4, connID:1, pacNum:1, priFlag:0
 		0x04, 0x01, 0x01, 0x00,
 		// stream, fin:true, stID:1, offset:1, dataLength:1
 		0xe4, 0x01, 0x00, 0x01, 0x00, 0x05, 'a', 'i', 'u', 'e', 'o',

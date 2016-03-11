@@ -562,14 +562,14 @@ func ParseStopWaitingFrame(fp *FramePacket, data []byte) (Frame, int) {
 
 	length := 0
 	// the same length as the packet header's sequence number
-	switch frame.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
-	case SEQUENCE_NUMBER_LENGTH_6:
+	switch frame.PublicFlags & PACKET_NUMBER_LENGTH_MASK {
+	case PACKET_NUMBER_LENGTH_6:
 		length = 6
-	case SEQUENCE_NUMBER_LENGTH_4:
+	case PACKET_NUMBER_LENGTH_4:
 		length = 4
-	case SEQUENCE_NUMBER_LENGTH_2:
+	case PACKET_NUMBER_LENGTH_2:
 		length = 2
-	case SEQUENCE_NUMBER_LENGTH_1:
+	case PACKET_NUMBER_LENGTH_1:
 		length = 1
 	}
 
@@ -583,14 +583,14 @@ func ParseStopWaitingFrame(fp *FramePacket, data []byte) (Frame, int) {
 func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 	// shold here be functionized?
 	length := 1
-	switch frame.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
-	case SEQUENCE_NUMBER_LENGTH_6:
+	switch frame.PublicFlags & PACKET_NUMBER_LENGTH_MASK {
+	case PACKET_NUMBER_LENGTH_6:
 		length = 6
-	case SEQUENCE_NUMBER_LENGTH_4:
+	case PACKET_NUMBER_LENGTH_4:
 		length = 4
-	case SEQUENCE_NUMBER_LENGTH_2:
+	case PACKET_NUMBER_LENGTH_2:
 		length = 2
-	case SEQUENCE_NUMBER_LENGTH_1:
+	case PACKET_NUMBER_LENGTH_1:
 		length = 1
 	}
 

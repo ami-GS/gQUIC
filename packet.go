@@ -43,19 +43,19 @@ func (pType PacketType) String() string {
 type PublicFlagType byte
 
 const (
-	CONTAIN_QUIC_VERSION        PublicFlagType = 0x01
-	PUBLIC_RESET                               = 0x02
-	CONNECTION_ID_LENGTH_MASK                  = 0x0c
-	CONNECTION_ID_LENGTH_8                     = 0x0c
-	CONNECTION_ID_LENGTH_4                     = 0x08
-	CONNECTION_ID_LENGTH_1                     = 0x04
-	OMIT_CONNECTION_ID                         = 0x00
-	SEQUENCE_NUMBER_LENGTH_MASK                = 0x30
-	SEQUENCE_NUMBER_LENGTH_6                   = 0x30
-	SEQUENCE_NUMBER_LENGTH_4                   = 0x20
-	SEQUENCE_NUMBER_LENGTH_2                   = 0x10
-	SEQUENCE_NUMBER_LENGTH_1                   = 0x00
-	RESERVED                                   = 0xc0
+	CONTAIN_QUIC_VERSION      PublicFlagType = 0x01
+	PUBLIC_RESET                             = 0x02
+	CONNECTION_ID_LENGTH_MASK                = 0x0c
+	CONNECTION_ID_LENGTH_8                   = 0x0c
+	CONNECTION_ID_LENGTH_4                   = 0x08
+	CONNECTION_ID_LENGTH_1                   = 0x04
+	OMIT_CONNECTION_ID                       = 0x00
+	PACKET_NUMBER_LENGTH_MASK                = 0x30
+	PACKET_NUMBER_LENGTH_6                   = 0x30
+	PACKET_NUMBER_LENGTH_4                   = 0x20
+	PACKET_NUMBER_LENGTH_2                   = 0x10
+	PACKET_NUMBER_LENGTH_1                   = 0x00
+	RESERVED                                 = 0xc0
 )
 
 func (f PublicFlagType) String() string {
@@ -76,15 +76,15 @@ func (f PublicFlagType) String() string {
 	default:
 		str += "\tOMIT_CONNECTION_ID\n"
 	}
-	switch f & SEQUENCE_NUMBER_LENGTH_MASK {
-	case SEQUENCE_NUMBER_LENGTH_6:
-		str += "\tSEQUENCE_NUMBER_LENGTH_6\n"
-	case SEQUENCE_NUMBER_LENGTH_4:
-		str += "\tSEQUENCE_NUMBER_LENGTH_4\n"
-	case SEQUENCE_NUMBER_LENGTH_2:
-		str += "\tSEQUENCE_NUMBER_LENGTH_2\n"
-	case SEQUENCE_NUMBER_LENGTH_1:
-		str += "\tSEQUENCE_NUMBER_LENGTH_1\n"
+	switch f & PACKET_NUMBER_LENGTH_MASK {
+	case PACKET_NUMBER_LENGTH_6:
+		str += "\tPACKET_NUMBER_LENGTH_6\n"
+	case PACKET_NUMBER_LENGTH_4:
+		str += "\tPACKET_NUMBER_LENGTH_4\n"
+	case PACKET_NUMBER_LENGTH_2:
+		str += "\tPACKET_NUMBER_LENGTH_2\n"
+	case PACKET_NUMBER_LENGTH_1:
+		str += "\tPACKET_NUMBER_LENGTH_1\n"
 	}
 	if len(str) > 0 {
 		str = "\n" + str
@@ -136,17 +136,17 @@ func (f PrivateFlagType) String() string {
 */
 
 type PacketHeader struct {
-	Type           PacketType
-	PublicFlags    PublicFlagType
-	ConnectionID   uint64
-	Version        uint32
-	SequenceNumber uint64
-	RegularPacket  bool
-	PrivateFlags   PrivateFlagType
-	FEC            byte
+	Type          PacketType
+	PublicFlags   PublicFlagType
+	ConnectionID  uint64
+	Versions      []uint32
+	PacketNumber  uint64
+	RegularPacket bool
+	PrivateFlags  PrivateFlagType
+	FEC           byte
 }
 
-func NewPacketHeader(packetType PacketType, connectionID uint64, version uint32, sequenceNumber uint64, fec byte) *PacketHeader {
+func NewPacketHeader(packetType PacketType, connectionID uint64, versions []uint32, packetNumber uint64, fec byte) *PacketHeader {
 
 	var publicFlags PublicFlagType
 	var privateFlags PrivateFlagType
@@ -180,36 +180,40 @@ func NewPacketHeader(packetType PacketType, connectionID uint64, version uint32,
 		publicFlags |= CONNECTION_ID_LENGTH_8
 	}
 
-	// TODO: currently, SequenceNumber changes in FECPacket.AppendFramePacket,
+	// TODO: currently, PacketNumber changes in FECPacket.AppendFramePacket,
 	// so that here should be in GetWire(). right?
 	if packetType == FramePacketType {
 		switch {
-		case sequenceNumber <= 0xff:
-			publicFlags |= SEQUENCE_NUMBER_LENGTH_1
-		case sequenceNumber <= 0xffff:
-			publicFlags |= SEQUENCE_NUMBER_LENGTH_2
-		case sequenceNumber <= 0xffffffff:
-			publicFlags |= SEQUENCE_NUMBER_LENGTH_4
-		case sequenceNumber <= 0xffffffffffff:
-			publicFlags |= SEQUENCE_NUMBER_LENGTH_6
+		case packetNumber <= 0xff:
+			publicFlags |= PACKET_NUMBER_LENGTH_1
+		case packetNumber <= 0xffff:
+			publicFlags |= PACKET_NUMBER_LENGTH_2
+		case packetNumber <= 0xffffffff:
+			publicFlags |= PACKET_NUMBER_LENGTH_4
+		case packetNumber <= 0xffffffffffff:
+			publicFlags |= PACKET_NUMBER_LENGTH_6
 		}
 
 		// version negotiation packet is still considering?
 		// private flags == FLAG_FEC indicate FEC packet
 		// others indicate frame packet
 	} else {
-		publicFlags |= SEQUENCE_NUMBER_LENGTH_1
+		publicFlags |= PACKET_NUMBER_LENGTH_1
 	}
 
+	if !regularPacket {
+		packetNumber = 0
+		// TODO: emit warnning, packet number cannnot be set
+	}
 	ph := &PacketHeader{
-		Type:           packetType,
-		PublicFlags:    publicFlags,
-		ConnectionID:   connectionID,
-		Version:        version,
-		SequenceNumber: sequenceNumber,
-		RegularPacket:  regularPacket,
-		PrivateFlags:   privateFlags,
-		FEC:            fec,
+		Type:          packetType,
+		PublicFlags:   publicFlags,
+		ConnectionID:  connectionID,
+		Versions:      versions,
+		PacketNumber:  packetNumber,
+		RegularPacket: regularPacket,
+		PrivateFlags:  privateFlags,
+		FEC:           fec,
 	}
 	return ph
 }
@@ -260,18 +264,18 @@ func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length i
 		}
 
 		// TODO: parse sequence number
-		switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
-		case SEQUENCE_NUMBER_LENGTH_6:
-			ph.SequenceNumber = binary.BigEndian.Uint64(data[length:])
+		switch ph.PublicFlags & PACKET_NUMBER_LENGTH_MASK {
+		case PACKET_NUMBER_LENGTH_6:
+			ph.PacketNumber = binary.BigEndian.Uint64(data[length:])
 			length += 6
-		case SEQUENCE_NUMBER_LENGTH_4:
-			ph.SequenceNumber = uint64(data[length])<<24 | uint64(data[length+1])<<16 | uint64(data[length+2])<<8 | uint64(data[length+3])
+		case PACKET_NUMBER_LENGTH_4:
+			ph.PacketNumber = uint64(data[length])<<24 | uint64(data[length+1])<<16 | uint64(data[length+2])<<8 | uint64(data[length+3])
 			length += 4
-		case SEQUENCE_NUMBER_LENGTH_2:
-			ph.SequenceNumber = uint64(data[length])<<8 | uint64(data[length+1])
+		case PACKET_NUMBER_LENGTH_2:
+			ph.PacketNumber = uint64(data[length])<<8 | uint64(data[length+1])
 			length += 2
-		case SEQUENCE_NUMBER_LENGTH_1:
-			ph.SequenceNumber = uint64(data[length])
+		case PACKET_NUMBER_LENGTH_1:
+			ph.PacketNumber = uint64(data[length])
 			length += 1
 		}
 	}
@@ -315,17 +319,17 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 		vLen = 4
 	}
 
-	sNumLen := 0
-	if ph.Type != PublicResetPacketType {
-		switch ph.PublicFlags & SEQUENCE_NUMBER_LENGTH_MASK {
-		case SEQUENCE_NUMBER_LENGTH_6:
-			sNumLen = 6
-		case SEQUENCE_NUMBER_LENGTH_4:
-			sNumLen = 4
-		case SEQUENCE_NUMBER_LENGTH_2:
-			sNumLen = 2
-		case SEQUENCE_NUMBER_LENGTH_1:
-			sNumLen = 1
+	pNumLen := 0
+	if ph.RegularPacket {
+		switch ph.PublicFlags & PACKET_NUMBER_LENGTH_MASK {
+		case PACKET_NUMBER_LENGTH_6:
+			pNumLen = 6
+		case PACKET_NUMBER_LENGTH_4:
+			pNumLen = 4
+		case PACKET_NUMBER_LENGTH_2:
+			pNumLen = 2
+		case PACKET_NUMBER_LENGTH_1:
+			pNumLen = 1
 		}
 	}
 
@@ -337,7 +341,7 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 			privateLen += 1
 		}
 	}
-	wire = make([]byte, 1+cIDLen+vLen+sNumLen+privateLen)
+	wire = make([]byte, 1+cIDLen+vLen+pNumLen+privateLen)
 	wire[0] = byte(ph.PublicFlags)
 	index := 1
 	for i := 0; i < cIDLen; i++ {
@@ -350,10 +354,10 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 		index += vLen
 	}
 
-	for i := 0; i < sNumLen; i++ {
-		wire[index+i] = byte(ph.SequenceNumber >> byte(8*(sNumLen-i-1)))
+	for i := 0; i < pNumLen; i++ {
+		wire[index+i] = byte(ph.PacketNumber >> byte(8*(pNumLen-i-1)))
 	}
-	index += sNumLen
+	index += pNumLen
 
 	if ph.RegularPacket {
 		wire[index] = byte(ph.PrivateFlags)
@@ -532,7 +536,7 @@ func (packet *FECPacket) GetWire() (wire []byte, err error) {
 func (packet *FECPacket) AppendFramePacket(nextPacket *FramePacket) {
 	nextPacket.FEC = byte(len(packet.FECGroup))
 	packet.FECGroup = append(packet.FECGroup, nextPacket)
-	packet.SequenceNumber += 1 //suspicious
+	packet.PacketNumber += 1 //suspicious
 	packet.UpdateRedundancy(nextPacket)
 }
 
