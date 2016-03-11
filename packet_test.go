@@ -6,10 +6,12 @@ import (
 )
 
 func TestPacketHeader(t *testing.T) {
-	// pubFlag:5 ConnID: 1, version: 1, seqNum:1, privateFlag:0, fec:1
-	data := []byte{0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01}
+	// pubFlag:5 ConnID: 1, version: 1, pacNum:1, privateFlag:0, fec:1
+	//data := []byte{0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01}
+	// pubFlag:5 ConnID: 1, version: 1, pacNum:1, privateFlag:0, fec:None
+	data := []byte{0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01}
 	//
-	actualHeader := NewPacketHeader(VersionNegotiationPacketType, 1, 1, 1, 0)
+	actualHeader := NewPacketHeader(VersionNegotiationPacketType, 1, []uint32{1}, 0, 0)
 
 	header, actualLen, _ := ParsePacketHeader(data, true)
 	if actualLen != len(data) {
@@ -38,7 +40,7 @@ func TestFramePacket(t *testing.T) {
 	}
 	actual_ph, idx, _ := ParsePacketHeader(data, false)
 	packet, actualLen := PacketParserMap[actual_ph.Type](actual_ph, data[idx:])
-	ph := NewPacketHeader(FramePacketType, 1, 0, 1, 0)
+	ph := NewPacketHeader(FramePacketType, 1, nil, 1, 0)
 	actualPacket := NewFramePacket(1, 1)
 	actualPacket.PacketHeader = ph
 	f1 := NewStreamFrame(true, 1, 1, []byte("aiueo"))

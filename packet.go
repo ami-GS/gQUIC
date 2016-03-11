@@ -257,12 +257,7 @@ func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length i
 		length = 9
 	}
 
-	if ph.Type != PublicResetPacketType {
-		if !ph.RegularPacket && ph.Type == VersionNegotiationPacketType {
-			ph.Version = binary.BigEndian.Uint32(data[length:])
-			length += 4
-		}
-
+	if ph.RegularPacket {
 		// TODO: parse sequence number
 		switch ph.PublicFlags & PACKET_NUMBER_LENGTH_MASK {
 		case PACKET_NUMBER_LENGTH_6:
@@ -277,6 +272,17 @@ func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length i
 		case PACKET_NUMBER_LENGTH_1:
 			ph.PacketNumber = uint64(data[length])
 			length += 1
+		}
+	}
+
+	if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
+		ph.Versions = append(ph.Versions, binary.BigEndian.Uint32(data[length:]))
+		length += 4
+		if ph.Type == VersionNegotiationPacketType {
+			for length < len(data) {
+				ph.Versions = append(ph.Versions, binary.BigEndian.Uint32(data[length:]))
+				length += 4
+			}
 		}
 	}
 
@@ -315,8 +321,8 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	}
 
 	vLen := 0
-	if ph.Type == VersionNegotiationPacketType {
-		vLen = 4
+	if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
+		vLen = 4 * len(ph.Versions)
 	}
 
 	pNumLen := 0
@@ -350,8 +356,10 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	index += cIDLen
 
 	if vLen > 0 {
-		binary.BigEndian.PutUint32(wire[index:], ph.Version)
-		index += vLen
+		for _, v := range ph.Versions {
+			binary.BigEndian.PutUint32(wire[index:], v)
+			index += vLen
+		}
 	}
 
 	for i := 0; i < pNumLen; i++ {
@@ -370,19 +378,32 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 }
 
 func (ph *PacketHeader) String() string {
-	return fmt.Sprintf("Packet Type=%s, PublicFlags={%s}, ConnectionID=%d, Version=%d, SequenceNumber=%d, PrivateFlags={%s}, FEC=%d\n", ph.Type.String(), ph.PublicFlags.String(), ph.ConnectionID, ph.Version, ph.SequenceNumber, ph.PrivateFlags.String(), ph.FEC)
+	return fmt.Sprintf("Packet Type=%s, PublicFlags={%s}, ConnectionID=%d, Version=%d, PacketNumber=%d, PrivateFlags={%s}, FEC=%d\n", ph.Type.String(), ph.PublicFlags.String(), ph.ConnectionID, ph.Versions, ph.PacketNumber, ph.PrivateFlags.String(), ph.FEC)
 }
+
+/*
+0        1        2        3        4        5        6        7       8
++--------+--------+--------+--------+--------+--------+--------+--------+--------+
+| Public |    Connection ID (64)                                                 | ->
+|Flags(8)|                                                                       |
++--------+--------+--------+--------+--------+--------+--------+--------+--------+
+	9       10       11        12       13      14       15       16       17
++--------+--------+--------+--------+--------+--------+--------+--------+---...--+
+|      1st QUIC version supported   |     2nd QUIC version supported    |   ...
+|      by server (32)               |     by server (32)                |
++--------+--------+--------+--------+--------+--------+--------+--------+---...--+
+*/
 
 type VersionNegotiationPacket struct {
 	*PacketHeader
-	Version uint32 //?
+	Versions []uint32 //?
 }
 
-func NewVersionNegotiationPacket(connectionID, sequenceNumber uint64, version uint32) *VersionNegotiationPacket {
-	ph := NewPacketHeader(VersionNegotiationPacketType, connectionID, version, sequenceNumber, 0)
+func NewVersionNegotiationPacket(connectionID uint64, versions []uint32) *VersionNegotiationPacket {
+	ph := NewPacketHeader(VersionNegotiationPacketType, connectionID, versions, 0, 0)
 	packet := &VersionNegotiationPacket{
 		PacketHeader: ph,
-		Version:      version,
+		Versions:     versions,
 	}
 	return packet
 }
@@ -418,8 +439,8 @@ type FramePacket struct {
 	RestSize uint16
 }
 
-func NewFramePacket(connectionID, sequenceNumber uint64) *FramePacket {
-	ph := NewPacketHeader(FramePacketType, connectionID, 0, sequenceNumber, 0)
+func NewFramePacket(connectionID, packetNumber uint64) *FramePacket {
+	ph := NewPacketHeader(FramePacketType, connectionID, nil, packetNumber, 0)
 	packet := &FramePacket{
 		PacketHeader: ph,
 		Frames:       []*Frame{},
@@ -504,8 +525,8 @@ func NewFECPacket(firstPacket *FramePacket) *FECPacket {
 	// TODO: is fec correct?
 	// zero origin?
 	// I guess byte length of sequence number in header should be fixed
-	ph := NewPacketHeader(FECPacketType, firstPacket.ConnectionID, 0,
-		firstPacket.SequenceNumber+1, 0)
+	ph := NewPacketHeader(FECPacketType, firstPacket.ConnectionID, nil,
+		firstPacket.PacketNumber+1, 0)
 	// TODO: bad performance same as below in UpdateRedundancy()
 	// and suspicious because length of sequence Number might change.
 	hWire, _ := ph.GetWire()
@@ -571,7 +592,7 @@ type PublicResetPacket struct {
 }
 
 func NewPublicResetPacket(connectionID uint64) *PublicResetPacket {
-	ph := NewPacketHeader(PublicResetPacketType, connectionID, 0, 0, 0)
+	ph := NewPacketHeader(PublicResetPacketType, connectionID, nil, 0, 0)
 	packet := &PublicResetPacket{
 		PacketHeader: ph,
 		Msg:          NewMessage(PRST),
