@@ -13,6 +13,7 @@ const (
 	SHLO QuicTag = 'S' + ('H' << 8) + ('L' << 16) + ('O' << 24)
 	REJ  QuicTag = 'R' + ('E' << 8) + ('J' << 16) + (0 << 24)
 
+	// Required Parameters
 	// in CHLO/SHLO
 	// Stream Flow Control Window
 	SFCW QuicTag = 'S' + ('F' << 8) + ('C' << 16) + ('W' << 24)
@@ -32,6 +33,14 @@ const (
 	CCS QuicTag = 'C' + ('C' << 8) + ('S' << 16) + (0 << 24)
 	// Cached certificate (optional)
 	CCRT QuicTag = 'C' + ('C' << 8) + ('R' << 16) + ('T' << 24)
+
+	// Optional Parameters
+	// Socket receive buffer size in bytes
+	SRBF QuicTag = 'S' + ('R' << 8) + ('B' << 16) + ('F' << 24)
+	// Connection ID truncation
+	TCID QuicTag = 'T' + ('C' << 8) + ('I' << 16) + ('D' << 24)
+	// Connection Options are a repeated tag field
+	COPT QuicTag = 'C' + ('O' << 8) + ('P' << 16) + ('T' << 24)
 
 	// in REJ
 	// Server config (optional)
