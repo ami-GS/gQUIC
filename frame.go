@@ -278,52 +278,55 @@ func (frame *StreamFrame) String() (str string) {
 /*
       0        1                           N
  +--------+--------+---------------------------------------------------+
- |Type (8)|Received|    Largest Observed (8, 16, 32, or 48 bits)       |
- |        |Entropy |                     (variable length)             |
+ |  Type  |Received|                Largest Observed                   |
+ |  (8)   |Entropy |              (8, 16, 32, or 48 bits)              |
  +--------+--------+---------------------------------------------------+
     N+1       N+2      N+3      N+4                   N+8
  +--------+--------+---------+--------+--------------------------------+
- |Largest Observed |   Num   | Delta  |  Time Since Largest Observed   |
- | Delta Time (16) |Timestamp|Largest |                                |
- |        |        |   (8)   |Observed|                                |
+ |    Ack Delay    |   Num   | Delta  |        First Timestamp         |
+ |     Time (16)   |Timestamp|Largest |           (32 bits)            |
+ |                 |   (8)   |Observed|                                |
  +--------+--------+---------+--------+--------------------------------+
     N+9         N+11 - X
- +--------+------------------+
- | Delta  |       Time       |
- |Largest |  Since Previous  |
- |Observed|Timestamp (Repeat)|
- +--------+------------------+
+ +--------+-------------------+
+ | Delta  |   Time Since      |
+ |Largest | Previous Timestamp|  <-- Repeat (NumTimestamp - 1) times
+ |Observed|     (16 bits)     |
+ +--------+-------------------+
      X                        X+1 - Y                           Y+1
  +--------+-------------------------------------------------+--------+
- | Number |    Missing Packet Sequence Number Delta         | Range  |
- | Ranges | (repeats Number Ranges times with Range Length) | Length |
- | (opt)  |                                                 |(Repeat)|
+ | Number |     Missing Packet Sequence Number Delta        | Range  |
+ | Ranges |           (8, 16, 32, or 48 bits)               | Length |
+ | (opt)  |        (repeats Number Ranges times)            |(Repeat)|
  +--------+-------------------------------------------------+--------+
      Y+2                       Y+3 - Z
  +--------+-----------------------------------------------------+
- | Number |       Revived Packet  (8, 16, 32, or 48 bits)       |
- | Revived|       Sequence Number (variable length)             |
- | (opt)  |         (repeats Number Revied times)               |
+ | Number |            Revived Packet Number                    |
+ | Revived|  (8, 16, 32, or 48 bits, same as Largest Observed)  |
+ | (opt)  |        (repeats Number Revived times)               |
  +--------+-----------------------------------------------------+
 */
 
 type AckFrame struct {
 	*FramePacket
-	Type                              FrameType
-	Settings                          byte
-	ReceivedEntropy                   byte
-	LargestObserved                   uint64
-	LargestObservedDeltaTime          uint16 // actual type is ufloat16
-	NumTimestamp                      byte
-	DeltaSinceLargestObserved         byte
-	TimeSinceLargestObserved          uint32
-	DeltaSincePreviousLargestObserved []byte
-	TimeSincePreviousTimestamp        []uint16
-	NumRanges                         byte
-	MissingPacketSequenceNumberDelta  []uint64 //suspicious
-	RangeLength                       []byte
-	NumRevived                        byte
-	RevivedPacketSequenceNumber       []uint64
+	Type                 FrameType
+	Settings             byte
+	ReceivedEntropy      byte
+	LargestObserved      uint64
+	AckDelayTime         uint16
+	NumTimestamp         byte
+	DeltaLargestObserved byte
+	FirstTimestamp       uint32
+
+	DeltaLargestObserved_r     []byte
+	TimeSincePreviousTimestamp []uint16 // Repeat (Numtimestamp - 1) times
+
+	NumRanges                        byte
+	MissingPacketSequenceNumberDelta []uint64 // repeats NumberRanges times
+	RangeLength                      []byte   // repeat
+
+	NumRevived          byte
+	RevivedPacketNumber []uint64 // repeats NumberRevived times
 }
 
 func NewAckFrame(hasNACK, isTruncate bool, largestObserved, missingDelta uint64) *AckFrame {
@@ -408,16 +411,16 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 	}
 
 	length += lOLen
-	frame.LargestObservedDeltaTime = binary.BigEndian.Uint16(data[length:])
+	frame.AckDelayTime = binary.BigEndian.Uint16(data[length:])
 	frame.NumTimestamp = data[length+2]
-	frame.DeltaSinceLargestObserved = data[length+3]
-	frame.TimeSinceLargestObserved = binary.BigEndian.Uint32(data[length+4:])
+	frame.DeltaLargestObserved = data[length+3]
+	frame.FirstTimestamp = binary.BigEndian.Uint32(data[length+4:])
 	length += 8
 
-	frame.DeltaSincePreviousLargestObserved = make([]byte, frame.NumTimestamp)
-	frame.TimeSincePreviousTimestamp = make([]uint16, frame.NumTimestamp)
-	for i := 0; i < int(frame.NumTimestamp); i++ {
-		frame.DeltaSincePreviousLargestObserved[i] = data[length]
+	frame.DeltaLargestObserved_r = make([]byte, frame.NumTimestamp-1)
+	frame.TimeSincePreviousTimestamp = make([]uint16, frame.NumTimestamp-1)
+	for i := 0; i < int(frame.NumTimestamp-1); i++ {
+		frame.DeltaLargestObserved_r[i] = data[length]
 		frame.TimeSincePreviousTimestamp[i] = binary.BigEndian.Uint16(data[length+1:])
 		length += 3
 	}
@@ -429,18 +432,18 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 		for i := 0; i < int(frame.NumRanges); i++ {
 			for j := 0; j < mPSeqNumDLen; j++ {
 				frame.MissingPacketSequenceNumberDelta[i] |= uint64(data[length]) << byte(8*(mPSeqNumDLen-j-1))
-				length += 1
+				length += 1 // suspicious
 			}
 			frame.RangeLength[i] = data[length]
 			length += 1
 		}
 		frame.NumRevived = data[length]
 		length += 1
-		frame.RevivedPacketSequenceNumber = make([]uint64, frame.NumRevived)
+		frame.RevivedPacketNumber = make([]uint64, frame.NumRevived)
 		for i := 0; i < int(frame.NumRevived); i++ {
 			for j := 0; j < lOLen; j++ {
-				frame.RevivedPacketSequenceNumber[i] |= uint64(data[length]) << byte(8*(lOLen-j-1))
-				length += 1
+				frame.RevivedPacketNumber[i] |= uint64(data[length]) << byte(8*(lOLen-j-1))
+				length += 1 // suspicious
 			}
 		}
 	}
@@ -482,7 +485,7 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		hasNACK = 1
 	}
 
-	wire = make([]byte, 1+1+lOLen+2+1+1+4+int(frame.NumTimestamp)*3+hasNACK*2+int(frame.NumRanges)*(mPSeqNumDLen+1)+int(frame.NumRevived)*lOLen)
+	wire = make([]byte, 1+1+lOLen+2+1+1+4+int(frame.NumTimestamp-1)*3+hasNACK*2+int(frame.NumRanges)*(mPSeqNumDLen+1)+int(frame.NumRevived)*lOLen)
 	wire[0] = byte(frame.Type) + frame.Settings
 	wire[1] = frame.ReceivedEntropy
 	length := 2
@@ -490,13 +493,13 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		wire[i+length] = byte(frame.LargestObserved >> byte(8*(lOLen-i-1)))
 	}
 	length += lOLen
-	binary.BigEndian.PutUint16(wire[length:], frame.LargestObservedDeltaTime)
+	binary.BigEndian.PutUint16(wire[length:], frame.AckDelayTime)
 	wire[length+2] = frame.NumTimestamp
-	wire[length+3] = frame.DeltaSinceLargestObserved
-	binary.BigEndian.PutUint32(wire[length+4:], frame.TimeSinceLargestObserved)
+	wire[length+3] = frame.DeltaLargestObserved
+	binary.BigEndian.PutUint32(wire[length+4:], frame.FirstTimestamp)
 	length += 8
-	for i := 0; i < int(frame.NumTimestamp); i++ {
-		wire[length+i] = frame.DeltaSincePreviousLargestObserved[i]
+	for i := 0; i < int(frame.NumTimestamp-1); i++ {
+		wire[length+i] = frame.DeltaLargestObserved_r[i]
 		binary.BigEndian.PutUint16(wire[length+i+1:], frame.TimeSincePreviousTimestamp[i])
 		length += 3
 	}
@@ -515,7 +518,7 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		length += 1
 		for i := 0; i < int(frame.NumRevived); i++ {
 			for j := 0; j < lOLen; j++ {
-				wire[length+j] = byte(frame.RevivedPacketSequenceNumber[i] >> byte(8*(lOLen-j-1)))
+				wire[length+j] = byte(frame.RevivedPacketNumber[i] >> byte(8*(lOLen-j-1)))
 			}
 			length += lOLen
 		}
