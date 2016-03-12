@@ -160,8 +160,6 @@ func NewPacketHeader(packetType PacketType, connectionID uint64, versions []uint
 		regularPacket = true
 		if packetType == FECPacketType {
 			privateFlags |= FLAG_FEC
-		} else {
-			// do nothing
 		}
 	}
 
@@ -293,6 +291,7 @@ func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length i
 			// TODO: ?
 		}
 		if ph.PrivateFlags&FLAG_FEC_GROUP == FLAG_FEC_GROUP {
+			ph.Type = FECPacketType
 			ph.FEC = data[length]
 			length += 1
 		}
@@ -396,14 +395,12 @@ func (ph *PacketHeader) String() string {
 
 type VersionNegotiationPacket struct {
 	*PacketHeader
-	Versions []uint32 //?
 }
 
 func NewVersionNegotiationPacket(connectionID uint64, versions []uint32) *VersionNegotiationPacket {
 	ph := NewPacketHeader(VersionNegotiationPacketType, connectionID, versions, 0, 0)
 	packet := &VersionNegotiationPacket{
 		PacketHeader: ph,
-		Versions:     versions,
 	}
 	return packet
 }
