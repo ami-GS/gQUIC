@@ -9,7 +9,13 @@ type Client struct {
 	FinVersionNegotiation bool
 }
 
-func (self *Client) FramePacket(frames []*Frame) {}
+func (self *Client) FramePacket(frames []*Frame) {
+	// TODO: When is new connectionID created?
+	//       and how is packet number decided?
+	p := NewFramePacket(0, 0)
+	p.Frames = frames
+	self.Ct.Send(p)
+}
 
 func (self *Client) PublicResetPacket() {}
 
