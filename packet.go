@@ -9,6 +9,7 @@ const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
 
 type Packet interface {
 	GetWire() ([]byte, error)
+	GetConnectionID() uint64
 	String() string
 }
 
@@ -419,6 +420,10 @@ func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	return append(hWire, wire...), err
 }
 
+func (packet *VersionNegotiationPacket) GetConnectionID() uint64 {
+	return packet.ConnectionID
+}
+
 func (packet *VersionNegotiationPacket) String() string {
 	return packet.PacketHeader.String() // TODO
 }
@@ -482,6 +487,10 @@ func (packet *FramePacket) GetWire() ([]byte, error) {
 		}
 	}
 	return append(hWire, packet.Wire...), err // temporally
+}
+
+func (packet *FramePacket) GetConnectionID() uint64 {
+	return packet.ConnectionID
 }
 
 func (packet *FramePacket) PushBack(frame Frame) bool {
@@ -551,6 +560,10 @@ func (packet *FECPacket) GetWire() (wire []byte, err error) {
 	return append(hWire, packet.Redundancy...), err
 }
 
+func (packet *FECPacket) GetConnectionID() uint64 {
+	return packet.ConnectionID
+}
+
 func (packet *FECPacket) AppendFramePacket(nextPacket *FramePacket) {
 	nextPacket.FEC = byte(len(packet.FECGroup))
 	packet.FECGroup = append(packet.FECGroup, nextPacket)
@@ -611,6 +624,10 @@ func (packet *PublicResetPacket) GetWire() ([]byte, error) {
 	hWire, err := packet.PacketHeader.GetWire()
 	msgWire, err := packet.Msg.GetWire()
 	return append(hWire, msgWire...), err
+}
+
+func (packet *PublicResetPacket) GetConnectionID() uint64 {
+	return packet.ConnectionID
 }
 
 func (packet *PublicResetPacket) String() string {
