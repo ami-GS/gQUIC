@@ -2,26 +2,32 @@ package quic
 
 import (
 	"math/rand"
+	"net"
 )
 
 type Client struct {
-	Ct                    *Transport
+	Conns                 map[uint64]*Conn
+	RemoteAddr            *net.UDPAddr
 	FinVersionNegotiation bool
 }
 
-func (self *Client) FramePacket(frames []*Frame) {
+func (self *Client) FramePacket(frames []*Frame) error {
 	// TODO: When is new connectionID created?
 	//       and how is packet number decided?
 	p := NewFramePacket(0, 0)
 	p.Frames = frames
-	self.Ct.Send(p)
+	conn, ok := self.Conns[p.GetConnectionID()]
+	if !ok {
+		return CONNECTION_NOT_FOUND
+	}
+	return conn.WritePacket(p)
 }
 
 func (self *Client) PublicResetPacket() {}
 
 func (self *Client) FECPacket() {}
 
-func (self *Client) getConnectionID() (uint64, error) {
+func (self *Client) newConnectionID() (uint64, error) {
 	ok := true
 	var id uint64
 	for trial := 0; ok; trial++ {
@@ -30,7 +36,7 @@ func (self *Client) getConnectionID() (uint64, error) {
 		}
 		// TODO: here should be uint64 random
 		id = uint64(rand.Int63())
-		_, ok = self.Ct.Conns[id]
+		_, ok = self.Conns[id]
 	}
 	return id, nil
 }
