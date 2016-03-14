@@ -1,9 +1,5 @@
 package quic
 
-import (
-	"net"
-)
-
 type State byte
 
 const (
@@ -13,18 +9,18 @@ const (
 )
 
 type Stream struct {
+	*Conn
 	ID     uint32
 	State  State
 	Window *Window
-	Conn   *net.Conn
 }
 
-func NewStream(streamID uint32, socket *net.Conn) (stream *Stream) {
+func NewStream(streamID uint32, conn *Conn) (stream *Stream) {
 	stream = &Stream{
+		Conn:   conn,
 		ID:     streamID,
 		State:  OPEN,
 		Window: NewWindow(),
-		Conn:   socket,
 	}
 	return
 }
