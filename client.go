@@ -11,6 +11,22 @@ type Client struct {
 	FinVersionNegotiation bool
 }
 
+func NewClient(addPair string) (*Client, error) {
+	rAddr, err := net.ResolveUDPAddr("udp4", addPair)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		Conns:                 make(map[uint64]*Conn),
+		RemoteAddr:            rAddr,
+		FinVersionNegotiation: false,
+	}, nil
+}
+
+func (self *Client) Connect() error {
+	return nil
+}
+
 func (self *Client) FramePacket(frames []*Frame) error {
 	// TODO: When is new connectionID created?
 	//       and how is packet number decided?
