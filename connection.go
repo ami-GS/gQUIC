@@ -5,22 +5,29 @@ import (
 )
 
 type Conn struct {
-	Socket  *net.Conn
+	*Transport
 	Window  *Window
 	Streams map[uint32]*Stream
 }
 
-func NewConnection(socket *net.Conn) (conn *Conn) {
-	conn = &Conn{
-		Socket:  socket,
-		Window:  NewWindow(),
-		Streams: make(map[uint32]*Stream),
+func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
+	t, err := NewTransport(rAddr)
+	if err != nil {
+		return nil, err
 	}
-	return conn
+	return &Conn{
+		Transport: t,
+		Window:    NewWindow(),
+		Streams:   make(map[uint32]*Stream),
+	}, nil
 }
 
 func (conn *Conn) NewStream(streamID uint32) {
-	conn.Streams[streamID] = NewStream(streamID, conn.Socket)
+	conn.Streams[streamID] = NewStream(streamID, conn)
+}
+
+func (conn *Conn) WritePacket(p Packet) error {
+	return conn.Send(p)
 }
 
 func (conn *Conn) ReadPacket(p Packet) {
