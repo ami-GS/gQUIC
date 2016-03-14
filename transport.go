@@ -6,7 +6,15 @@ import (
 
 // TODO: should be encrypt at proper timing
 type Transport struct {
-	Conns map[uint64]*net.UDPConn
+	Conn *net.UDPConn
+}
+
+func NewTransport(rAddr *net.UDPAddr) (*Transport, error) {
+	conn, err := net.DialUDP("udp4", nil, rAddr)
+	if err != nil {
+		return nil, err
+	}
+	return &Transport{conn}, nil
 }
 
 func (self *Transport) Connect() (err error) {
@@ -18,13 +26,7 @@ func (self *Transport) Send(p Packet) (err error) {
 	if err != nil {
 		return err
 	}
-	id := p.GetConnectionID()
-	conn, ok := self.Conns[id]
-	if ok {
-		_, err = conn.Write(wire)
-	} else {
-		return CONNECTION_NOT_FOUND
-	}
+	_, err = self.Conn.Write(wire)
 	return err
 }
 
