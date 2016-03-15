@@ -71,13 +71,13 @@ func TestPaddingFrame(t *testing.T) {
 }
 
 func TestRstStreamFrame(t *testing.T) {
-	// streamID:1, offset:1, errorcode: NO_ERROR
+	// streamID:1, offset:1, errorcode: QUIC_NO_ERROR
 	data := []byte{0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00}
 	fp := NewFramePacket(0, 0)
 
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
-	actualFrame := NewRstStreamFrame(1, 1, NO_ERROR)
+	actualFrame := NewRstStreamFrame(1, 1, QUIC_NO_ERROR)
 	actualFrame.FramePacket = fp
 
 	wire, _ := actualFrame.GetWire()
@@ -119,13 +119,13 @@ func TestPingFrame(t *testing.T) {
 }
 
 func TestConnectionCloseFrame(t *testing.T) {
-	// errorcode: NO_ERROR, reason length: 14, reason: "This is reason",
+	// errorcode: QUIC_NO_ERROR, reason length: 14, reason: "This is reason",
 	data := []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e}
 	reason := "This is reason"
 	data = append(data, []byte(reason)...)
 	fp := NewFramePacket(0, 0)
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
-	actualFrame := NewConnectionCloseFrame(NO_ERROR, reason)
+	actualFrame := NewConnectionCloseFrame(QUIC_NO_ERROR, reason)
 	actualFrame.FramePacket = fp
 
 	wire, _ := actualFrame.GetWire()
@@ -144,13 +144,13 @@ func TestConnectionCloseFrame(t *testing.T) {
 }
 
 func TestGoAwayFrame(t *testing.T) {
-	// errorcode: NO_ERROR, last streamID: 1, reason length: 14, reason: "This is reason",
+	// errorcode: QUIC_NO_ERROR, last streamID: 1, reason length: 14, reason: "This is reason",
 	data := []byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e}
 	reason := "This is reason"
 	data = append(data, []byte(reason)...)
 	fp := NewFramePacket(0, 0)
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
-	actualFrame := NewGoAwayFrame(NO_ERROR, 1, reason)
+	actualFrame := NewGoAwayFrame(QUIC_NO_ERROR, 1, reason)
 	actualFrame.FramePacket = fp
 
 	wire, _ := actualFrame.GetWire()

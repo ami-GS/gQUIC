@@ -44,15 +44,6 @@ func (frameType FrameType) String() string {
 	}
 }
 
-type QuicErrorCode uint32
-
-const (
-	NO_ERROR QuicErrorCode = iota
-	// TODO: write down Error code
-	// the details are stil in progress?
-
-)
-
 type Frame interface {
 	GetWire() ([]byte, error)
 	String() string
@@ -751,10 +742,10 @@ type RstStreamFrame struct {
 	Type      FrameType
 	StreamID  uint32
 	Offset    uint64
-	ErrorCode QuicErrorCode
+	ErrorCode QUIC_OFFICIAL_ERROR
 }
 
-func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QuicErrorCode) *RstStreamFrame {
+func NewRstStreamFrame(streamID uint32, offset uint64, errorCode QUIC_OFFICIAL_ERROR) *RstStreamFrame {
 	rstStreamFrame := &RstStreamFrame{
 		Type:      RstStreamFrameType,
 		StreamID:  streamID,
@@ -771,7 +762,7 @@ func ParseRstStreamFrame(fp *FramePacket, data []byte) (Frame, int) {
 	}
 	frame.StreamID = binary.BigEndian.Uint32(data[1:])
 	frame.Offset = binary.BigEndian.Uint64(data[5:])
-	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[13:]))
+	frame.ErrorCode = QUIC_OFFICIAL_ERROR(binary.BigEndian.Uint32(data[13:]))
 	return frame, 17
 }
 
@@ -831,12 +822,12 @@ func (frame *PingFrame) String() (str string) {
 type ConnectionCloseFrame struct {
 	*FramePacket
 	Type               FrameType
-	ErrorCode          QuicErrorCode
+	ErrorCode          QUIC_OFFICIAL_ERROR
 	ReasonPhraseLength uint16
 	ReasonPhrase       string
 }
 
-func NewConnectionCloseFrame(errorCode QuicErrorCode, reasonPhrase string) *ConnectionCloseFrame {
+func NewConnectionCloseFrame(errorCode QUIC_OFFICIAL_ERROR, reasonPhrase string) *ConnectionCloseFrame {
 
 	connectionCloseFrame := &ConnectionCloseFrame{
 		Type:               ConnectionCloseFrameType,
@@ -852,7 +843,7 @@ func ParseConnectionCloseFrame(fp *FramePacket, data []byte) (Frame, int) {
 		FramePacket: fp,
 		Type:        ConnectionCloseFrameType,
 	}
-	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[1:]))
+	frame.ErrorCode = QUIC_OFFICIAL_ERROR(binary.BigEndian.Uint32(data[1:]))
 	frame.ReasonPhraseLength = binary.BigEndian.Uint16(data[5:])
 	frame.ReasonPhrase = string(data[7 : 7+frame.ReasonPhraseLength])
 	return frame, 7 + int(frame.ReasonPhraseLength)
@@ -888,13 +879,13 @@ func (frame *ConnectionCloseFrame) String() (str string) {
 type GoAwayFrame struct {
 	*FramePacket
 	Type               FrameType
-	ErrorCode          QuicErrorCode
+	ErrorCode          QUIC_OFFICIAL_ERROR
 	LastGoodStreamID   uint32
 	ReasonPhraseLength uint16
 	ReasonPhrase       string
 }
 
-func NewGoAwayFrame(errorCode QuicErrorCode, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
+func NewGoAwayFrame(errorCode QUIC_OFFICIAL_ERROR, lastGoodStreamID uint32, reasonPhrase string) *GoAwayFrame {
 	goAwayFrame := &GoAwayFrame{
 		Type:               GoAwayFrameType,
 		ErrorCode:          errorCode,
@@ -910,7 +901,7 @@ func ParseGoAwayFrame(fp *FramePacket, data []byte) (Frame, int) {
 		FramePacket: fp,
 		Type:        GoAwayFrameType,
 	}
-	frame.ErrorCode = QuicErrorCode(binary.BigEndian.Uint32(data[1:]))
+	frame.ErrorCode = QUIC_OFFICIAL_ERROR(binary.BigEndian.Uint32(data[1:]))
 	frame.LastGoodStreamID = binary.BigEndian.Uint32(data[5:])
 	frame.ReasonPhraseLength = binary.BigEndian.Uint16(data[9:])
 	frame.ReasonPhrase = string(data[11 : 11+frame.ReasonPhraseLength])
