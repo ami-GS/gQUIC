@@ -613,9 +613,9 @@ func NewPublicResetPacket(connectionID uint64) *PublicResetPacket {
 func ParsePublicResetPacket(ph *PacketHeader, data []byte) (Packet, int) {
 	packet := &PublicResetPacket{
 		PacketHeader: ph,
-		//Msg: // TODO: what todo here?
+		Msg:          &Message{},
 	}
-	//packet.Msg.Parse(data)
+	packet.Msg.Parse(data)
 	return packet, len(data)
 }
 
