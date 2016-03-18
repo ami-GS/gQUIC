@@ -30,6 +30,21 @@ func (self *Transport) Send(p Packet) (err error) {
 	return err
 }
 
-func (self *Transport) Recv() (err error) {
-	return nil
+func (self *Transport) Recv() (Packet, int, error) {
+	wire := make([]byte, MTU) // TODO: need to check
+	len, err := self.Conn.Read(wire)
+	if err != nil {
+		return nil, len, err
+	}
+	ph, len, err := ParsePacketHeader(wire, false) //
+	if err != nil {
+		return nil, len, err
+	}
+	f, ok := PacketParserMap[ph.Type]
+	if !ok {
+		return nil, len, QUIC_INVALID_PACKET_HEADER
+	}
+	p, nxt := f(ph, wire[len:])
+
+	return p, len + nxt, nil
 }
