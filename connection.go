@@ -11,7 +11,8 @@ type Conn struct {
 }
 
 func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
-	t, err := NewTransport(rAddr)
+	// TODO: apply apropriate path
+	t, err := NewTransport(rAddr, "path/to/cert", "path/to/key")
 	if err != nil {
 		return nil, err
 	}
