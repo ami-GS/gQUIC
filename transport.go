@@ -32,10 +32,6 @@ func NewTransport(rAddr *net.UDPAddr, certPath, keyPath string) (*Transport, err
 	return &Transport{conn, certPath, keyPath}, nil
 }
 
-func (self *Transport) Connect() (err error) {
-	return nil
-}
-
 func (self *Transport) Send(p Packet) (err error) {
 	wire, err := p.GetWire()
 	if err != nil {
