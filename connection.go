@@ -23,6 +23,12 @@ func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
 	}, nil
 }
 
+func (conn *Conn) handShake() error {
+	conn.NewStream(1)
+	// TODO: send message
+	return nil
+}
+
 func (conn *Conn) NewStream(streamID uint32) {
 	conn.Streams[streamID] = NewStream(streamID, conn)
 }
