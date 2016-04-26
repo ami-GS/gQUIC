@@ -104,7 +104,7 @@ const (
 )
 
 func (tag QuicTag) String() string {
-	m := map[QuicTag]string{
+	return map[QuicTag]string{
 		CHLO: "CHLO",
 		SHLO: "SHLO",
 		REJ:  "REJ",
@@ -138,8 +138,7 @@ func (tag QuicTag) String() string {
 		RNON: "RNON",
 		RSEQ: "RSEQ",
 		CADR: "CADR",
-	}
-	return m[tag]
+	}[tag]
 }
 
 type Message struct {
