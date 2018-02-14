@@ -56,7 +56,6 @@ func (conn *Conn) ReadPacket(p Packet) {
 				//conn.Streams[f.StreamID].ReadFrame(f)
 			}
 		}
-	case *FECPacket:
 	case *PublicResetPacket:
 		// Abrubt termination
 	}

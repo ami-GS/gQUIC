@@ -41,8 +41,6 @@ func (self *Client) FramePacket(frames []*Frame) error {
 
 func (self *Client) PublicResetPacket() {}
 
-func (self *Client) FECPacket() {}
-
 func (self *Client) newConnectionID() (uint64, error) {
 	ok := true
 	var id uint64
