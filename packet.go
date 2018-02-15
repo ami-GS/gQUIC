@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '2'<<8 | '5') // temporally
+const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '3'<<8 | '4') // temporally
 
 type Packet interface {
 	GetWire() ([]byte, error)
