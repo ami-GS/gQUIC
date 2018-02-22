@@ -296,6 +296,28 @@ func (frame *StreamFrame) String() (str string) {
 +----------+--------+---------------------+     +--------+------------------+
 */
 
+type AckTypeFlag byte
+
+const (
+	// "01nullmm"
+	// 'n'
+	HasAckBlockLengths AckTypeFlag = 0x20
+	// 'u'
+	Unused = 0x10
+	// 'll'
+	LargestAckedLenMask = 0x0c
+	LargestAckedLen1    = 0x00
+	LargestAckedLen2    = 0x04
+	LargestAckedLen4    = 0x08
+	LargestAckedLen6    = 0x0c
+	// 'mm'
+	AckBlockLengthLenMask = 0x03
+	AckBlockLengthLen1    = 0x00
+	AckBlockLengthLen2    = 0x01
+	AckBlockLengthLen4    = 0x02
+	AckBlockLengthLen6    = 0x03
+)
+
 type FirstTimestamp struct {
 	DeltaLargestAcked     byte
 	TimeSinceLargestAcked uint32
@@ -323,34 +345,33 @@ type AckFrame struct {
 }
 
 func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengthLen byte, blockLengths []uint64, firstTimestamp *FirstTimestamp, nextTimestamps []NextTimestamp) *AckFrame {
-	var settings byte
-	// 'n' bit
+	var settings AckTypeFlag
 	if len(blockLengths) > 0 {
-		settings |= 0x20
+		settings |= HasAckBlockLengths
 	}
 
 	// 'll' bits
 	switch {
 	case largestAcked <= 0xff:
-		settings |= 0x00
+		settings |= LargestAckedLen1
 	case largestAcked <= 0xffff:
-		settings |= 0x04
+		settings |= LargestAckedLen2
 	case largestAcked <= 0xffffff:
-		settings |= 0x08
+		settings |= LargestAckedLen4
 	case largestAcked <= 0xffffffff:
-		settings |= 0x0c
+		settings |= LargestAckedLen6
 	}
 
 	// 'mm' bits
 	switch blockLengthLen {
 	case 1:
-		settings |= 0x00
+		settings |= AckBlockLengthLen1
 	case 2:
-		settings |= 0x04
+		settings |= AckBlockLengthLen2
 	case 4:
-		settings |= 0x08
+		settings |= AckBlockLengthLen4
 	case 6:
-		settings |= 0x0c
+		settings |= AckBlockLengthLen6
 	}
 
 	numBlocks := 0
@@ -368,7 +389,7 @@ func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengthL
 
 	ackFrame := &AckFrame{
 		Type:                  AckFrameType,
-		Settings:              settings,
+		Settings:              byte(settings),
 		LargestAcked:          largestAcked,
 		LargestAckedDeltaTime: largestAckedDeltaTime,
 		NumberBlocks_1:        byte(numBlocks - 1),               // byte(-1) = 255 means no data
@@ -385,7 +406,7 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 	frame := &AckFrame{
 		FramePacket: fp,
 		Type:        AckFrameType,
-		Settings:    data[0] & 0x3f,
+		Settings:    data[0],
 	}
 
 	myUint64 := func(idx, frameLen int) (buff uint64) {
@@ -396,7 +417,7 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 	}
 
 	length := 1
-	ll := int((frame.Settings & 0x0c) >> 2)
+	ll := int((frame.Settings & LargestAckedLenMask) >> 2)
 	lOLen := 1
 	if ll != 0 {
 		lOLen = ll * 2
@@ -408,11 +429,11 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 	length += 2
 
 	// has ack blocks
-	if frame.Settings&0x20 == 0x20 {
+	if AckTypeFlag(frame.Settings)&HasAckBlockLengths == HasAckBlockLengths {
 		frame.NumberBlocks_1 = data[length]
 		length++
 
-		mm := int(frame.Settings & 0x03)
+		mm := int(frame.Settings & AckBlockLengthLenMask)
 		mmLen := 1
 		if mm != 0 {
 			mmLen = mm * 2
@@ -449,7 +470,7 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		return size
 	}
 
-	ll := int((frame.Settings & 0x0c) >> 2)
+	ll := int((frame.Settings & LargestAckedLenMask) >> 2)
 	lOLen := 1
 	if ll != 0 {
 		lOLen = ll * 2
@@ -460,8 +481,8 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 	putAckBlock := func(wire []byte) (idx int) {
 		return idx
 	}
-	if frame.Settings&0x20 == 0x20 {
-		mm := int(frame.Settings & 0x03)
+	if AckTypeFlag(frame.Settings)&HasAckBlockLengths == HasAckBlockLengths {
+		mm := int(frame.Settings & AckBlockLengthLenMask)
 		mmLen = 1
 		if mm != 0 {
 			mmLen = mm * 2
