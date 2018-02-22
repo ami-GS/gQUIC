@@ -322,7 +322,7 @@ type AckFrame struct {
 	Timestamps   []NextTimestamp
 }
 
-func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengthLen byte, blockLengths []uint64, firstTimestamp FirstTimestamp, nextTimestamps []NextTimestamp) *AckFrame {
+func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengthLen byte, blockLengths []uint64, firstTimestamp *FirstTimestamp, nextTimestamps []NextTimestamp) *AckFrame {
 	var settings byte
 	// 'n' bit
 	if len(blockLengths) > 0 {
@@ -358,16 +358,24 @@ func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengthL
 		numBlocks = len(blockLengths)
 	}
 
+	numTimestamps := 0
+	timestamp_1 := FirstTimestamp{}
+	if firstTimestamp != nil {
+		timestamp_1 = *firstTimestamp
+		numTimestamps++
+		numTimestamps += len(nextTimestamps)
+	}
+
 	ackFrame := &AckFrame{
 		Type:                  AckFrameType,
 		Settings:              settings,
 		LargestAcked:          largestAcked,
 		LargestAckedDeltaTime: largestAckedDeltaTime,
-		NumberBlocks_1:        byte(numBlocks - 1), // byte(-1) = 255 means no data
-		GapToNextBlock:        make([]byte, len(blockLengths)-1),
+		NumberBlocks_1:        byte(numBlocks - 1),               // byte(-1) = 255 means no data
+		GapToNextBlock:        make([]byte, len(blockLengths)-1), // TODO: ???
 		AckBlockLength:        blockLengths,
-		NumTimestamp:          byte(len(nextTimestamps) + 1),
-		Timestamp_1:           firstTimestamp,
+		NumTimestamp:          byte(numTimestamps),
+		Timestamp_1:           timestamp_1,
 		Timestamps:            nextTimestamps,
 	}
 	return ackFrame
