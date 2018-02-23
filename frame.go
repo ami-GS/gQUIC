@@ -3,6 +3,8 @@ package quic
 import (
 	"encoding/binary"
 	"fmt"
+
+	"github.com/ami-GS/gQUIC/utils"
 )
 
 type FrameType uint8
@@ -409,13 +411,6 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 		Settings:    data[0],
 	}
 
-	myUint64 := func(idx, frameLen int) (buff uint64) {
-		for i := 0; i < frameLen; i++ {
-			buff |= uint64(data[idx+i]) << byte(8*(frameLen-i-1))
-		}
-		return buff
-	}
-
 	length := 1
 	ll := int((frame.Settings & LargestAckedLenMask) >> 2)
 	lOLen := 1
@@ -423,7 +418,7 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 		lOLen = ll * 2
 	}
 
-	frame.LargestAcked = myUint64(length, lOLen)
+	frame.LargestAcked = utils.MyUint64(data[length:], lOLen)
 	length += lOLen
 	frame.LargestAckedDeltaTime = binary.BigEndian.Uint16(data[length:])
 	length += 2
@@ -439,11 +434,11 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 			mmLen = mm * 2
 		}
 
-		frame.FirstAckBlockLength = myUint64(length, mmLen)
+		frame.FirstAckBlockLength = utils.MyUint64(data[length:], mmLen)
 		length += mmLen
 		for i := 0; i < int(frame.NumberBlocks_1); i++ {
 			frame.GapToNextBlock[i] = data[length]
-			frame.AckBlockLength[i] = myUint64(length+1, mmLen)
+			frame.AckBlockLength[i] = utils.MyUint64(data[length+1:], mmLen)
 			length += mmLen + 1
 		}
 	}
@@ -463,13 +458,6 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 }
 
 func (frame *AckFrame) GetWire() (wire []byte, err error) {
-	myPutUint64 := func(wire []byte, dat uint64, size int) int {
-		for i := 0; i < size; i++ {
-			wire[i] = byte(dat >> byte(8*(size-i-1)))
-		}
-		return size
-	}
-
 	ll := int((frame.Settings & LargestAckedLenMask) >> 2)
 	lOLen := 1
 	if ll != 0 {
@@ -491,10 +479,10 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		//override
 		putAckBlock = func(wire []byte) (idx int) {
 			wire[idx] = frame.NumberBlocks_1
-			idx += 1 + myPutUint64(wire[idx+1:], frame.FirstAckBlockLength, mmLen)
+			idx += 1 + utils.MyPutUint64(wire[idx+1:], frame.FirstAckBlockLength, mmLen)
 			for i := 0; i < int(frame.NumberBlocks_1); i++ {
 				wire[idx] = frame.GapToNextBlock[i]
-				idx += 1 + myPutUint64(wire[idx+1:], frame.AckBlockLength[i], mmLen)
+				idx += 1 + utils.MyPutUint64(wire[idx+1:], frame.AckBlockLength[i], mmLen)
 			}
 			return idx
 		}
@@ -526,7 +514,7 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+lOLen+2+blockRangeLen+timestampLen)
 	wire[0] = byte(frame.Type) | frame.Settings
 	length := 1
-	length += myPutUint64(wire[length:], frame.LargestAcked, lOLen)
+	length += utils.MyPutUint64(wire[length:], frame.LargestAcked, lOLen)
 	binary.BigEndian.PutUint16(wire[length:], frame.LargestAckedDeltaTime)
 	length += 2
 	length += putAckBlock(wire[length:])
