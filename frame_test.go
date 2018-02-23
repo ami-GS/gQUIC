@@ -220,14 +220,14 @@ func TestBlockedFrame(t *testing.T) {
 func TestStopWaitingFrame(t *testing.T) {
 	data := [][]byte{
 		// Sent Entropy: 1, least unacked delta: 1
-		[]byte{0x06, 0x01, 0x01},
+		[]byte{0x06, 0x01},
 		// Sent Entropy: 0, least unacked delta: 257
-		[]byte{0x06, 0x00, 0x01, 0x01},
+		[]byte{0x06, 0x01, 0x01},
 	}
 	fp := NewFramePacket(0, 0)
 	actualFrames := []*StopWaitingFrame{
-		NewStopWaitingFrame(1, 1),
-		NewStopWaitingFrame(0, 257),
+		NewStopWaitingFrame(1),
+		NewStopWaitingFrame(257),
 	}
 
 	for i, d := range data {
@@ -244,7 +244,6 @@ func TestStopWaitingFrame(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(actualFrame, frame) {
-			t.Errorf(actualFrame.String())
 			t.Errorf("got %v\nwant %v", actualFrame, frame)
 		}
 

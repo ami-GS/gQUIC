@@ -528,24 +528,22 @@ func (frame *AckFrame) String() (str string) {
 }
 
 /*
-      0        1        2        3         4        5        6      7
- +--------+--------+--------+--------+--------+--------+-------+-------+
- |Type (8)|Sent    |   Least unacked delta (8, 16, 32, or 48 bits)     |
- |        |Entropy |                       (variable length)           |
- +--------+--------+--------+--------+--------+--------+-------+-------+
+        0        1        2        3         4       5       6
+   +--------+--------+--------+--------+--------+-------+-------+
+   |Type (8)|   Least unacked delta (8, 16, 32, or 48 bits)     |
+   |        |                       (variable length)           |
+   +--------+--------+--------+--------+--------+--------+------+
 */
 
 type StopWaitingFrame struct {
 	*FramePacket
 	Type              FrameType
-	SentEntropy       byte
 	LeastUnackedDelta uint64
 }
 
-func NewStopWaitingFrame(sentEntropy byte, leastUnackedDelta uint64) *StopWaitingFrame {
+func NewStopWaitingFrame(leastUnackedDelta uint64) *StopWaitingFrame {
 	stopWaitingFrame := &StopWaitingFrame{
 		Type:              StopWaitingFrameType,
-		SentEntropy:       sentEntropy,
 		LeastUnackedDelta: leastUnackedDelta,
 	}
 	return stopWaitingFrame
@@ -555,7 +553,6 @@ func ParseStopWaitingFrame(fp *FramePacket, data []byte) (Frame, int) {
 	frame := &StopWaitingFrame{
 		FramePacket: fp,
 		Type:        StopWaitingFrameType,
-		SentEntropy: data[1],
 	}
 
 	length := 0
@@ -571,11 +568,9 @@ func ParseStopWaitingFrame(fp *FramePacket, data []byte) (Frame, int) {
 		length = 1
 	}
 
-	for i := 0; i < length; i++ {
-		frame.LeastUnackedDelta |= uint64(data[2+i]) << byte(8*(length-i-1))
-	}
+	frame.LeastUnackedDelta = utils.MyUint64(data[1:], length)
 
-	return frame, length + 2
+	return frame, length + 1
 }
 
 func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
@@ -592,20 +587,16 @@ func (frame *StopWaitingFrame) GetWire() (wire []byte, err error) {
 		length = 1
 	}
 
-	wire = make([]byte, 2+length)
+	wire = make([]byte, 1+length)
 	wire[0] = byte(frame.Type)
-	wire[1] = frame.SentEntropy
 
-	for i := 0; i < length; i++ {
-		wire[2+i] = byte(frame.LeastUnackedDelta >> byte(8*(length-i-1)))
-	}
+	_ = utils.MyPutUint64(wire[1:], frame.LeastUnackedDelta, length)
 
 	return
 }
 
 func (frame *StopWaitingFrame) String() (str string) {
-	str = fmt.Sprintf("STOP WAITING\n\t\tSent Entropy : %d, Least unacked delta : %d",
-		frame.SentEntropy, frame.LeastUnackedDelta)
+	str = fmt.Sprintf("STOP WAITING\n\t\tLeast unacked delta : %d", frame.LeastUnackedDelta)
 	return str
 }
 
