@@ -6,9 +6,9 @@ import (
 )
 
 func TestPacketHeader(t *testing.T) {
-	// pubFlag:5 ConnID: 1, version: 1, pacNum:1, privateFlag:0, fec:1
+	// pubFlag:5 ConnID: 1, version: 1, pacNum:1
 	//data := []byte{0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01}
-	// pubFlag:5 ConnID: 1, version: 1, pacNum:1, privateFlag:0, fec:None
+	// pubFlag:5 ConnID: 1, version: 1, pacNum:1
 	data := []byte{0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01}
 	//
 	actualHeader := NewPacketHeader(VersionNegotiationPacketType, 1, []uint32{1}, 0, nil)
