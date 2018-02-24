@@ -100,7 +100,7 @@ type StreamFrame struct {
 }
 
 func NewStreamFrame(fin bool, streamID uint32, offset uint64, data []byte) *StreamFrame {
-	var settings byte = 0
+	var settings byte
 	if fin {
 		settings |= 0x40
 	}
@@ -164,54 +164,16 @@ func ParseStreamFrame(fp *FramePacket, data []byte) (Frame, int) {
 	}
 
 	length := 1
-	switch frame.Settings & 0x03 {
-	case 0x00:
-		frame.StreamID = uint32(data[1])
-		length += 1
-	case 0x01:
-		frame.StreamID = uint32(data[1])<<8 | uint32(data[2])
-		length += 2
-	case 0x02:
-		frame.StreamID = uint32(data[1])<<16 | uint32(data[2])<<8 | uint32(data[3])
-		length += 3
-	case 0x03:
-		frame.StreamID = binary.BigEndian.Uint32(data[1:5])
-		length += 4
-	}
+	streamIDLen := int(frame.Settings&0x03) + 1
+	frame.StreamID = utils.MyUint32(data[length:], streamIDLen)
+	length += streamIDLen
 
-	switch frame.Settings & 0x1c {
-	case 0x00:
-		frame.Offset = 0
-	case 0x04:
-		frame.Offset = uint64(data[length])<<8 | uint64(data[length+1])
-		length += 2
-	case 0x08:
-		frame.Offset = uint64(data[length])<<16 | uint64(data[length+1])<<8 | uint64(data[length+2])
-		length += 3
-	case 0x0c:
-		for i := 0; i < 4; i++ {
-			frame.Offset |= uint64(data[length+i]) << byte(8*(3-i))
-		}
-		length += 4
-	case 0x10:
-		for i := 0; i < 5; i++ {
-			frame.Offset |= uint64(data[length+i]) << byte(8*(4-i))
-		}
-		length += 5
-	case 0x14:
-		for i := 0; i < 6; i++ {
-			frame.Offset |= uint64(data[length+i]) << byte(8*(5-i))
-		}
-		length += 6
-	case 0x18:
-		for i := 0; i < 7; i++ {
-			frame.Offset |= uint64(data[length+i]) << byte(8*(6-i))
-		}
-		length += 7
-	case 0x1c:
-		frame.Offset |= binary.BigEndian.Uint64(data[length:])
-		length += 8
+	offsetLen := int((frame.Settings & 0x1c) >> 2)
+	if offsetLen != 0 {
+		offsetLen++
 	}
+	frame.Offset = utils.MyUint64(data[length:], offsetLen)
+	length += offsetLen
 
 	var dataLength uint16 // as is not contained. right?
 	if frame.Settings&0x20 == 0x20 {
@@ -234,7 +196,7 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	// offset length
 	OLEN := int((frame.Settings & 0x1c >> 2))
 	if OLEN > 0 {
-		OLEN += 1
+		OLEN++
 	}
 
 	dataLength := len(frame.Data)
@@ -242,16 +204,8 @@ func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	wire[0] = byte(frame.Type) + frame.Settings
 	index := 1
 
-	for i := 0; i < SLEN; i++ {
-		wire[index+i] = byte(frame.StreamID >> byte(8*(SLEN-i-1)))
-	}
-	index += SLEN
-
-	for i := 0; i < OLEN; i++ {
-		wire[index+i] = byte(frame.Offset >> byte(8*(OLEN-i-1)))
-	}
-	index += OLEN
-
+	index += utils.MyPutUint32(wire[index:], frame.StreamID, SLEN)
+	index += utils.MyPutUint64(wire[index:], frame.Offset, OLEN)
 	if DLEN > 0 {
 		binary.BigEndian.PutUint16(wire[index:], uint16(dataLength))
 		index += 2

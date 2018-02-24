@@ -3,6 +3,8 @@ package quic
 import (
 	"encoding/binary"
 	"fmt"
+
+	"github.com/ami-GS/gQUIC/utils"
 )
 
 const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '3'<<8 | '4') // temporally
@@ -292,10 +294,7 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+cIDLen+vLen+pNumLen+nonseLen)
 	wire[0] = byte(ph.PublicFlags)
 	index := 1
-	for i := 0; i < cIDLen; i++ {
-		wire[index+i] = byte(ph.ConnectionID >> byte(8*(cIDLen-i-1)))
-	}
-	index += cIDLen
+	index += utils.MyPutUint64(wire[index:], ph.ConnectionID, cIDLen)
 
 	if vLen > 0 {
 		for _, v := range ph.Versions {
@@ -309,10 +308,7 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 		index += nonseLen
 	}
 
-	for i := 0; i < pNumLen; i++ {
-		wire[index+i] = byte(ph.PacketNumber >> byte(8*(pNumLen-i-1)))
-	}
-	index += pNumLen
+	index += utils.MyPutUint64(wire[index:], ph.PacketNumber, pNumLen)
 
 	return
 }
