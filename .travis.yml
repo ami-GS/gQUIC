@@ -1,0 +1,12 @@
+sudo: false
+language: go
+go:
+- 1.7.x
+- 1.8.x
+- 1.9.x
+before_install:
+  go get -t ./...
+install:
+  - go test
+notifications:
+  email: false
