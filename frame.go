@@ -477,7 +477,26 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *AckFrame) String() (str string) {
-	str = fmt.Sprintf("ACK\n\t\t")
+	ackBlockStrs := ""
+	for i := 0; i < len(frame.GapToNextBlock); i++ {
+		ackBlockStrs += fmt.Sprintf("[%d] Gap to Next Block : %d\n\t\tAck Block Length %d\n\t", i, frame.GapToNextBlock[i], frame.AckBlockLength[i])
+	}
+	timeStamps := fmt.Sprintf("Delta Largest Acked : %d\n\tTime Sice Largest Acked : %d\n\t", frame.Timestamp_1.DeltaLargestAcked, frame.Timestamp_1.TimeSinceLargestAcked)
+	for i := 0; i < int(frame.NumTimestamp)-1; i++ {
+		timeStamps += fmt.Sprintf("Delta Largest Acked : %d\n\tTime Since Previous Timestamp : %d\n\t", frame.Timestamps[i].DeltaLargestAcked, frame.Timestamps[i].TimeSinceLargestAcked)
+	}
+
+	str = fmt.Sprintf(
+		`ACK
+	%b
+	Largest Acked : %d
+	Largest Acked Delta Time : %d
+	Number Block-1 : %d
+	First Ack Block Length %d
+	%s
+	Num Timestamps : %d
+	%s`, frame.Settings, frame.LargestAcked, frame.LargestAckedDeltaTime, frame.NumberBlocks_1,
+		frame.FirstAckBlockLength, ackBlockStrs, frame.NumTimestamp, timeStamps)
 	return str
 }
 
