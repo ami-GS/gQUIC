@@ -5,7 +5,46 @@ import (
 	"testing"
 )
 
-func TestStreamFrameFrame(t *testing.T) {
+func TestAckFrame(t *testing.T) {
+	data := [][]byte{
+		// 0b0100 0000, LAcked:0, LAckedDelta:0, NumTimeStamp:0,
+		[]byte{0x40, 0x00, 0x00, 0x00, 0x00},
+		// 0b0100 0000, LAcked:0, LAckedDelta:0, NumTimeStamp:1,
+		//[]byte{0x40, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00},
+	}
+	fp := NewFramePacket(0, 0)
+	actualFrames := []*AckFrame{
+		NewAckFrame(0, 0, 0, nil, nil, nil),
+		/*
+			NewAckFrame(0, 0, 0, nil, &FirstTimestamp{
+				DeltaLargestAcked:     0,
+				TimeSinceLargestAcked: 0,
+			}, nil),
+		*/
+	}
+
+	for i, d := range data {
+		frame, _ := FrameParserMap[FrameType(d[0]&AckFrameType)](fp, d)
+		actualFrame := actualFrames[i]
+		actualFrame.FramePacket = fp
+
+		wire, _ := actualFrame.GetWire()
+		if len(wire) != len(d) {
+			t.Errorf("got %v\nwant %v", len(wire), len(d))
+		}
+		/*
+			if !reflect.DeepEqual(actualFrame, frame) {
+				t.Errorf("got %v\nwant %v", actualFrame, frame)
+			}
+		*/
+		actualWire, _ := frame.GetWire()
+		if !reflect.DeepEqual(actualWire, d) {
+			t.Errorf("got %v\nwant %v", actualWire, d)
+		}
+	}
+}
+
+func TestStreamFrame(t *testing.T) {
 	// fin: true, streamID: 1, offset: 1, dataLength: 1
 	//data := []byte{0xe4, 0x01, 0x00, 0x01, 0x00, 0x05}
 	data := [][]byte{
