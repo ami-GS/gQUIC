@@ -188,7 +188,7 @@ func ParseStreamFrame(fp *FramePacket, data []byte) (Frame, int) {
 
 func (frame *StreamFrame) GetWire() (wire []byte, err error) {
 	// data length's length
-	DLEN := int((frame.Settings & 0x20 >> 5) * 2)
+	DLEN := int((frame.Settings & 0x20 >> 5) << 1)
 
 	// streamID length
 	SLEN := int((frame.Settings & 0x03) + 1)
@@ -377,7 +377,7 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 	ll := int((frame.Settings & LargestAckedLenMask) >> 2)
 	lOLen := 1
 	if ll != 0 {
-		lOLen = ll * 2
+		lOLen = ll << 1
 	}
 
 	frame.LargestAcked = utils.MyUint64(data[length:], lOLen)
@@ -389,11 +389,10 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 	if AckTypeFlag(frame.Settings)&HasAckBlockLengths == HasAckBlockLengths {
 		frame.NumberBlocks_1 = data[length]
 		length++
-
 		mm := int(frame.Settings & AckBlockLengthLenMask)
 		mmLen := 1
 		if mm != 0 {
-			mmLen = mm * 2
+			mmLen = mm << 1
 		}
 
 		frame.FirstAckBlockLength = utils.MyUint64(data[length:], mmLen)
@@ -425,7 +424,7 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 	ll := int((frame.Settings & LargestAckedLenMask) >> 2)
 	lOLen := 1
 	if ll != 0 {
-		lOLen = ll * 2
+		lOLen = ll << 1
 	}
 
 	blockRangeLen := 0
@@ -437,7 +436,7 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		mm := int(frame.Settings & AckBlockLengthLenMask)
 		mmLen = 1
 		if mm != 0 {
-			mmLen = mm * 2
+			mmLen = mm << 1
 		}
 		blockRangeLen = (mmLen + 1) * int(frame.NumberBlocks_1+1)
 		//override
