@@ -300,7 +300,7 @@ type AckFrame struct {
 	Timestamps   []NextTimestamp
 }
 
-func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengthLen byte, blockLengths []uint64, firstTimestamp *FirstTimestamp, nextTimestamps []NextTimestamp) *AckFrame {
+func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengths []uint64, firstTimestamp *FirstTimestamp, nextTimestamps []NextTimestamp) *AckFrame {
 	var settings AckTypeFlag = AckFrameType
 	if len(blockLengths) > 0 {
 		settings |= HasAckBlockLengths
