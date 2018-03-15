@@ -1,26 +1,43 @@
 package quic
 
 import (
+	"math"
 	"reflect"
 	"testing"
 )
 
 func TestAckFrame(t *testing.T) {
 	data := [][]byte{
-		// 0b0100 0000, LAcked:0, LAckedDelta:0, NumTimeStamp:0,
-		[]byte{0x40, 0x00, 0x00, 0x00, 0x00},
+		// 0b0100 0000, LAcked:1, LAckedDelta:0, NumTimeStamp:0,
+		[]byte{0x40, 0x01, 0x00, 0x00, 0x00},
+		[]byte{0x44, 0x01, 0x00, 0x00, 0x00, 0x00},
+		[]byte{0x48, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		[]byte{0x4c, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		// 0b0110 0000, LAcked:1, LAckedDelta:0, Numberblocks-1:0, AckBlockLen:1, NumTimeStamp:0,
+		[]byte{0x60, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00},
+		[]byte{0x61, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00},
+		[]byte{0x62, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00},
+		[]byte{0x63, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+
 		// 0b0100 0000, LAcked:0, LAckedDelta:0, NumTimeStamp:1,
 		//[]byte{0x40, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00},
+		// 0b0100 0000, LAcked:0, LAckedDelta:0, NumTimeStamp:1,
+		[]byte{0x40, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00},
 	}
 	fp := NewFramePacket(0, 0)
 	actualFrames := []*AckFrame{
-		NewAckFrame(0, 0, 0, nil, nil, nil),
-		/*
-			NewAckFrame(0, 0, 0, nil, &FirstTimestamp{
-				DeltaLargestAcked:     0,
-				TimeSinceLargestAcked: 0,
-			}, nil),
-		*/
+		NewAckFrame(1, 0, nil, nil, nil),
+		NewAckFrame(uint64(math.Pow(2, 8)), 0, nil, nil, nil),
+		NewAckFrame(uint64(math.Pow(2, 24)), 0, nil, nil, nil),
+		NewAckFrame(uint64(math.Pow(2, 40)), 0, nil, nil, nil),
+		NewAckFrame(1, 0, []uint64{1}, nil, nil),
+		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 8))}, nil, nil),
+		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 24))}, nil, nil),
+		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 32))}, nil, nil),
+		NewAckFrame(1, 0, nil, &FirstTimestamp{
+			DeltaLargestAcked:     0,
+			TimeSinceLargestAcked: 0,
+		}, nil),
 	}
 
 	for i, d := range data {
