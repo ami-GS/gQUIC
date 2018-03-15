@@ -312,34 +312,40 @@ func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengthL
 		settings |= LargestAckedLen1
 	case largestAcked <= 0xffff:
 		settings |= LargestAckedLen2
-	case largestAcked <= 0xffffff:
-		settings |= LargestAckedLen4
 	case largestAcked <= 0xffffffff:
+		settings |= LargestAckedLen4
+	case largestAcked <= 0xffffffffffff:
 		settings |= LargestAckedLen6
-	}
-
-	// 'mm' bits
-	switch blockLengthLen {
-	case 1:
-		settings |= AckBlockLengthLen1
-	case 2:
-		settings |= AckBlockLengthLen2
-	case 4:
-		settings |= AckBlockLengthLen4
-	case 6:
-		settings |= AckBlockLengthLen6
 	}
 
 	numBlocks := 0
 	gapToNextBlock := []byte{}
 	firstBlockLen := uint64(0)
 	afterBlockLen := []uint64{}
-	if blockLengths != nil && len(blockLengths) > 0 {
-		settings |= 0x30 // 'n'
-		firstBlockLen = blockLengths[0]
-		afterBlockLen = blockLengths[1:]
-		numBlocks = len(blockLengths) - 1
-		gapToNextBlock = make([]byte, numBlocks)
+	if blockLengths != nil {
+		if len(blockLengths) > 0 {
+			firstBlockLen = blockLengths[0]
+			afterBlockLen = blockLengths[1:]
+			numBlocks = len(blockLengths) - 1
+			gapToNextBlock = make([]byte, numBlocks)
+			// TODO length should be fit with largest
+			// 'mm' bits
+			switch {
+			case blockLengths[0] <= 0xff:
+				settings |= AckBlockLengthLen1
+			case blockLengths[0] <= 0xffff:
+				settings |= AckBlockLengthLen2
+			case blockLengths[0] <= 0xffffffff:
+				settings |= AckBlockLengthLen4
+			case blockLengths[0] <= 0xffffffffffff:
+				settings |= AckBlockLengthLen6
+			}
+
+		} else {
+			settings |= AckBlockLengthLen1
+		}
+		// 'n' bit
+		settings |= 0x20
 	}
 
 	numTimestamps := 0
@@ -455,7 +461,7 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 	putTimestamps := func(wire []byte) (idx int) {
 		return 1
 	}
-	if frame.NumTimestamp > 1 {
+	if frame.NumTimestamp > 0 {
 		timestampLen += 5
 		if frame.NumTimestamp > 1 {
 			timestampLen += 3 * int(frame.NumTimestamp-1)
