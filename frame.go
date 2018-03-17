@@ -345,7 +345,7 @@ func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengths
 			settings |= AckBlockLengthLen1
 		}
 		// 'n' bit
-		settings |= 0x20
+		settings |= HasAckBlockLengths
 	}
 
 	numTimestamps := 0
@@ -400,9 +400,10 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 		if mm != 0 {
 			mmLen = mm << 1
 		}
-
 		frame.FirstAckBlockLength = utils.MyUint64(data[length:], mmLen)
 		length += mmLen
+		frame.GapToNextBlock = make([]byte, frame.NumberBlocks_1)
+		frame.AckBlockLength = make([]uint64, frame.NumberBlocks_1)
 		for i := 0; i < int(frame.NumberBlocks_1); i++ {
 			frame.GapToNextBlock[i] = data[length]
 			frame.AckBlockLength[i] = utils.MyUint64(data[length+1:], mmLen)
