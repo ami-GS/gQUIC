@@ -489,9 +489,14 @@ func (frame *AckFrame) String() (str string) {
 	for i := 0; i < len(frame.GapToNextBlock); i++ {
 		ackBlockStrs += fmt.Sprintf("[%d] Gap to Next Block : %d\n\t\tAck Block Length %d\n\t", i, frame.GapToNextBlock[i], frame.AckBlockLength[i])
 	}
-	timeStamps := fmt.Sprintf("Delta Largest Acked : %d\n\tTime Sice Largest Acked : %d\n\t", frame.Timestamp_1.DeltaLargestAcked, frame.Timestamp_1.TimeSinceLargestAcked)
-	for i := 0; i < int(frame.NumTimestamp)-1; i++ {
-		timeStamps += fmt.Sprintf("Delta Largest Acked : %d\n\tTime Since Previous Timestamp : %d\n\t", frame.Timestamps[i].DeltaLargestAcked, frame.Timestamps[i].TimeSinceLargestAcked)
+	timeStamps := ""
+	if frame.NumTimestamp == 0 {
+		timeStamps = fmt.Sprintf("Delta Largest Acked : <nil>\n\tTime Sice Largest Acked : <nil>\n\t")
+	} else if frame.NumTimestamp > 0 {
+		timeStamps = fmt.Sprintf("[First] Delta Largest Acked : %d\n\tTime Sice Largest Acked : %d\n\t", frame.Timestamps[0].DeltaLargestAcked, frame.Timestamps[0].TimeSinceLargestAcked)
+		for i := 1; i < int(frame.NumTimestamp); i++ {
+			timeStamps += fmt.Sprintf("[%d] Delta Largest Acked : %d\n\tTime Since Previous Timestamp : %d\n\t", i, frame.Timestamps[i].DeltaLargestAcked, frame.Timestamps[i].TimeSinceLargestAcked)
+		}
 	}
 
 	str = fmt.Sprintf(
