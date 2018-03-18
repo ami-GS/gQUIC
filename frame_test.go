@@ -19,6 +19,9 @@ func TestAckFrame(t *testing.T) {
 		[]byte{0x62, 0x01, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00},
 		[]byte{0x63, 0x01, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 
+		// 0b0110 0000, LAcked:1, LAckedDelta:0, Numberblocks-1:0, AckBlockLen:1, NumTimeStamp:1,
+		[]byte{0x60, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01},
+		[]byte{0x60, 0x01, 0x00, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x02},
 		// 0b0100 0000, LAcked:0, LAckedDelta:0, NumTimeStamp:1,
 		//[]byte{0x40, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00},
 		// 0b0100 0000, LAcked:0, LAckedDelta:0, NumTimeStamp:1,
@@ -26,18 +29,37 @@ func TestAckFrame(t *testing.T) {
 	}
 	fp := NewFramePacket(0, 0)
 	actualFrames := []*AckFrame{
-		NewAckFrame(1, 0, nil, nil, nil),
-		NewAckFrame(uint64(math.Pow(2, 8)), 0, nil, nil, nil),
-		NewAckFrame(uint64(math.Pow(2, 24)), 0, nil, nil, nil),
-		NewAckFrame(uint64(math.Pow(2, 40)), 0, nil, nil, nil),
-		NewAckFrame(1, 0, []uint64{1, 2}, nil, nil),
-		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 8)), uint64(math.Pow(2, 8) + 1)}, nil, nil),
-		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 24)), uint64(math.Pow(2, 24)) + 1}, nil, nil),
-		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 40)), uint64(math.Pow(2, 40)) + 1}, nil, nil),
-		NewAckFrame(1, 0, nil, &FirstTimestamp{
-			DeltaLargestAcked:     0,
-			TimeSinceLargestAcked: 0,
-		}, nil),
+		NewAckFrame(1, 0, nil, nil),
+		NewAckFrame(uint64(math.Pow(2, 8)), 0, nil, nil),
+		NewAckFrame(uint64(math.Pow(2, 24)), 0, nil, nil),
+		NewAckFrame(uint64(math.Pow(2, 40)), 0, nil, nil),
+		NewAckFrame(1, 0, []uint64{1, 2}, nil),
+		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 8)), uint64(math.Pow(2, 8) * 2)}, nil),
+		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 24)), uint64(math.Pow(2, 24)) * 2}, nil),
+		NewAckFrame(1, 0, []uint64{uint64(math.Pow(2, 40)), uint64(math.Pow(2, 40)) * 2}, nil),
+
+		NewAckFrame(1, 0, []uint64{1}, []Timestamp{
+			Timestamp{
+				DeltaLargestAcked:     0,
+				TimeSinceLargestAcked: 1,
+			},
+		}),
+		NewAckFrame(1, 0, []uint64{1}, []Timestamp{
+			Timestamp{
+				DeltaLargestAcked:     0,
+				TimeSinceLargestAcked: 1,
+			},
+			Timestamp{
+				DeltaLargestAcked:     0,
+				TimeSinceLargestAcked: 2,
+			},
+		}),
+		NewAckFrame(1, 0, nil, []Timestamp{
+			Timestamp{
+				DeltaLargestAcked:     0,
+				TimeSinceLargestAcked: 0,
+			},
+		}),
 	}
 
 	for i, d := range data {
@@ -47,16 +69,16 @@ func TestAckFrame(t *testing.T) {
 
 		wire, _ := actualFrame.GetWire()
 		if len(wire) != len(d) {
-			t.Errorf("got %v\nwant %v", len(wire), len(d))
+			t.Errorf("\ngot  %v\nwant %v", len(wire), len(d))
 		}
 		/*
 			if !reflect.DeepEqual(actualFrame, frame) {
-				t.Errorf("got %v\nwant %v", actualFrame, frame)
+				t.Errorf("got  %v\nwant %v", actualFrame, frame)
 			}
 		*/
 		actualWire, _ := frame.GetWire()
 		if !reflect.DeepEqual(actualWire, d) {
-			t.Errorf("got %v\nwant %v", actualWire, d)
+			t.Errorf("\ngot  %v\nwant %v", actualWire, d)
 		}
 	}
 }
@@ -275,9 +297,9 @@ func TestBlockedFrame(t *testing.T) {
 
 func TestStopWaitingFrame(t *testing.T) {
 	data := [][]byte{
-		// Sent Entropy: 1, least unacked delta: 1
+		// least unacked delta: 1
 		[]byte{0x06, 0x01},
-		// Sent Entropy: 0, least unacked delta: 257
+		// least unacked delta: 257
 		[]byte{0x06, 0x01, 0x01},
 	}
 	fp := NewFramePacket(0, 0)

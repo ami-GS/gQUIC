@@ -274,15 +274,11 @@ const (
 	AckBlockLengthLen6    = 0x03
 )
 
-type FirstTimestamp struct {
+type Timestamp struct {
 	DeltaLargestAcked     byte
 	TimeSinceLargestAcked uint32
 }
 
-type NextTimestamp struct {
-	DeltaLargestAcked     byte
-	TimeSinceLargestAcked uint16
-}
 type AckFrame struct {
 	*FramePacket
 	Type                  FrameType
@@ -296,11 +292,10 @@ type AckFrame struct {
 	AckBlockLength []uint64 // repeats NumberBlocks_1 times ???
 
 	NumTimestamp byte
-	Timestamp_1  FirstTimestamp // Repeat Num Timestamps
-	Timestamps   []NextTimestamp
+	Timestamps   []Timestamp
 }
 
-func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengths []uint64, firstTimestamp *FirstTimestamp, nextTimestamps []NextTimestamp) *AckFrame {
+func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengths []uint64, timestamps []Timestamp) *AckFrame {
 	var settings AckTypeFlag = AckFrameType
 	if len(blockLengths) > 0 {
 		settings |= HasAckBlockLengths
@@ -349,11 +344,8 @@ func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengths
 	}
 
 	numTimestamps := 0
-	timestamp_1 := FirstTimestamp{}
-	if firstTimestamp != nil {
-		timestamp_1 = *firstTimestamp
-		numTimestamps++
-		numTimestamps += len(nextTimestamps)
+	if timestamps != nil {
+		numTimestamps += len(timestamps)
 	}
 
 	ackFrame := &AckFrame{
@@ -366,8 +358,7 @@ func NewAckFrame(largestAcked uint64, largestAckedDeltaTime uint16, blockLengths
 		GapToNextBlock:        gapToNextBlock, // TODO: ???
 		AckBlockLength:        afterBlockLen,
 		NumTimestamp:          byte(numTimestamps),
-		Timestamp_1:           timestamp_1,
-		Timestamps:            nextTimestamps,
+		Timestamps:            timestamps,
 	}
 	return ackFrame
 }
@@ -413,17 +404,18 @@ func ParseAckFrame(fp *FramePacket, data []byte) (Frame, int) {
 
 	frame.NumTimestamp = data[length]
 	length++
+	frame.Timestamps = nil
 	if frame.NumTimestamp > 0 {
-		frame.Timestamp_1.DeltaLargestAcked = data[length]
-		frame.Timestamp_1.TimeSinceLargestAcked = binary.BigEndian.Uint32(data[length+1:])
+		frame.Timestamps = make([]Timestamp, int(frame.NumTimestamp))
+		frame.Timestamps[0].DeltaLargestAcked = data[length]
+		frame.Timestamps[0].TimeSinceLargestAcked = binary.BigEndian.Uint32(data[length+1:])
 		length += 5
-		for i := 0; i < int(frame.NumTimestamp)-1; i++ {
+		for i := 1; i < int(frame.NumTimestamp); i++ {
 			frame.Timestamps[i].DeltaLargestAcked = data[length]
-			frame.Timestamps[i].TimeSinceLargestAcked = binary.BigEndian.Uint16(data[length+1:])
+			frame.Timestamps[i].TimeSinceLargestAcked = uint32(binary.BigEndian.Uint16(data[length+1:]))
 			length += 3
 		}
 	}
-
 	return frame, length
 }
 
@@ -469,12 +461,12 @@ func (frame *AckFrame) GetWire() (wire []byte, err error) {
 		}
 		putTimestamps = func(wire []byte) (idx int) {
 			wire[idx] = frame.NumTimestamp
-			wire[idx+1] = frame.Timestamp_1.DeltaLargestAcked
-			binary.BigEndian.PutUint32(wire[idx+2:], frame.Timestamp_1.TimeSinceLargestAcked)
+			wire[idx+1] = frame.Timestamps[0].DeltaLargestAcked
+			binary.BigEndian.PutUint32(wire[idx+2:], frame.Timestamps[0].TimeSinceLargestAcked)
 			idx += 6
-			for i := 0; i < int(frame.NumTimestamp)-1; i++ {
+			for i := 1; i < int(frame.NumTimestamp); i++ {
 				wire[idx] = frame.Timestamps[i].DeltaLargestAcked
-				binary.BigEndian.PutUint16(wire[idx+1:], frame.Timestamps[i].TimeSinceLargestAcked)
+				binary.BigEndian.PutUint16(wire[idx+1:], uint16(frame.Timestamps[i].TimeSinceLargestAcked))
 				idx += 3
 			}
 			return idx
