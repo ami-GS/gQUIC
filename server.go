@@ -11,8 +11,6 @@ func (self *Server) PublicResetPacket() {}
 
 func (self *Server) VersionNegotiationPacket() {}
 
-func (self *Server) FECPacket() {}
-
 func (self *Server) checkProposedVersion(prppVersion uint32) bool {
 	// compare the proposed version to lists
 	return true
