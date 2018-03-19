@@ -6,7 +6,7 @@ import (
 )
 
 func TestMessage(t *testing.T) {
-	version := "Q025"
+	version := "Q034"
 	serverName := "S_NAME"
 	data := []byte{'O', 'L', 'H', 'C', 0x00, 0x02, 0x00, 0x00,
 		0x00, 'R', 'E', 'V', 0x00, 0x00, 0x00, 0x04,

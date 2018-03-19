@@ -7,8 +7,6 @@ import (
 	"github.com/ami-GS/gQUIC/utils"
 )
 
-const QUIC_VERSION = uint32('Q'<<24 | '0'<<16 | '3'<<8 | '4') // temporally
-
 type Packet interface {
 	GetWire() ([]byte, error)
 	GetConnectionID() uint64
