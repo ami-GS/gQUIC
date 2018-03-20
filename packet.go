@@ -226,6 +226,19 @@ func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length i
 		length += 32
 	}
 
+	if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
+		ph.Versions = append(ph.Versions, binary.BigEndian.Uint32(data[length:]))
+		length += 4
+		if ph.Type == VersionNegotiationPacketType {
+			for length < len(data) {
+				ph.Versions = append(ph.Versions, binary.BigEndian.Uint32(data[length:]))
+				length += 4
+			}
+		}
+	}
+
+	// TODO : here Nonce
+
 	if ph.RegularPacket {
 		// TODO: parse sequence number
 		switch ph.PublicFlags & PACKET_NUMBER_LENGTH_MASK {
@@ -243,18 +256,6 @@ func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length i
 			length++
 		}
 	}
-
-	if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-		ph.Versions = append(ph.Versions, binary.BigEndian.Uint32(data[length:]))
-		length += 4
-		if ph.Type == VersionNegotiationPacketType {
-			for length < len(data) {
-				ph.Versions = append(ph.Versions, binary.BigEndian.Uint32(data[length:]))
-				length += 4
-			}
-		}
-	}
-
 	return ph, length, err
 }
 
@@ -300,7 +301,6 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 			index += vLen
 		}
 	}
-
 	if nonseLen > 0 {
 		copy(wire[index:], ph.Nonse)
 		index += nonseLen
