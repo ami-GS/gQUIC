@@ -312,7 +312,13 @@ func (ph *PacketHeader) GetWire() (wire []byte, err error) {
 }
 
 func (ph *PacketHeader) String() string {
-	return fmt.Sprintf("Packet Type=%s, PublicFlags={%s}, ConnectionID=%d, Version=%d, PacketNumber=%d\n", ph.Type.String(), ph.PublicFlags.String(), ph.ConnectionID, ph.Versions, ph.PacketNumber)
+	versions := []string{}
+	buff := make([]byte, 4)
+	for _, v := range ph.Versions {
+		binary.BigEndian.PutUint32(buff, v)
+		versions = append(versions, string(buff))
+	}
+	return fmt.Sprintf("Packet Type=%s, PublicFlags={%s}, ConnectionID=%d, Version=%v, PacketNumber=%d\n", ph.Type.String(), ph.PublicFlags.String(), ph.ConnectionID, versions, ph.PacketNumber)
 }
 
 /*
