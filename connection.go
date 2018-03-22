@@ -1,25 +1,37 @@
 package quic
 
 import (
+	"math/rand"
 	"net"
+	"strconv"
+	"strings"
 )
 
 type Conn struct {
 	*Transport
-	Window  *Window
-	Streams map[uint32]*Stream
+	Window       *Window
+	Streams      map[uint32]*Stream
+	ConnectionID uint64
+	RemoteAddr   *net.UDPAddr
 }
 
-func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
-	// TODO: apply apropriate path
-	t, err := NewTransport(rAddr, "path/to/cert", "path/to/key")
+func NewConnection(addPair string) (*Conn, error) {
+	out := strings.Split(addPair, ":")
+	p, err := strconv.Atoi(out[1])
 	if err != nil {
 		return nil, err
 	}
+	rAddr := &net.UDPAddr{
+		IP:   []byte(out[0]),
+		Port: p,
+	}
+
 	return &Conn{
-		Transport: t,
-		Window:    NewWindow(),
-		Streams:   make(map[uint32]*Stream),
+		Transport:    nil,
+		Window:       NewWindow(),
+		Streams:      make(map[uint32]*Stream),
+		ConnectionID: 0,
+		RemoteAddr:   rAddr,
 	}, nil
 }
 
@@ -59,4 +71,10 @@ func (conn *Conn) ReadPacket(p Packet) {
 	case *PublicResetPacket:
 		// Abrubt termination
 	}
+
+func (self *Conn) NewConnectionID() (uint64, error) {
+	// TODO: here should be uint64 random
+	// TODO: check if ID is already used or not
+	id := uint64(rand.Int63())
+	return id, nil
 }
