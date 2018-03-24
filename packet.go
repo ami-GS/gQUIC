@@ -10,6 +10,7 @@ import (
 type Packet interface {
 	GetWire() ([]byte, error)
 	GetConnectionID() uint64
+	GetHeader() *PacketHeader
 	String() string
 }
 
@@ -364,6 +365,10 @@ func (packet *VersionNegotiationPacket) GetConnectionID() uint64 {
 	return packet.ConnectionID
 }
 
+func (packet *VersionNegotiationPacket) GetHeader() *PacketHeader {
+	return packet.PacketHeader
+}
+
 func (packet *VersionNegotiationPacket) String() string {
 	return packet.PacketHeader.String() // TODO
 }
@@ -433,6 +438,10 @@ func (packet *FramePacket) GetConnectionID() uint64 {
 	return packet.ConnectionID
 }
 
+func (packet *FramePacket) GetHeader() *PacketHeader {
+	return packet.PacketHeader
+}
+
 func (packet *FramePacket) PushBack(frame Frame) bool {
 	wire, _ := frame.GetWire()
 	dataSize := uint16(len(wire))
@@ -500,6 +509,10 @@ func (packet *PublicResetPacket) GetWire() ([]byte, error) {
 
 func (packet *PublicResetPacket) GetConnectionID() uint64 {
 	return packet.ConnectionID
+}
+
+func (packet *PublicResetPacket) GetHeader() *PacketHeader {
+	return packet.PacketHeader
 }
 
 func (packet *PublicResetPacket) String() string {
