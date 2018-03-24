@@ -15,17 +15,7 @@ type Conn struct {
 	RemoteAddr   *net.UDPAddr
 }
 
-func NewConnection(addPair string) (*Conn, error) {
-	out := strings.Split(addPair, ":")
-	p, err := strconv.Atoi(out[1])
-	if err != nil {
-		return nil, err
-	}
-	rAddr := &net.UDPAddr{
-		IP:   []byte(out[0]),
-		Port: p,
-	}
-
+func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
 	return &Conn{
 		Transport:    nil,
 		Window:       NewWindow(),
@@ -33,6 +23,21 @@ func NewConnection(addPair string) (*Conn, error) {
 		ConnectionID: 0,
 		RemoteAddr:   rAddr,
 	}, nil
+}
+
+func (conn *Conn) Dial() error {
+	// TODO: apply apropriate path
+	t, err := NewTransport("path/to/cert", "path/to/key")
+	if err != nil {
+		return err
+	}
+	err = t.Dial(conn.RemoteAddr)
+	if err != nil {
+		return err
+	}
+	conn.ConnectionID, _ = conn.NewConnectionID()
+	conn.Transport = t
+	return nil
 }
 
 func (conn *Conn) handShake() error {

@@ -24,12 +24,23 @@ func NewTransport(rAddr *net.UDPAddr, certPath, keyPath string) (*Transport, err
 		config = &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		}
-	}
-	conn, err := tls.Dial("udp4", string(rAddr.IP)+":"+strconv.Itoa(rAddr.Port), config)
+
+func (self *Transport) Listen(rAddr *net.UDPAddr) error {
+	conn, err := net.ListenUDP("udp", rAddr)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &Transport{conn, certPath, keyPath}, nil
+	self.UDPConn = conn
+	return nil
+}
+
+func (self *Transport) Dial(rAddr *net.UDPAddr) error {
+	conn, err := net.DialUDP("udp", nil, rAddr)
+	if err != nil {
+		return err
+	}
+	self.UDPConn = conn
+	return nil
 }
 
 func (self *Transport) Send(p Packet) (err error) {
