@@ -1,29 +1,43 @@
 package quic
 
 import (
-	"crypto/tls"
 	"net"
-	"strconv"
 )
 
 // TODO: should be encrypt at proper timing
 type Transport struct {
-	Conn     *tls.Conn
-	CertPath string
-	KeyPath  string
+	//Conn     *tls.Conn
+	UDPConn    *net.UDPConn
+	RemoteAddr *net.UDPAddr
+	CertPath   string
+	KeyPath    string
 }
 
-func NewTransport(rAddr *net.UDPAddr, certPath, keyPath string) (*Transport, error) {
-	var config *tls.Config = nil
-	if certPath != "" && keyPath != "" {
-		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+func NewTransport(certPath, keyPath string) (*Transport, error) {
+	/*
+		var config *tls.Config = nil
+		if certPath != "" && keyPath != "" {
+			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+			if err != nil {
+				return nil, err
+			}
+			// TODO: others?
+			config = &tls.Config{
+				Certificates: []tls.Certificate{cert},
+			}
+		}
+		conn, err := tls.Dial("udp4", string(rAddr.IP)+":"+strconv.Itoa(rAddr.Port), config)
 		if err != nil {
 			return nil, err
 		}
-		// TODO: others?
-		config = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		}
+		return &Transport{conn, certPath, keyPath}, nil
+	*/
+	//conn, err := net.ListenUDP("udp", rAddr)
+	return &Transport{
+		CertPath: certPath,
+		KeyPath:  keyPath,
+	}, nil
+}
 
 func (self *Transport) Listen(rAddr *net.UDPAddr) error {
 	conn, err := net.ListenUDP("udp", rAddr)
@@ -48,7 +62,7 @@ func (self *Transport) Send(p Packet) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = self.Conn.Write(wire)
+	_, err = self.UDPConn.Write(wire)
 	return err
 }
 
