@@ -57,6 +57,10 @@ func (self *Transport) Dial(rAddr *net.UDPAddr) error {
 	return nil
 }
 
+func (self *Transport) Close() error {
+	return self.UDPConn.Close()
+}
+
 func (self *Transport) Send(p Packet) (err error) {
 	wire, err := p.GetWire()
 	if err != nil {
@@ -66,21 +70,21 @@ func (self *Transport) Send(p Packet) (err error) {
 	return err
 }
 
-func (self *Transport) Recv() (Packet, int, error) {
+func (self *Transport) Recv() (Packet, int, *net.UDPAddr, error) {
 	wire := make([]byte, MTU) // TODO: need to check
-	len, err := self.Conn.Read(wire)
+	len, sourceAddr, err := self.UDPConn.ReadFromUDP(wire)
 	if err != nil {
-		return nil, len, err
+		return nil, len, nil, err
 	}
 	ph, len, err := ParsePacketHeader(wire, false) //
 	if err != nil {
-		return nil, len, err
+		return nil, len, nil, err
 	}
 	f, ok := PacketParserMap[ph.Type]
 	if !ok {
-		return nil, len, QUIC_INVALID_PACKET_HEADER
+		return nil, len, nil, QUIC_INVALID_PACKET_HEADER
 	}
 	p, nxt := f(ph, wire[len:])
 
-	return p, len + nxt, nil
+	return p, len + nxt, sourceAddr, nil
 }
