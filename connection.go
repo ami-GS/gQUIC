@@ -3,8 +3,6 @@ package quic
 import (
 	"math/rand"
 	"net"
-	"strconv"
-	"strings"
 )
 
 type Conn struct {
@@ -13,6 +11,8 @@ type Conn struct {
 	Streams      map[uint32]*Stream
 	ConnectionID uint64
 	RemoteAddr   *net.UDPAddr
+	SentGoAway   bool
+	RecvGoAway   bool
 }
 
 func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
@@ -22,6 +22,8 @@ func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
 		Streams:      make(map[uint32]*Stream),
 		ConnectionID: 0,
 		RemoteAddr:   rAddr,
+		SentGoAway:   false,
+		RecvGoAway:   false,
 	}, nil
 }
 
@@ -40,46 +42,60 @@ func (conn *Conn) Dial() error {
 	return nil
 }
 
+func (conn *Conn) Close() error {
+	return conn.Transport.Close()
+}
+
 func (conn *Conn) handShake() error {
-	conn.NewStream(1)
+	conn.GenStream(1)
 	// TODO: send message
 	return nil
 }
 
-func (conn *Conn) NewStream(streamID uint32) {
-	conn.Streams[streamID] = NewStream(streamID, conn)
+func (conn *Conn) ReadConnectionLevelFrame(f Frame) error {
+	switch frame := f.(type) {
+	case *AckFrame:
+	case *StopWaitingFrame:
+		//case *CongestionFeedBackFrame:
+	case *PingFrame:
+		// Ack the packet containing this frame
+	case *ConnectionCloseFrame:
+		// close connection -> close streams -> send GoAwayFrame
+	case *GoAwayFrame:
+		conn.ApplyGoAwayFrame(frame)
+		// will not accept any frame on this connection
+	}
+
+	return nil
+}
+
+func (conn *Conn) GenStream(streamID uint32) *Stream {
+	stream := NewStream(streamID, conn)
+	conn.Streams[streamID] = stream
+	return stream
 }
 
 func (conn *Conn) WritePacket(p Packet) error {
-	return conn.Send(p)
-}
-
-func (conn *Conn) ReadPacket(p Packet) {
 	switch packet := p.(type) {
-	case *VersionNegotiationPacket:
 	case *FramePacket:
 		for _, f := range packet.Frames {
 			switch (*f).(type) {
-			case *AckFrame:
-			case *StopWaitingFrame:
-			//case *CongestionFeedBackFrame:
-			case *PingFrame:
-				// Ack the packet containing this frame
-			case *ConnectionCloseFrame:
-				// close connection -> close streams -> send GoAwayFrame
 			case *GoAwayFrame:
-				// will not accept any frame on this connection
-			case *StreamFrame, *WindowUpdateFrame, *BlockedFrame, *RstStreamFrame:
-				//conn.Streams[f.StreamID].ReadFrame(f)
+				conn.SentGoAway = true
 			}
 		}
-	case *PublicResetPacket:
-		// Abrubt termination
 	}
+
+	return conn.Send(p)
+}
 
 func (self *Conn) NewConnectionID() (uint64, error) {
 	// TODO: here should be uint64 random
 	// TODO: check if ID is already used or not
 	id := uint64(rand.Int63())
 	return id, nil
+}
+
+func (conn *Conn) ApplyGoAwayFrame(f *GoAwayFrame) {
+	conn.RecvGoAway = true
 }
