@@ -47,11 +47,13 @@ func (frameType FrameType) String() string {
 }
 
 type Frame interface {
+	GetType() FrameType
 	GetWire() ([]byte, error)
 	String() string
 }
 
 type StreamLevelFrame interface {
+	GetType() FrameType
 	GetWire() ([]byte, error)
 	String() string
 	GetStreamID() uint32
@@ -226,6 +228,10 @@ func (frame *StreamFrame) String() (str string) {
 	str = fmt.Sprintf("STREAM\n\t\tStreamID : %d, Offset : %d, DataLength : %d, Data: %v",
 		frame.StreamID, frame.Offset, len(frame.Data), frame.Data)
 	return str
+}
+
+func (frame *StreamFrame) GetType() FrameType {
+	return frame.Type
 }
 
 func (frame *StreamFrame) GetStreamID() uint32 {
@@ -523,6 +529,10 @@ func (frame *AckFrame) String() (str string) {
 	return str
 }
 
+func (frame *AckFrame) GetType() FrameType {
+	return frame.Type
+}
+
 /*
         0        1        2        3         4       5       6
    +--------+--------+--------+--------+--------+-------+-------+
@@ -596,6 +606,10 @@ func (frame *StopWaitingFrame) String() (str string) {
 	return str
 }
 
+func (frame *StopWaitingFrame) GetType() FrameType {
+	return frame.Type
+}
+
 /*
      0         1                 4        5                 12
  +--------+--------+-- ... --+-------+--------+-- ... --+-------+
@@ -644,6 +658,10 @@ func (frame *WindowUpdateFrame) String() (str string) {
 	return str
 }
 
+func (frame *WindowUpdateFrame) GetType() FrameType {
+	return frame.Type
+}
+
 func (frame *WindowUpdateFrame) GetStreamID() uint32 {
 	return frame.StreamID
 }
@@ -690,6 +708,10 @@ func (frame *BlockedFrame) String() (str string) {
 	return str
 }
 
+func (frame *BlockedFrame) GetType() FrameType {
+	return frame.Type
+}
+
 func (frame *BlockedFrame) GetStreamID() uint32 {
 	return frame.StreamID
 }
@@ -727,6 +749,10 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 func (frame *PaddingFrame) String() (str string) {
 	str = "PADDING\n\t\t"
 	return str
+}
+
+func (frame *PaddingFrame) GetType() FrameType {
+	return frame.Type
 }
 
 /*
@@ -780,6 +806,10 @@ func (frame *RstStreamFrame) String() (str string) {
 	return str
 }
 
+func (frame *RstStreamFrame) GetType() FrameType {
+	return frame.Type
+}
+
 func (frame *RstStreamFrame) GetStreamID() uint32 {
 	return frame.StreamID
 }
@@ -812,6 +842,10 @@ func (frame *PingFrame) GetWire() (wire []byte, err error) {
 func (frame *PingFrame) String() (str string) {
 	str = fmt.Sprintf("PING\n\t\t")
 	return str
+}
+
+func (frame *PingFrame) GetType() FrameType {
+	return frame.Type
 }
 
 /*
@@ -865,6 +899,10 @@ func (frame *ConnectionCloseFrame) String() (str string) {
 	str = fmt.Sprintf("CONNECTION CLOSE\n\t\tError code : %d, Reason length : %d\nReason : %s",
 		frame.ErrorCode, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
+}
+
+func (frame *ConnectionCloseFrame) GetType() FrameType {
+	return frame.Type
 }
 
 /*
@@ -925,4 +963,8 @@ func (frame *GoAwayFrame) String() (str string) {
 	str = fmt.Sprintf("GOAWAY\n\t\tError code : %d, LastGoodStreamID : %d, Reason length : %d\nReason : %s",
 		frame.ErrorCode, frame.LastGoodStreamID, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
+}
+
+func (frame *GoAwayFrame) GetType() FrameType {
+	return frame.Type
 }
