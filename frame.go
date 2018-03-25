@@ -51,6 +51,12 @@ type Frame interface {
 	String() string
 }
 
+type StreamLevelFrame interface {
+	GetWire() ([]byte, error)
+	String() string
+	GetStreamID() uint32
+}
+
 type FrameParser func(fp *FramePacket, data []byte) (Frame, int)
 
 var FrameParserMap = map[FrameType]FrameParser{
@@ -220,6 +226,10 @@ func (frame *StreamFrame) String() (str string) {
 	str = fmt.Sprintf("STREAM\n\t\tStreamID : %d, Offset : %d, DataLength : %d, Data: %v",
 		frame.StreamID, frame.Offset, len(frame.Data), frame.Data)
 	return str
+}
+
+func (frame *StreamFrame) GetStreamID() uint32 {
+	return frame.StreamID
 }
 
 /*
@@ -634,6 +644,10 @@ func (frame *WindowUpdateFrame) String() (str string) {
 	return str
 }
 
+func (frame *WindowUpdateFrame) GetStreamID() uint32 {
+	return frame.StreamID
+}
+
 /*
       0        1        2        3         4
  +--------+--------+--------+--------+--------+
@@ -674,6 +688,10 @@ func (frame *BlockedFrame) GetWire() (wire []byte, err error) {
 func (frame *BlockedFrame) String() (str string) {
 	str = fmt.Sprintf("BLOCKED\n\t\tStreamID %d", frame.StreamID)
 	return str
+}
+
+func (frame *BlockedFrame) GetStreamID() uint32 {
+	return frame.StreamID
 }
 
 // CongestionFeedback
@@ -760,6 +778,10 @@ func (frame *RstStreamFrame) String() (str string) {
 	str = fmt.Sprintf("RST STREAM\n\t\tStreamID : %d, Offset : %d, Error code : %d",
 		frame.StreamID, frame.Offset, frame.ErrorCode) // TODO: Error Code should be string
 	return str
+}
+
+func (frame *RstStreamFrame) GetStreamID() uint32 {
+	return frame.StreamID
 }
 
 type PingFrame struct {
