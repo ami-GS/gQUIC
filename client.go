@@ -27,6 +27,30 @@ func (self *Client) Connect() error {
 	return nil
 }
 
+// Func name should be same as that of http
+func (self *Client) Connect(addPair string) error {
+	// if connection is stil alive, then skip
+	rAddr, err := utils.ParseAddressPair(addPair)
+	if err != nil {
+		return err
+	}
+	conn, err := NewConnection(rAddr)
+	if err != nil {
+		return err
+	}
+	self.Conn = conn
+	err = self.Conn.Dial()
+	if err != nil {
+		return err
+	}
+	p := NewFramePacket(self.Conn.ConnectionID, 1)
+	p.PacketHeader.PublicFlags |= CONTAIN_QUIC_VERSION
+	p.PacketHeader.Versions = QUIC_VERSION_LIST
+	if err != nil {
+		return err
+	}
+	return self.Send(p)
+}
 func (self *Client) FramePacket(frames []*Frame) error {
 	// TODO: When is new connectionID created?
 	//       and how is packet number decided?
