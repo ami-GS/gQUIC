@@ -1,6 +1,10 @@
 package quic
 
-import "github.com/ami-GS/gQUIC/utils"
+import (
+	"time"
+
+	"github.com/ami-GS/gQUIC/utils"
+)
 
 type Client struct {
 	Conn                   *Conn
@@ -17,9 +21,20 @@ func NewClient(isServerObj bool) (*Client, error) {
 		LastSentVersion:    0,
 		DecidedVersion:     0,
 		RecvChan:           make(chan Packet),
-		IsServerObj:        false,
+		IsServerObj:        isServerObj,
 		CurrentMaxStreamID: 0,
 	}, nil
+}
+
+func (self *Client) Loop() {
+	go self.ReadLoop()
+	for {
+		p, _, _, err := self.Conn.Recv()
+		if err != nil {
+			panic(err)
+		}
+		self.RecvChan <- p
+	}
 }
 
 func (self *Client) ReadLoop() {
@@ -28,10 +43,39 @@ func (self *Client) ReadLoop() {
 		select {
 		case p := <-self.RecvChan:
 			// This could be implemented by interface?
+			// TODO : ack should use buffer to maximize efficiency
+			// Currently just send ack for each packet
 			if self.IsServerObj {
 				err = self.ReadPacketFromClient(p)
+				packetNow := time.Now()
+				num := p.GetHeader().PacketNumber
+				pkt := NewFramePacket(self.Conn.ConnectionID, 1)
+				pkt.Frames = []Frame{
+					NewAckFrame(num, uint16(time.Now().Sub(packetNow)/time.Millisecond), []uint64{num}, []Timestamp{
+						Timestamp{
+							DeltaLargestAcked:     byte(num - num), // packet number = largest acked - DeltaLargestAcked
+							TimeSinceLargestAcked: uint32(time.Now().Sub(self.Conn.TimeSpawn)),
+						},
+					},
+					)}
+				err = self.Conn.SendTo(pkt, self.Conn.RemoteAddr)
+
 			} else {
 				err = self.ReadPacketFromServer(p)
+
+				packetNow := time.Now()
+				num := p.GetHeader().PacketNumber
+				pkt := NewFramePacket(self.Conn.ConnectionID, 1)
+				pkt.Frames = []Frame{
+					NewAckFrame(num, uint16(time.Now().Sub(packetNow)/time.Millisecond), []uint64{num}, []Timestamp{
+						Timestamp{
+							DeltaLargestAcked:     byte(num - num), // packet number = largest acked - DeltaLargestAcked
+							TimeSinceLargestAcked: uint32(time.Now().Sub(self.Conn.TimeSpawn)),
+						},
+					},
+					)}
+				err = self.Conn.Send(pkt)
+
 			}
 			if err != nil {
 				panic(err)
@@ -140,6 +184,7 @@ func (self *Client) Connect(addPair string) error {
 		return err
 	}
 	self.Conn = conn
+	self.Conn.RemoteAddr = rAddr
 	err = self.Conn.Dial()
 	if err != nil {
 		return err
@@ -150,6 +195,7 @@ func (self *Client) Connect(addPair string) error {
 	if err != nil {
 		return err
 	}
+	go self.Loop()
 	return self.Send(p)
 }
 

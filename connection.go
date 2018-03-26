@@ -3,6 +3,7 @@ package quic
 import (
 	"math/rand"
 	"net"
+	"time"
 )
 
 type Conn struct {
@@ -13,6 +14,7 @@ type Conn struct {
 	RemoteAddr   *net.UDPAddr
 	SentGoAway   bool
 	RecvGoAway   bool
+	TimeSpawn    time.Time
 }
 
 func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
@@ -24,6 +26,7 @@ func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
 		RemoteAddr:   rAddr,
 		SentGoAway:   false,
 		RecvGoAway:   false,
+		TimeSpawn:    time.Now(),
 	}, nil
 }
 
