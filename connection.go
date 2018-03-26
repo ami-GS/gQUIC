@@ -79,13 +79,12 @@ func (conn *Conn) WritePacket(p Packet) error {
 	switch packet := p.(type) {
 	case *FramePacket:
 		for _, f := range packet.Frames {
-			switch (*f).(type) {
+			switch f.(type) {
 			case *GoAwayFrame:
 				conn.SentGoAway = true
 			}
 		}
 	}
-
 	return conn.Send(p)
 }
 

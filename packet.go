@@ -380,7 +380,7 @@ func (packet *VersionNegotiationPacket) String() string {
 */
 type FramePacket struct {
 	*PacketHeader
-	Frames   []*Frame
+	Frames   []Frame
 	Wire     []byte
 	DataSize uint16
 	RestSize uint16
@@ -390,7 +390,7 @@ func NewFramePacket(connectionID, packetNumber uint64) *FramePacket {
 	ph := NewPacketHeader(FramePacketType, connectionID, nil, packetNumber, nil)
 	packet := &FramePacket{
 		PacketHeader: ph,
-		Frames:       []*Frame{},
+		Frames:       []Frame{},
 		RestSize:     MTU,
 	}
 	return packet
@@ -417,7 +417,7 @@ func ParseFramePacket(ph *PacketHeader, data []byte) (Packet, int) {
 			}
 		}
 		frame, nxt := f(packet, data[idx:])
-		packet.Frames = append(packet.Frames, &frame)
+		packet.Frames = append(packet.Frames, frame)
 		idx += nxt
 	}
 	return packet, idx
@@ -427,7 +427,7 @@ func (packet *FramePacket) GetWire() ([]byte, error) {
 	hWire, err := packet.PacketHeader.GetWire()
 	if len(packet.Wire) == 0 {
 		for _, f := range packet.Frames {
-			wire, _ := (*f).GetWire()
+			wire, _ := f.GetWire()
 			packet.Wire = append(packet.Wire, wire...)
 		}
 	}
@@ -447,7 +447,7 @@ func (packet *FramePacket) PushBack(frame Frame) bool {
 	dataSize := uint16(len(wire))
 
 	if packet.DataSize+dataSize <= MTU {
-		packet.Frames = append(packet.Frames, &frame)
+		packet.Frames = append(packet.Frames, frame)
 		packet.Wire = append(packet.Wire, wire...)
 		packet.DataSize += dataSize
 		packet.RestSize -= dataSize
@@ -460,7 +460,7 @@ func (packet *FramePacket) PushBack(frame Frame) bool {
 func (packet *FramePacket) String() (str string) {
 	str = packet.PacketHeader.String()
 	for _, frame := range packet.Frames {
-		str += "\t" + (*frame).String() + "\n"
+		str += "\t" + frame.String() + "\n"
 	}
 	return
 }

@@ -61,13 +61,13 @@ func (self *Client) ReadPacketFromServer(p Packet) error {
 		}
 	case *FramePacket:
 		for _, f := range packet.Frames {
-			frameType := (*f).GetType()
+			frameType := f.GetType()
 			switch frameType {
 			case AckFrameType, StopWaitingFrameType, //CongestionFeedBackFrameType,
 				PingFrameType, ConnectionCloseFrameType, GoAwayFrameType:
-				return self.Conn.ReadConnectionLevelFrame((*f))
+				return self.Conn.ReadConnectionLevelFrame(f)
 			case StreamFrameType, WindowUpdateFrameType, BlockedFrameType, RstStreamFrameType:
-				sFrame := (*f).(StreamLevelFrame)
+				sFrame := f.(StreamLevelFrame)
 				return ReadStreamLevelFrame(self.Conn, sFrame)
 			}
 		}
@@ -110,14 +110,15 @@ func (self *Client) ReadPacketFromClient(p Packet) error {
 		// client should not send version negotiatino packet
 	case *FramePacket:
 		for _, f := range packet.Frames {
-			frameType := (*f).GetType()
+			frameType := f.GetType()
 			switch frameType {
 			case AckFrameType, StopWaitingFrameType, //CongestionFeedBackFrameType,
 				PingFrameType, ConnectionCloseFrameType, GoAwayFrameType:
-				return self.Conn.ReadConnectionLevelFrame((*f))
+				return self.Conn.ReadConnectionLevelFrame(f)
 			case StreamFrameType, WindowUpdateFrameType, BlockedFrameType, RstStreamFrameType:
-				sFrame := (*f).(StreamLevelFrame)
+				sFrame := f.(StreamLevelFrame)
 				return ReadStreamLevelFrame(self.Conn, sFrame)
+			case PaddingFrameType:
 			}
 		}
 	case *PublicResetPacket:
@@ -159,20 +160,18 @@ func (self *Client) Request() error {
 	return nil
 }
 
+func (self *Client) SendFramePacket(frames []Frame) error {
+	p := NewFramePacket(self.Conn.ConnectionID, 1)
+	p.Frames = frames
+	return self.Send(p)
+}
+
 func (self *Client) Send(p Packet) error {
 	// TODO : this would also be implemented by interface
 	if self.IsServerObj && self.DecidedVersion == 0 {
 		self.BufUntilVersionDecided = append(self.BufUntilVersionDecided, p)
 	}
 
-	return self.Conn.WritePacket(p)
-}
-
-func (self *Client) FramePacket(frames []*Frame) error {
-	// TODO: When is new connectionID created?
-	//       and how is packet number decided?
-	p := NewFramePacket(0, 0)
-	p.Frames = frames
 	return self.Conn.WritePacket(p)
 }
 
