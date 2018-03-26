@@ -7,10 +7,9 @@ import (
 // TODO: should be encrypt at proper timing
 type Transport struct {
 	//Conn     *tls.Conn
-	UDPConn    *net.UDPConn
-	RemoteAddr *net.UDPAddr
-	CertPath   string
-	KeyPath    string
+	UDPConn  *net.UDPConn
+	CertPath string
+	KeyPath  string
 }
 
 func NewTransport(certPath, keyPath string) (*Transport, error) {
@@ -39,8 +38,8 @@ func NewTransport(certPath, keyPath string) (*Transport, error) {
 	}, nil
 }
 
-func (self *Transport) Listen(rAddr *net.UDPAddr) error {
-	conn, err := net.ListenUDP("udp", rAddr)
+func (self *Transport) Listen(lAddr *net.UDPAddr) error {
+	conn, err := net.ListenUDP("udp", lAddr)
 	if err != nil {
 		return err
 	}
@@ -61,6 +60,15 @@ func (self *Transport) Close() error {
 	return self.UDPConn.Close()
 }
 
+func (self *Transport) SendTo(p Packet, rAddr *net.UDPAddr) (err error) {
+	wire, err := p.GetWire()
+	if err != nil {
+		return err
+	}
+	_, err = self.UDPConn.WriteToUDP(wire, rAddr)
+	return err
+}
+
 func (self *Transport) Send(p Packet) (err error) {
 	wire, err := p.GetWire()
 	if err != nil {
@@ -72,6 +80,7 @@ func (self *Transport) Send(p Packet) (err error) {
 
 func (self *Transport) Recv() (Packet, int, *net.UDPAddr, error) {
 	wire := make([]byte, MTU) // TODO: need to check
+
 	len, sourceAddr, err := self.UDPConn.ReadFromUDP(wire)
 	if err != nil {
 		return nil, len, nil, err
