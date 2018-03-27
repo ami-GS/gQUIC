@@ -46,6 +46,7 @@ func (self *Server) ListenAndServe(addPair string) error {
 				break
 			}
 			client.Conn, err = NewConnection(rAddr)
+			client.Conn.Transport = self.St
 			client.Conn.ConnectionID = p.GetConnectionID()
 			if err != nil {
 				break
