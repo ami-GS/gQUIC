@@ -8,8 +8,10 @@ QUIC(Quick UDP Internet Connection) implementation in go
 #### RUN example
 running example locally
 1. Server: run loop for waiting client connection
-2. Client: send packet with version
+2. Client: send packet with version (no frame)
 3. Server: check whether the version can be used from server (as of now)
+4. Client: send packet with Stream frame, data with "testData"
+5. Server: send Ack (this cause infinite loop)
 4. To be implemented
 
 ```sh

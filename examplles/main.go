@@ -19,6 +19,11 @@ func runServer(addPair string) {
 func runClient(addPair string) {
 	cli, _ := quic.NewClient(false)
 	fmt.Println(cli.Connect(addPair))
+
+	f := []quic.Frame{
+		quic.NewStreamFrame(true, 1, 1, []byte("testData")),
+	}
+	cli.SendFramePacket(f)
 }
 
 func main() {
