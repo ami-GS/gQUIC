@@ -386,11 +386,11 @@ type FramePacket struct {
 	RestSize uint16
 }
 
-func NewFramePacket(connectionID, packetNumber uint64) *FramePacket {
+func NewFramePacket(connectionID, packetNumber uint64, frame []Frame) *FramePacket {
 	ph := NewPacketHeader(FramePacketType, connectionID, nil, packetNumber, nil)
 	packet := &FramePacket{
 		PacketHeader: ph,
-		Frames:       []Frame{},
+		Frames:       frame,
 		RestSize:     MTU,
 	}
 	return packet

@@ -91,6 +91,20 @@ func (conn *Conn) WritePacket(p Packet) error {
 	return conn.Send(p)
 }
 
+func (conn *Conn) WritePacketTo(p Packet, rAddr *net.UDPAddr) error {
+	defer conn.IncrementPacketIdx()
+	switch packet := p.(type) {
+	case *FramePacket:
+		for _, f := range packet.Frames {
+			switch f.(type) {
+			case *GoAwayFrame:
+				conn.SentGoAway = true
+			}
+		}
+	}
+	return conn.SendTo(p, rAddr)
+}
+
 func (self *Conn) NewConnectionID() (uint64, error) {
 	// TODO: here should be uint64 random
 	// TODO: check if ID is already used or not
