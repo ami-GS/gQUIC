@@ -41,7 +41,7 @@ func TestFramePacket(t *testing.T) {
 	actual_ph, idx, _ := ParsePacketHeader(data, false)
 	packet, actualLen := PacketParserMap[actual_ph.Type](actual_ph, data[idx:])
 	ph := NewPacketHeader(FramePacketType, 1, nil, 1, nil)
-	actualPacket := NewFramePacket(1, 1)
+	actualPacket := NewFramePacket(1, 1, nil)
 	actualPacket.PacketHeader = ph
 	f1 := NewStreamFrame(true, 1, 1, []byte("aiueo"))
 	f1.FramePacket = actualPacket

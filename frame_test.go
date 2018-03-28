@@ -27,7 +27,7 @@ func TestAckFrame(t *testing.T) {
 		// 0b0100 0000, LAcked:0, LAckedDelta:0, NumTimeStamp:1,
 		[]byte{0x40, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00},
 	}
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 	actualFrames := []*AckFrame{
 		NewAckFrame(1, 0, nil, nil),
 		NewAckFrame(uint64(math.Pow(2, 8)), 0, nil, nil),
@@ -94,7 +94,7 @@ func TestStreamFrame(t *testing.T) {
 	}
 
 	testD := []byte("aiueo")
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 	actualFrames := []*StreamFrame{
 		NewStreamFrame(true, 1, 1, testD),
 		NewStreamFrame(false, 256, 0, testD),
@@ -124,7 +124,7 @@ func TestStreamFrame(t *testing.T) {
 
 func TestPaddingFrame(t *testing.T) {
 	data := []byte{0x00, 0x00, 0x00, 0x00, 0x00}
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 	fp.DataSize = 1945
 	fp.RestSize = 5
 
@@ -152,7 +152,7 @@ func TestRstStreamFrame(t *testing.T) {
 	// streamID:1, offset:1, errorcode: QUIC_NO_ERROR
 	data := []byte{0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00}
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewRstStreamFrame(1, 1, QUIC_NO_ERROR)
@@ -175,7 +175,7 @@ func TestRstStreamFrame(t *testing.T) {
 
 func TestPingFrame(t *testing.T) {
 	data := []byte{0x07}
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewPingFrame()
@@ -201,7 +201,7 @@ func TestConnectionCloseFrame(t *testing.T) {
 	data := []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e}
 	reason := "This is reason"
 	data = append(data, []byte(reason)...)
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewConnectionCloseFrame(QUIC_NO_ERROR, reason)
 	actualFrame.FramePacket = fp
@@ -226,7 +226,7 @@ func TestGoAwayFrame(t *testing.T) {
 	data := []byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e}
 	reason := "This is reason"
 	data = append(data, []byte(reason)...)
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewGoAwayFrame(QUIC_NO_ERROR, 1, reason)
 	actualFrame.FramePacket = fp
@@ -251,7 +251,7 @@ func TestWindowUpdateFrame(t *testing.T) {
 	// streamID: 1, offset 1
 	data := []byte{0x04, 0x00, 0x00, 0x00, 0x01, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewWindowUpdateFrame(1, 1)
 	actualFrame.FramePacket = fp
@@ -275,7 +275,7 @@ func TestWindowUpdateFrame(t *testing.T) {
 func TestBlockedFrame(t *testing.T) {
 	// streamID: 1
 	data := []byte{0x05, 0x00, 0x00, 0x00, 0x01}
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 	frame, _ := FrameParserMap[FrameType(data[0])](fp, data)
 	actualFrame := NewBlockedFrame(1)
 	actualFrame.FramePacket = fp
@@ -302,7 +302,7 @@ func TestStopWaitingFrame(t *testing.T) {
 		// least unacked delta: 257
 		[]byte{0x06, 0x01, 0x01},
 	}
-	fp := NewFramePacket(0, 0)
+	fp := NewFramePacket(0, 0, nil)
 	actualFrames := []*StopWaitingFrame{
 		NewStopWaitingFrame(1),
 		NewStopWaitingFrame(257),
