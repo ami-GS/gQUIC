@@ -15,6 +15,7 @@ type Conn struct {
 	SentGoAway   bool
 	RecvGoAway   bool
 	TimeSpawn    time.Time
+	PacketIdx    uint64
 }
 
 func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
@@ -27,6 +28,7 @@ func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
 		SentGoAway:   false,
 		RecvGoAway:   false,
 		TimeSpawn:    time.Now(),
+		PacketIdx:    1,
 	}, nil
 }
 
@@ -78,7 +80,16 @@ func (conn *Conn) GenStream(streamID uint32) *Stream {
 	return stream
 }
 
+func (conn *Conn) IncrementPacketIdx() {
+	if conn.PacketIdx >= 0xffffffffffff {
+		conn.PacketIdx = 1
+		return
+	}
+	conn.PacketIdx++
+}
+
 func (conn *Conn) WritePacket(p Packet) error {
+	defer conn.IncrementPacketIdx()
 	switch packet := p.(type) {
 	case *FramePacket:
 		for _, f := range packet.Frames {
