@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"net"
 	"time"
 
 	"github.com/ami-GS/gQUIC/utils"
@@ -48,33 +47,21 @@ func (self *Client) ReadLoop() {
 			// Currently just send ack for each packet
 			if self.IsServerObj {
 				err = self.ReadPacketFromClient(p)
-				packetNow := time.Now()
-				num := p.GetHeader().PacketNumber
-				pkt := NewFramePacket(self.Conn.ConnectionID, self.Conn.PacketIdx, []Frame{
-					NewAckFrame(num, uint16(time.Now().Sub(packetNow)/time.Millisecond), []uint64{num}, []Timestamp{
-						Timestamp{
-							DeltaLargestAcked:     byte(num - num), // packet number = largest acked - DeltaLargestAcked
-							TimeSinceLargestAcked: uint32(time.Now().Sub(self.Conn.TimeSpawn)),
-						},
-					},
-					)})
-				err = self.SendTo(pkt, self.Conn.RemoteAddr)
-
 			} else {
 				err = self.ReadPacketFromServer(p)
-
-				packetNow := time.Now()
-				num := p.GetHeader().PacketNumber
-				pkt := NewFramePacket(self.Conn.ConnectionID, self.Conn.PacketIdx, []Frame{
-					NewAckFrame(num, uint16(time.Now().Sub(packetNow)/time.Millisecond), []uint64{num}, []Timestamp{
-						Timestamp{
-							DeltaLargestAcked:     byte(num - num), // packet number = largest acked - DeltaLargestAcked
-							TimeSinceLargestAcked: uint32(time.Now().Sub(self.Conn.TimeSpawn)),
-						},
-					},
-					)})
-				err = self.Send(pkt)
 			}
+
+			packetNow := time.Now()
+			num := p.GetHeader().PacketNumber
+			pkt := NewFramePacket(self.Conn.ConnectionID, self.Conn.PacketIdx, []Frame{
+				NewAckFrame(num, uint16(time.Now().Sub(packetNow)/time.Millisecond), []uint64{num}, []Timestamp{
+					Timestamp{
+						DeltaLargestAcked:     byte(num - num), // packet number = largest acked - DeltaLargestAcked
+						TimeSinceLargestAcked: uint32(time.Now().Sub(self.Conn.TimeSpawn)),
+					},
+				},
+				)})
+			err = self.Send(pkt)
 			if err != nil {
 				panic(err)
 			}
@@ -96,7 +83,7 @@ func (self *Client) ReadPacketFromServer(p Packet) error {
 		self.LastSentVersion = packet.Versions[0]
 		for _, p := range self.BufUntilVersionDecided {
 			// skip self.Send to re buffer
-			err := self.Conn.WritePacket(p)
+			err := self.Conn.WritePacket(p, self.IsServerObj)
 			if err != nil {
 				return err
 			}
@@ -219,15 +206,5 @@ func (self *Client) Send(p Packet) error {
 	if self.IsServerObj && self.DecidedVersion == 0 {
 		self.BufUntilVersionDecided = append(self.BufUntilVersionDecided, p)
 	}
-
-	return self.Conn.WritePacket(p)
-}
-
-func (self *Client) SendTo(p Packet, rAddr *net.UDPAddr) error {
-	// TODO : this would also be implemented by interface
-	if self.IsServerObj && self.DecidedVersion == 0 {
-		self.BufUntilVersionDecided = append(self.BufUntilVersionDecided, p)
-	}
-
-	return self.Conn.WritePacketTo(p, rAddr)
+	return self.Conn.WritePacket(p, self.IsServerObj)
 }

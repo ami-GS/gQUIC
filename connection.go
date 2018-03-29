@@ -88,7 +88,7 @@ func (conn *Conn) IncrementPacketIdx() {
 	conn.PacketIdx++
 }
 
-func (conn *Conn) WritePacket(p Packet) error {
+func (conn *Conn) WritePacket(p Packet, fromServer bool) error {
 	defer conn.IncrementPacketIdx()
 	switch packet := p.(type) {
 	case *FramePacket:
@@ -98,22 +98,11 @@ func (conn *Conn) WritePacket(p Packet) error {
 				conn.SentGoAway = true
 			}
 		}
+	}
+	if fromServer {
+		return conn.SendTo(p, conn.RemoteAddr)
 	}
 	return conn.Send(p)
-}
-
-func (conn *Conn) WritePacketTo(p Packet, rAddr *net.UDPAddr) error {
-	defer conn.IncrementPacketIdx()
-	switch packet := p.(type) {
-	case *FramePacket:
-		for _, f := range packet.Frames {
-			switch f.(type) {
-			case *GoAwayFrame:
-				conn.SentGoAway = true
-			}
-		}
-	}
-	return conn.SendTo(p, rAddr)
 }
 
 func (self *Conn) NewConnectionID() (uint64, error) {
