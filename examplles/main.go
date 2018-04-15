@@ -27,6 +27,16 @@ func runClient(addPair string) {
 
 	time.Sleep(200 * time.Millisecond)
 	cli.Ping()
+	time.Sleep(200 * time.Millisecond)
+	f = []quic.Frame{
+		quic.NewGoAwayFrame(quic.QUIC_NO_ERROR, cli.Conn.LastGoodStreamID, "This is GoAway reason"),
+	}
+	cli.SendFramePacket(f)
+	time.Sleep(200 * time.Millisecond)
+	f = []quic.Frame{
+		quic.NewConnectionCloseFrame(quic.QUIC_NO_ERROR, "This is Connection Close reason"),
+	}
+	cli.SendFramePacket(f)
 }
 
 func main() {

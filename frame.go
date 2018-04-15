@@ -516,8 +516,7 @@ func (frame *AckFrame) String() (str string) {
 	}
 
 	str = fmt.Sprintf(
-		`ACK
-	%b
+		`ACK (Settings: %b)
 	Largest Acked : %d
 	Largest Acked Delta Time : %d
 	Number Block-1 : %d
@@ -747,7 +746,7 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 	return
 }
 func (frame *PaddingFrame) String() (str string) {
-	str = "PADDING\n\t\t"
+	str = "===================== PADDING ====================\n\t\t"
 	return str
 }
 
@@ -896,7 +895,7 @@ func (frame *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *ConnectionCloseFrame) String() (str string) {
-	str = fmt.Sprintf("CONNECTION CLOSE\n\t\tError code : %d, Reason length : %d\nReason : %s",
+	str = fmt.Sprintf("CONNECTION CLOSE\n\t\tError code : %s, Reason length : %d, Reason : %s",
 		frame.ErrorCode, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
 }
@@ -960,7 +959,7 @@ func (frame *GoAwayFrame) GetWire() (wire []byte, err error) {
 }
 
 func (frame *GoAwayFrame) String() (str string) {
-	str = fmt.Sprintf("GOAWAY\n\t\tError code : %d, LastGoodStreamID : %d, Reason length : %d\nReason : %s",
+	str = fmt.Sprintf("GOAWAY\n\t\tError code : %s, LastGoodStreamID : %d, Reason length, : %d Reason : %s",
 		frame.ErrorCode, frame.LastGoodStreamID, frame.ReasonPhraseLength, frame.ReasonPhrase)
 	return str
 }
