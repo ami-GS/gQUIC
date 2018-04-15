@@ -24,6 +24,9 @@ func runClient(addPair string) {
 		quic.NewStreamFrame(true, 1, 1, []byte("testData")),
 	}
 	cli.SendFramePacket(f)
+
+	time.Sleep(200 * time.Millisecond)
+	cli.Ping()
 }
 
 func main() {
