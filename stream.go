@@ -43,7 +43,10 @@ func ReadStreamLevelFrame(conn *Conn, f StreamLevelFrame) (bool, error) {
 
 	switch frame := f.(type) {
 	case *StreamFrame:
-		if !ok {
+		if !ok && conn.SentGoAway {
+			// TODO: not accept any new stream
+			return false, nil
+		} else if !ok {
 			// implecitely created
 			stream = conn.GenStream(id)
 		}

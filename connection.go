@@ -10,6 +10,7 @@ type Conn struct {
 	*Transport
 	Window           *Window
 	Streams          map[uint32]*Stream
+	LastGoodStreamID uint32
 	ConnectionID     uint64
 	RemoteAddr       *net.UDPAddr
 	SentGoAway       bool
@@ -24,6 +25,7 @@ func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
 		Transport:        nil,
 		Window:           NewWindow(),
 		Streams:          make(map[uint32]*Stream),
+		LastGoodStreamID: 0,
 		ConnectionID:     0,
 		RemoteAddr:       rAddr,
 		SentGoAway:       false,
@@ -84,6 +86,7 @@ func (conn *Conn) ReadConnectionLevelFrame(f Frame) (bool, error) {
 func (conn *Conn) GenStream(streamID uint32) *Stream {
 	stream := NewStream(streamID, conn)
 	conn.Streams[streamID] = stream
+	conn.LastGoodStreamID = streamID
 	return stream
 }
 
@@ -100,9 +103,22 @@ func (conn *Conn) WritePacket(p Packet, fromServer bool) error {
 	switch packet := p.(type) {
 	case *FramePacket:
 		for _, f := range packet.Frames {
-			switch f.(type) {
+			switch frame := f.(type) {
 			case *GoAwayFrame:
 				conn.SentGoAway = true
+			case *StreamFrame:
+				_, ok := conn.Streams[frame.GetStreamID()]
+				if !ok && conn.SentGoAway {
+					// TODO: error creating new stream for going away connection
+					return nil
+				}
+			case *ConnectionCloseFrame:
+				if conn.SentGoAway {
+					// TODO: warning if goaway was not sent
+					// this means that "abnormally terminated"
+				}
+				// terminate streams.
+				// terminate connection.
 			}
 		}
 	}
