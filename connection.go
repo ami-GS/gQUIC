@@ -8,27 +8,29 @@ import (
 
 type Conn struct {
 	*Transport
-	Window       *Window
-	Streams      map[uint32]*Stream
-	ConnectionID uint64
-	RemoteAddr   *net.UDPAddr
-	SentGoAway   bool
-	RecvGoAway   bool
-	TimeSpawn    time.Time
-	PacketIdx    uint64
+	Window           *Window
+	Streams          map[uint32]*Stream
+	ConnectionID     uint64
+	RemoteAddr       *net.UDPAddr
+	SentGoAway       bool
+	RecvGoAway       bool
+	TimeSpawn        time.Time
+	PacketIdx        uint64
+	UnackedPackets   map[uint64]Packet
 }
 
 func NewConnection(rAddr *net.UDPAddr) (*Conn, error) {
 	return &Conn{
-		Transport:    nil,
-		Window:       NewWindow(),
-		Streams:      make(map[uint32]*Stream),
-		ConnectionID: 0,
-		RemoteAddr:   rAddr,
-		SentGoAway:   false,
-		RecvGoAway:   false,
-		TimeSpawn:    time.Now(),
-		PacketIdx:    1,
+		Transport:        nil,
+		Window:           NewWindow(),
+		Streams:          make(map[uint32]*Stream),
+		ConnectionID:     0,
+		RemoteAddr:       rAddr,
+		SentGoAway:       false,
+		RecvGoAway:       false,
+		TimeSpawn:        time.Now(),
+		PacketIdx:        1,
+		UnackedPackets:   make(map[uint64]Packet),
 	}, nil
 }
 
@@ -107,6 +109,7 @@ func (conn *Conn) WritePacket(p Packet, fromServer bool) error {
 	if fromServer {
 		return conn.SendTo(p, conn.RemoteAddr)
 	}
+	conn.UnackedPackets[p.GetHeader().PacketNumber] = p
 	return conn.Send(p)
 }
 
