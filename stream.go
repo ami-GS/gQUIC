@@ -37,7 +37,7 @@ func NewStream(streamID uint32, conn *Conn) (stream *Stream) {
 	return
 }
 
-func ReadStreamLevelFrame(conn *Conn, f StreamLevelFrame) error {
+func ReadStreamLevelFrame(conn *Conn, f StreamLevelFrame) (bool, error) {
 	id := f.GetStreamID()
 	stream, ok := conn.Streams[id]
 
@@ -47,28 +47,30 @@ func ReadStreamLevelFrame(conn *Conn, f StreamLevelFrame) error {
 			// implecitely created
 			stream = conn.GenStream(id)
 		}
-		stream.ApplyStreamFrame(frame)
+		return stream.ApplyStreamFrame(frame)
 	case *WindowUpdateFrame:
 		if !ok {
-			return QUIC_PACKET_FOR_NONEXISTENT_STREAM
+			return false, QUIC_PACKET_FOR_NONEXISTENT_STREAM
 		}
-		stream.ApplyWindowUpdateFrame(frame)
+		return stream.ApplyWindowUpdateFrame(frame)
 	case *BlockedFrame:
 		if !ok {
-			return QUIC_PACKET_FOR_NONEXISTENT_STREAM
+			return false, QUIC_PACKET_FOR_NONEXISTENT_STREAM
 		}
-		stream.ApplyBlockedFrame(frame)
+		return stream.ApplyBlockedFrame(frame)
 	case *RstStreamFrame:
 		// Abrupt termination
 		if !ok {
-			return QUIC_PACKET_FOR_NONEXISTENT_STREAM
+			return false, QUIC_PACKET_FOR_NONEXISTENT_STREAM
 		}
-		stream.ApplyRstStream(frame)
+		return stream.ApplyRstStream(frame)
+	default:
+		// error
 	}
-	return nil
+	return false, nil
 }
 
-func (self *Stream) ApplyStreamFrame(f *StreamFrame) {
+func (self *Stream) ApplyStreamFrame(f *StreamFrame) (bool, error) {
 	if f.Fin {
 		self.PeerState = HALF_CLOSED
 		if self.State == HALF_CLOSED {
@@ -79,18 +81,19 @@ func (self *Stream) ApplyStreamFrame(f *StreamFrame) {
 	if self.PeerState == HALF_CLOSED || self.PeerState == CLOSED {
 		// TODO : emit error
 	}
+	return false, nil
 }
 
-func (self *Stream) ApplyBlockedFrame(f *BlockedFrame) {
-
+func (self *Stream) ApplyBlockedFrame(f *BlockedFrame) (bool, error) {
+	return false, nil
 }
 
-func (self *Stream) ApplyWindowUpdateFrame(f *WindowUpdateFrame) {
-
+func (self *Stream) ApplyWindowUpdateFrame(f *WindowUpdateFrame) (bool, error) {
+	return false, nil
 }
 
-func (self *Stream) ApplyRstStream(f *RstStreamFrame) {
-
+func (self *Stream) ApplyRstStream(f *RstStreamFrame) (bool, error) {
+	return false, nil
 }
 
 func (self *Stream) SendStreamFrame(f *StreamFrame) {

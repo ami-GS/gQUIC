@@ -57,21 +57,26 @@ func (conn *Conn) handShake() error {
 	return nil
 }
 
-func (conn *Conn) ReadConnectionLevelFrame(f Frame) error {
+func (conn *Conn) ReadConnectionLevelFrame(f Frame) (bool, error) {
 	switch frame := f.(type) {
 	case *AckFrame:
+		return conn.ApplyAckFrame(frame)
 	case *StopWaitingFrame:
+		return conn.ApplyStopWaitingFrame(frame)
 		//case *CongestionFeedBackFrame:
 	case *PingFrame:
+		return conn.ApplyPingFrame(frame)
 		// Ack the packet containing this frame
 	case *ConnectionCloseFrame:
+		return conn.ApplyConnectionCloseFrame(frame)
 		// close connection -> close streams -> send GoAwayFrame
 	case *GoAwayFrame:
-		conn.ApplyGoAwayFrame(frame)
+		return conn.ApplyGoAwayFrame(frame)
 		// will not accept any frame on this connection
+	default:
+		// error
 	}
-
-	return nil
+	return false, nil
 }
 
 func (conn *Conn) GenStream(streamID uint32) *Stream {
@@ -112,6 +117,36 @@ func (self *Conn) NewConnectionID() (uint64, error) {
 	return id, nil
 }
 
-func (conn *Conn) ApplyGoAwayFrame(f *GoAwayFrame) {
+func (conn *Conn) ApplyAckFrame(f *AckFrame) (bool, error) {
+	// TODO: currently packet is acked immediately. Largest Acked was packet ID sent just before
+	_, ok := conn.UnackedPackets[f.LargestAcked]
+	if ok {
+		delete(conn.UnackedPackets, f.LargestAcked)
+	} else {
+		//panic(no packet sent)
+	}
+	return true, nil
+}
+
+func (conn *Conn) ApplyStopWaitingFrame(f *StopWaitingFrame) (bool, error) {
+	return false, nil
+}
+
+func (conn *Conn) ApplyConnectionCloseFrame(f *ConnectionCloseFrame) (bool, error) {
+	// check streams have been closed
+	// if no, abnormally terminated
+	if !conn.RecvGoAway /*|| some streams are stil alive */ {
+		// TODO: warning, abnomal termination
+	}
+	// want to close after all receiving process is finished
+	//conn.Close()
+	return false, nil
+}
+
+func (conn *Conn) ApplyPingFrame(f *PingFrame) (bool, error) {
+	return false, nil
+}
+func (conn *Conn) ApplyGoAwayFrame(f *GoAwayFrame) (bool, error) {
 	conn.RecvGoAway = true
+	return false, nil
 }

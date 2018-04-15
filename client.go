@@ -39,6 +39,7 @@ func (self *Client) Loop() {
 
 func (self *Client) ReadLoop() {
 	var err error
+	var hasAck bool
 	for {
 		select {
 		case p := <-self.RecvChan:
@@ -46,22 +47,23 @@ func (self *Client) ReadLoop() {
 			// TODO : ack should use buffer to maximize efficiency
 			// Currently just send ack for each packet
 			if self.IsServerObj {
-				err = self.ReadPacketFromClient(p)
+				hasAck, err = self.ReadPacketFromClient(p)
 			} else {
-				err = self.ReadPacketFromServer(p)
+				hasAck, err = self.ReadPacketFromServer(p)
 			}
-
-			packetNow := time.Now()
-			num := p.GetHeader().PacketNumber
-			pkt := NewFramePacket(self.Conn.ConnectionID, self.Conn.PacketIdx, []Frame{
-				NewAckFrame(num, uint16(time.Now().Sub(packetNow)/time.Millisecond), []uint64{num}, []Timestamp{
-					Timestamp{
-						DeltaLargestAcked:     byte(num - num), // packet number = largest acked - DeltaLargestAcked
-						TimeSinceLargestAcked: uint32(time.Now().Sub(self.Conn.TimeSpawn)),
+			if !hasAck {
+				packetNow := time.Now()
+				num := p.GetHeader().PacketNumber
+				pkt := NewFramePacket(self.Conn.ConnectionID, self.Conn.PacketIdx, []Frame{
+					NewAckFrame(num, uint16(time.Now().Sub(packetNow)/time.Millisecond), []uint64{num}, []Timestamp{
+						Timestamp{
+							DeltaLargestAcked:     byte(num - num), // packet number = largest acked - DeltaLargestAcked
+							TimeSinceLargestAcked: uint32(time.Now().Sub(self.Conn.TimeSpawn)),
+						},
 					},
-				},
-				)})
-			err = self.Send(pkt)
+					)})
+				err = self.Send(pkt)
+			}
 			if err != nil {
 				panic(err)
 			}
@@ -69,7 +71,7 @@ func (self *Client) ReadLoop() {
 	}
 }
 
-func (self *Client) ReadPacketFromServer(p Packet) error {
+func (self *Client) ReadPacketFromServer(p Packet) (bool, error) {
 	// called from Client, the packet comes from server
 	// process something for connection, then move to process for client
 	header := p.GetHeader()
@@ -85,7 +87,7 @@ func (self *Client) ReadPacketFromServer(p Packet) error {
 			// skip self.Send to re buffer
 			err := self.Conn.WritePacket(p, self.IsServerObj)
 			if err != nil {
-				return err
+				return false, err
 			}
 		}
 	case *FramePacket:
@@ -102,12 +104,13 @@ func (self *Client) ReadPacketFromServer(p Packet) error {
 		}
 	case *PublicResetPacket:
 		// Abrubt termination
-		return self.Conn.Close()
+		return false, self.Conn.Close()
 	}
-	return nil
+
+	return false, nil
 }
 
-func (self *Client) ReadPacketFromClient(p Packet) error {
+func (self *Client) ReadPacketFromClient(p Packet) (bool, error) {
 	// called from Server, the packet comes from client
 	// process something for connection, then move to process for client
 	header := p.GetHeader()
@@ -128,7 +131,7 @@ func (self *Client) ReadPacketFromClient(p Packet) error {
 		VerDecided:
 			if self.DecidedVersion == 0 {
 				err := self.Send(NewVersionNegotiationPacket(p.GetConnectionID(), QUIC_VERSION_LIST))
-				return err
+				return false, err
 			}
 		}
 	}
@@ -152,9 +155,9 @@ func (self *Client) ReadPacketFromClient(p Packet) error {
 		}
 	case *PublicResetPacket:
 		// Abrubt termination
-		return self.Conn.Close()
+		return false, self.Conn.Close()
 	}
-	return nil
+	return false, nil
 }
 
 // Func name should be same as that of http
