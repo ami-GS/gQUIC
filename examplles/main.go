@@ -26,7 +26,10 @@ func runClient(addPair string) {
 	cli.SendFramePacket(f)
 
 	time.Sleep(200 * time.Millisecond)
-	cli.Ping()
+	err := cli.Ping()
+	if err != nil {
+		panic(err)
+	}
 	time.Sleep(200 * time.Millisecond)
 	f = []quic.Frame{
 		quic.NewGoAwayFrame(quic.QUIC_NO_ERROR, cli.Conn.LastGoodStreamID, "This is GoAway reason"),

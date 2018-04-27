@@ -200,11 +200,11 @@ func (self *Client) SendFramePacket(frames []Frame) error {
 	return err
 }
 
-func (self *Client) Ping() {
+func (self *Client) Ping() error {
 	f := []Frame{
 		NewPingFrame(),
 	}
-	self.SendFramePacket(f)
+	return self.SendFramePacket(f)
 }
 
 func (self *Client) PublicResetPacket() {
