@@ -746,7 +746,7 @@ func (frame *PaddingFrame) GetWire() (wire []byte, err error) {
 	return
 }
 func (frame *PaddingFrame) String() (str string) {
-	str = "===================== PADDING ====================\n\t\t"
+	str = "===================== PADDING ====================\t\t"
 	return str
 }
 

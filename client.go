@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/ami-GS/gQUIC/utils"
@@ -67,6 +68,12 @@ func (self *Client) ReadLoop() {
 			if err != nil {
 				panic(err)
 			}
+			if self.IsServerObj {
+				fmt.Println("\t\t\t\t[Recv] Client =========>>>>>>>> Server\n", p)
+			} else {
+				fmt.Println("\t\t\t\t[Recv] Client <<<<<<<<========= Server\n", p)
+			}
+
 		}
 	}
 }
