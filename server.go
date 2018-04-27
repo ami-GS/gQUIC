@@ -35,26 +35,25 @@ func (self *Server) ListenAndServe(addPair string) error {
 	for {
 		p, _, rAddr, err := self.St.Recv()
 		if err != nil {
-			break
+			panic(err)
 		}
 		client, ok := self.Clients[p.GetConnectionID()]
-		if ok {
-			client.RecvChan <- p
-		} else {
+		if !ok {
 			client, err = NewClient(true) // true stands for server side object
 			if err != nil {
-				break
+				panic(err)
 			}
-			client.Conn, err = NewConnection(rAddr)
+			// TODO : need to be able to set initial windowsize
+			client.Conn, err = NewConnection(rAddr, -1)
+			if err != nil {
+				panic(err)
+			}
 			client.Conn.Transport = self.St
 			client.Conn.ConnectionID = p.GetConnectionID()
-			if err != nil {
-				break
-			}
 			self.Clients[p.GetConnectionID()] = client
 			go client.ReadLoop()
-			client.RecvChan <- p
 		}
+		client.RecvChan <- p
 	}
 
 	return err
