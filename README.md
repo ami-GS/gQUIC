@@ -5,6 +5,8 @@ QUIC(Quick UDP Internet Connection) implementation in go
 [draft-hamilton-early-deployment-quic-00](https://tools.ietf.org/html/draft-hamilton-early-deployment-quic-00)
 
 ### Notice
+Currently implementing latest draft in `latest` directory, the latest is really different from this draft.
+
 This is test implementation of IETF QUIC, not google QUIC.
 I noticed the name gQUIC is too confusing, this would be changed in the future.
 
