@@ -15,7 +15,9 @@ var LongHeaderPacketParserMap = map[LongHeaderPacketType]PacketParser{
 
 type Packet interface {
 	GetWire() ([]byte, error)
+	GetHeader() PacketHeader
 	SetHeader(ph PacketHeader)
+	SetFrames(fs []Frame)
 }
 
 func ParsePacket(data []byte) (packet Packet, idx int, err error) {
@@ -37,15 +39,43 @@ func ParsePacket(data []byte) (packet Packet, idx int, err error) {
 		packet, idxTmp, err = ParseOneRTTProtectedPacket(data)
 	}
 	packet.SetHeader(header)
+	idx += idxTmp
+	var fs []Frame
+	fs, idxTmp, err = ParseFrames(data[idx:])
+	if err != nil {
+		return nil, 0, err
+	}
+	packet.SetFrames(fs)
 	return packet, idx + idxTmp, err
 }
 
 type BasePacket struct {
 	Header PacketHeader
+	Frames []Frame
 }
 
+func (bp *BasePacket) GetHeader() PacketHeader {
+	return bp.Header
+}
 func (bp *BasePacket) SetHeader(h PacketHeader) {
 	bp.Header = h
+}
+
+func (bp *BasePacket) SetFrames(fs []Frame) {
+	bp.Frames = fs
+}
+
+func (bp *BasePacket) GetWire() (wire []byte, err error) {
+	hWire, err := bp.Header.GetWire()
+	if err != nil {
+		return nil, err
+	}
+	fsWire, err := GetFrameWires(bp.Frames)
+	if err != nil {
+		return nil, err
+	}
+	// TODO: protect for short header?
+	return append(hWire, fsWire...), nil
 }
 
 // long header with type of 0x7F
@@ -53,10 +83,10 @@ type InitialPacket struct {
 	*BasePacket
 }
 
-func NewInitialPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payload []byte) *InitialPacket {
+func NewInitialPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadLen uint64) *InitialPacket {
 	return &InitialPacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, payload),
+			Header: NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
 		},
 	}
 
@@ -71,10 +101,10 @@ type RetryPacket struct {
 	*BasePacket
 }
 
-func NewRetryPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payload []byte) *RetryPacket {
+func NewRetryPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadLen uint64) *RetryPacket {
 	return &RetryPacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, payload),
+			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
 		},
 	}
 }
@@ -88,10 +118,10 @@ type HandshakePacket struct {
 	*BasePacket
 }
 
-func NewHandshakePacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payload []byte) *HandshakePacket {
+func NewHandshakePacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadLen uint64) *HandshakePacket {
 	return &HandshakePacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, payload),
+			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
 		},
 	}
 }
@@ -110,10 +140,10 @@ type ZeroRTTProtectedPacket struct {
 	*BasePacket
 }
 
-func NewZeroRTTProtectedPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payload []byte) *ZeroRTTProtectedPacket {
+func NewZeroRTTProtectedPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadLen uint64) *ZeroRTTProtectedPacket {
 	return &ZeroRTTProtectedPacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, payload),
+			Header: NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
 		},
 	}
 }
@@ -126,10 +156,10 @@ type OneRTTProtectedPacket struct {
 	*BasePacket
 }
 
-func NewOneRTTProtectedPacket(packetType byte, destConnID []byte, packetNumber uint32, payload []byte) *OneRTTProtectedPacket {
+func NewOneRTTProtectedPacket(packetType byte, destConnID []byte, packetNumber uint32) *OneRTTProtectedPacket {
 	return &OneRTTProtectedPacket{
 		BasePacket: &BasePacket{
-			Header: NewShortHeader(packetType, destConnID, packetNumber, payload),
+			Header: NewShortHeader(packetType, destConnID, packetNumber),
 		},
 	}
 }
@@ -248,6 +278,12 @@ func (p *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	return
 }
 
+func (p *VersionNegotiationPacket) GetHeader() PacketHeader {
+	return nil
+}
 func (p *VersionNegotiationPacket) SetHeader(h PacketHeader) {
-	// no op
+	// no op?
+}
+func (p *VersionNegotiationPacket) SetFrames(fs []Frame) {
+	// no op?
 }
