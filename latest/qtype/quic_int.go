@@ -1,4 +1,4 @@
-package quiclatest
+package qtype
 
 import (
 	"math"
@@ -20,7 +20,6 @@ import (
    +------+--------+-------------+-----------------------+
 */
 
-//GetValue() returns decoded value
 type QuicInt struct {
 	Value   uint64 // encoded
 	Flag    byte
@@ -40,12 +39,17 @@ func NewQuicInt(value uint64) (*QuicInt, error) {
 }
 
 func (v *QuicInt) GetValue() uint64 {
-	val := uint64(0)
-	val |= v.Value & (0xcf << uint64((v.ByteLen-1)*8))
-	for i := 1; i < v.ByteLen; i++ {
-		val |= v.Value & (0xff << uint64((v.ByteLen-1-i)*8))
+	switch v.Flag {
+	case 0x00:
+		return v.Value
+	case 0x01:
+		return v.Value & 0x3fff
+	case 0x02:
+		return v.Value & 0x7fffffff
+	case 0x03:
+		return v.Value & 0x3fffffffffffffff
 	}
-	return val
+	return 0
 }
 
 func (v *QuicInt) PutWire(wire []byte) {
@@ -53,7 +57,7 @@ func (v *QuicInt) PutWire(wire []byte) {
 }
 
 func ParseQuicInt(data []byte) (*QuicInt, error) {
-	flag := data[0] & 0xc0
+	flag := (data[0] & 0xc0) >> 6
 	ret := &QuicInt{
 		Flag:    flag,
 		ByteLen: int(math.Pow(2, float64(flag))),
@@ -71,35 +75,23 @@ func EncodeToValue(val uint64) (ret uint64, byteFlag byte, err error) {
 		byteFlag = 0x01
 	case 0 <= val && val <= 1073741823:
 		byteFlag = 0x02
-	case 0 <= val && val <= 461168601842738790:
+	case 0 <= val && val <= 4611686018427387903:
 		byteFlag = 0x03
 	default:
 		return 0, 0, err
 		// error
 	}
 	byteLen := int(math.Pow(2, float64(byteFlag)))
+
 	for i := 0; i < byteLen; i++ {
 		shift := uint8((byteLen - 1 - i) * 8)
 		if i == 0 {
-			ret |= uint64(byteFlag) | (uint64((val>>shift)&0xff) << shift)
+			ret |= uint64((val>>shift)&0xff) << shift
+			ret |= uint64(byteFlag) << byte(((byteLen * 8) - 2))
 		} else {
 			ret |= uint64((val>>shift)&0xff) << shift
 		}
 	}
-	return ret, byteFlag, nil
-}
 
-func DecodeToValue(data []byte) (ret uint64, byteLen int, err error) {
-	ret = uint64(data[0] & 0x3f)
-	byteFlag := data[0] >> 6
-	byteLen = int(math.Pow(2, float64(byteFlag)))
-	for i := 0; i < byteLen; i++ {
-		shift := uint8(byteLen-1-i) * 8
-		if i == 0 {
-			ret |= uint64((data[i] & 0xcf)) << shift
-		} else {
-			ret |= uint64(data[i]) << shift
-		}
-	}
-	return ret, byteLen, nil
+	return ret, byteFlag, nil
 }
