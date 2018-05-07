@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"math"
 
+	"github.com/ami-GS/gQUIC/latest/qtype"
 	"github.com/ami-GS/gQUIC/utils"
 )
 
@@ -93,18 +94,16 @@ type LongHeader struct {
 	SCIL         byte
 	DestConnID   []byte // 0 or 32-144bit
 	SrcConnID    []byte
-	PayloadLen   *QuicInt
+	PayloadLen   *qtype.QuicInt
 	PacketNumber uint32
-	Payload      []byte
 }
 
-func NewLongHeader(packetType LongHeaderPacketType, version uint32, destConnID, srcConnID []byte, packetNumber uint32, payload []byte) *LongHeader {
-	paylen, err := NewQuicInt(uint64(len(payload)))
+func NewLongHeader(packetType LongHeaderPacketType, version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadlen uint64) *LongHeader {
+	paylen, err := qtype.NewQuicInt(uint64(payloadlen))
 	if err != nil {
 		//error
 	}
 	return &LongHeader{
-		//BasePacketHeader: &BasePacketHeader{LongHeaderType},
 		PacketType:   packetType,
 		Version:      version,
 		DCIL:         byte(len(destConnID) - 3),
@@ -113,13 +112,12 @@ func NewLongHeader(packetType LongHeaderPacketType, version uint32, destConnID, 
 		SrcConnID:    srcConnID,
 		PayloadLen:   paylen,
 		PacketNumber: packetNumber,
-		Payload:      payload,
 	}
 }
 
 func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	idx := 0
-	lh := NewLongHeader(0, 0, nil, nil, 0, nil)
+	lh := NewLongHeader(0, 0, nil, nil, 0, 0)
 	lh.PacketType = LongHeaderPacketType(data[idx] & 0x7f)
 	idx++
 	lh.Version = binary.BigEndian.Uint32(data[idx:])
@@ -143,7 +141,7 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 		}
 		idx += scil
 	}
-	lh.PayloadLen, _ = ParseQuicInt(data[idx:])
+	lh.PayloadLen, _ = qtype.ParseQuicInt(data[idx:])
 	idx += lh.PayloadLen.ByteLen
 	lh.PacketNumber = binary.BigEndian.Uint32(data[idx:])
 	return lh, idx, nil
@@ -197,26 +195,22 @@ func (lh LongHeader) GetWire() (wire []byte, err error) {
 */
 
 type ShortHeader struct {
-	//*BasePacketHeader
 	PacketType   byte
 	DestConnID   []byte
 	PacketNumber uint32
-	Payload      []byte // protected
 }
 
-func NewShortHeader(packetType byte, destConnID []byte, packetNumber uint32, payload []byte) *ShortHeader {
+func NewShortHeader(packetType byte, destConnID []byte, packetNumber uint32) *ShortHeader {
 	return &ShortHeader{
-		//BasePacketHeader: &BasePacketHeader{ShortHeaderType},
 		PacketType:   packetType,
 		DestConnID:   destConnID,
 		PacketNumber: packetNumber,
-		Payload:      payload,
 	}
 }
 
 func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	idx := 0
-	sh := NewShortHeader(0, nil, 0, nil)
+	sh := NewShortHeader(0, nil, 0)
 	sh.PacketType = data[idx]
 	idx++
 	// Connection ID length is depends on version, fix 64 bit as of now
