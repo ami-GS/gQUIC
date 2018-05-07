@@ -109,9 +109,9 @@ func ParseFrame(data []byte) (f Frame, idx int, err error) {
 	return FrameParserMap[FrameType(data[0])](data)
 }
 
-func ParseFrames(data []byte, payloadLen *QuicInt) (fs []Frame, idx int, err error) {
+func ParseFrames(data []byte) (fs []Frame, idx int, err error) {
 	// TODO: or call parallel?
-	for idx < int(payloadLen.GetValue())-1 {
+	for idx < len(data) {
 		f, oneLen, err := ParseFrame(data[idx:])
 		if err != nil {
 			return nil, idx + oneLen, err
@@ -120,6 +120,18 @@ func ParseFrames(data []byte, payloadLen *QuicInt) (fs []Frame, idx int, err err
 		idx += oneLen
 	}
 	return fs, idx, nil
+}
+
+func GetFrameWires(frames []Frame) (allWire []byte, err error) {
+	for _, frame := range frames {
+		wire, err := frame.GetWire()
+		if err != nil {
+			return nil, err
+		}
+		// TODO: looks slow
+		allWire = append(allWire, wire...)
+	}
+	return allWire, err
 }
 
 /*

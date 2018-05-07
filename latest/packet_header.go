@@ -43,18 +43,9 @@ const (
 
 type PacketHeader interface {
 	GetWire() ([]byte, error)
-	//	GetHeaderType() PacketHeaderType
+	GetConnectionIDPair() (uint64, uint64) // srcID, destID
 }
 
-/*
-type BasePacketHeader struct {
-	Type PacketHeaderType
-}
-
-func (bph BasePacketHeader) GetHeaderType() PacketHeaderType {
-	return bph.Type
-}
-*/
 // before passing data, need to check whether data[1:5] == 0x00 or not
 // data[1:5] == 0x00 means version negotiation packet
 type PacketHeaderPerser func(data []byte) (p PacketHeader, length int, err error)
@@ -179,6 +170,10 @@ func (lh LongHeader) GetWire() (wire []byte, err error) {
 	return
 }
 
+func (lh LongHeader) GetConnectionIDPair() (uint64, uint64) {
+	return 1, 1 //TODO: implement
+}
+
 // Short Header
 /*
     0                   1                   2                   3
@@ -244,4 +239,8 @@ func (sh ShortHeader) GetWire() (wire []byte, err error) {
 	idx += 8
 	idx += utils.MyPutUint32(wire[idx:], sh.PacketNumber, packetNumLen)
 	return
+}
+
+func (sh ShortHeader) GetConnectionIDPair() (uint64, uint64) {
+	return 0, 1 //TODO: implement
 }
