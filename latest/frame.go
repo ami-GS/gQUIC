@@ -646,11 +646,11 @@ type NewConnectionIDFrame struct {
 	*BaseFrame
 	Sequence        *qtype.QuicInt
 	Length          byte
-	ConnID          []byte
+	ConnID          qtype.ConnectionID
 	StatelessRstTkn [16]byte
 }
 
-func NewNewConnectionIDFrame(sequence uint64, length byte, connID []byte, stateLessRstTkn [16]byte) *NewConnectionIDFrame {
+func NewNewConnectionIDFrame(sequence uint64, length byte, connID qtype.ConnectionID, stateLessRstTkn [16]byte) *NewConnectionIDFrame {
 	seq, err := qtype.NewQuicInt(sequence)
 	if err != nil {
 		//error
@@ -678,10 +678,9 @@ func ParseNewConnectionIDFrame(data []byte) (Frame, int, error) {
 		return nil, 0, nil
 	}
 	idx += f.Sequence.ByteLen + 1
-
-	f.ConnID = make([]byte, f.Length)
-	for i := 0; i < int(f.Length); i++ {
-		f.ConnID[i] = data[idx+i]
+	f.ConnID, err = qtype.ReadConnectionID(data[idx:], int(f.Length))
+	if err != nil {
+		return nil, 0, err
 	}
 	idx += int(f.Length)
 	copy(f.StatelessRstTkn[:], data[idx:idx+16])
@@ -695,8 +694,8 @@ func (f *NewConnectionIDFrame) GetWire() (wire []byte, err error) {
 	f.Sequence.PutWire(wire)
 	idx += f.Sequence.ByteLen
 	wire[idx] += f.Length
-	copy(wire[idx:], f.ConnID)
-	idx += len(f.ConnID)
+	copy(wire[idx+1:], f.ConnID.Bytes())
+	idx += len(f.ConnID) + 1
 	copy(wire[idx:], f.StatelessRstTkn[:])
 	return
 }

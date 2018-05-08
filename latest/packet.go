@@ -2,6 +2,8 @@ package quiclatest
 
 import (
 	"encoding/binary"
+
+	"github.com/ami-GS/gQUIC/latest/qtype"
 )
 
 type PacketParser func(data []byte) (p Packet, length int, err error)
@@ -196,16 +198,25 @@ type VersionNegotiationPacket struct {
 	Version           uint32
 	DCIL              byte
 	SCIL              byte
-	DestConnID        []byte // 0 or 32-144bit
-	SrcConnID         []byte
+	DestConnID        qtype.ConnectionID
+	SrcConnID         qtype.ConnectionID
 	SupportedVersions []uint32
 }
 
-func NewVersionNegotiationPacket(destConnID, srcConnID []byte, supportedVersions []uint32) *VersionNegotiationPacket {
+func NewVersionNegotiationPacket(destConnID, srcConnID qtype.ConnectionID, supportedVersions []uint32) *VersionNegotiationPacket {
+	dcil := 0
+	if destConnID != nil {
+		dcil = len(destConnID) - 3
+	}
+	scil := 0
+	if srcConnID != nil {
+		scil = len(srcConnID) - 3
+	}
+
 	return &VersionNegotiationPacket{
 		Version:           0,
-		DCIL:              byte(len(destConnID) - 3),
-		SCIL:              byte(len(srcConnID) - 3),
+		DCIL:              byte(dcil),
+		SCIL:              byte(scil),
 		DestConnID:        destConnID,
 		SrcConnID:         srcConnID,
 		SupportedVersions: supportedVersions,
@@ -230,18 +241,12 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 	idx++
 	if packet.DCIL != 0 {
 		dcil := int(packet.DCIL + 3)
-		packet.DestConnID = make([]byte, dcil)
-		for i := 0; i < dcil; i++ {
-			packet.DestConnID[i] = data[idx+i]
-		}
+		qtype.ReadConnectionID(data[idx:], dcil)
 		idx += dcil
 	}
 	if packet.SCIL != 0 {
 		scil := int(packet.SCIL + 3)
-		packet.SrcConnID = make([]byte, scil)
-		for i := 0; i < scil; i++ {
-			packet.SrcConnID[i] = data[idx+i]
-		}
+		qtype.ReadConnectionID(data[idx:], scil)
 		idx += scil
 	}
 	numVersions := (len(data) - idx) / 4
@@ -286,4 +291,7 @@ func (p *VersionNegotiationPacket) SetHeader(h PacketHeader) {
 }
 func (p *VersionNegotiationPacket) SetFrames(fs []Frame) {
 	// no op?
+}
+func (p *VersionNegotiationPacket) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
+	return p.SrcConnID, p.DestConnID
 }

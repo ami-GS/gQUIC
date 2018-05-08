@@ -43,7 +43,7 @@ const (
 
 type PacketHeader interface {
 	GetWire() ([]byte, error)
-	GetConnectionIDPair() (uint64, uint64) // srcID, destID
+	GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) // srcID, destID
 }
 
 // before passing data, need to check whether data[1:5] == 0x00 or not
@@ -78,27 +78,35 @@ var PacketHeaderParserMap = map[PacketHeaderType]PacketHeaderPerser{
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
 type LongHeader struct {
-	//*BasePacketHeader
 	PacketType   LongHeaderPacketType
 	Version      uint32
 	DCIL         byte
 	SCIL         byte
-	DestConnID   []byte // 0 or 32-144bit
-	SrcConnID    []byte
+	DestConnID   qtype.ConnectionID
+	SrcConnID    qtype.ConnectionID
 	PayloadLen   *qtype.QuicInt
 	PacketNumber uint32
 }
 
-func NewLongHeader(packetType LongHeaderPacketType, version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadlen uint64) *LongHeader {
+func NewLongHeader(packetType LongHeaderPacketType, version uint32, destConnID, srcConnID qtype.ConnectionID, packetNumber uint32, payloadlen uint64) *LongHeader {
 	paylen, err := qtype.NewQuicInt(uint64(payloadlen))
 	if err != nil {
 		//error
 	}
+	dcil := 0
+	if destConnID != nil {
+		dcil = len(destConnID) - 3
+	}
+	scil := 0
+	if srcConnID != nil {
+		scil = len(srcConnID) - 3
+	}
+
 	return &LongHeader{
 		PacketType:   packetType,
 		Version:      version,
-		DCIL:         byte(len(destConnID) - 3),
-		SCIL:         byte(len(srcConnID) - 3),
+		DCIL:         byte(dcil),
+		SCIL:         byte(scil),
 		DestConnID:   destConnID,
 		SrcConnID:    srcConnID,
 		PayloadLen:   paylen,
@@ -107,6 +115,7 @@ func NewLongHeader(packetType LongHeaderPacketType, version uint32, destConnID, 
 }
 
 func ParseLongHeader(data []byte) (PacketHeader, int, error) {
+	var err error
 	idx := 0
 	lh := NewLongHeader(0, 0, nil, nil, 0, 0)
 	lh.PacketType = LongHeaderPacketType(data[idx] & 0x7f)
@@ -118,17 +127,17 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	idx++
 	if lh.DCIL != 0 {
 		dcil := int(lh.DCIL + 3)
-		lh.DestConnID = make([]byte, dcil)
-		for i := 0; i < dcil; i++ {
-			lh.DestConnID[i] = data[idx+i]
+		lh.DestConnID, err = qtype.ReadConnectionID(data[idx:], dcil)
+		if err != nil {
+			return nil, 0, err
 		}
 		idx += dcil
 	}
 	if lh.SCIL != 0 {
 		scil := int(lh.SCIL + 3)
-		lh.SrcConnID = make([]byte, scil)
-		for i := 0; i < scil; i++ {
-			lh.SrcConnID[i] = data[idx+i]
+		lh.SrcConnID, err = qtype.ReadConnectionID(data[idx:], scil)
+		if err != nil {
+			return nil, 0, err
 		}
 		idx += scil
 	}
@@ -153,15 +162,11 @@ func (lh LongHeader) GetWire() (wire []byte, err error) {
 	wire[5] = (lh.DCIL << 4) | lh.SCIL
 	idx := 5
 	if lh.DCIL != 0 {
-		for i := 0; i < int(lh.DCIL+3); i++ {
-			wire[idx+i] = lh.DestConnID[i]
-		}
+		copy(wire[idx:], lh.DestConnID.Bytes())
 		idx += int(lh.DCIL + 3)
 	}
 	if lh.SCIL != 0 {
-		for i := 0; i < int(lh.SCIL+3); i++ {
-			wire[idx+i] = lh.SrcConnID[i]
-		}
+		copy(wire[idx:], lh.SrcConnID.Bytes())
 		idx += int(lh.SCIL + 3)
 	}
 	lh.PayloadLen.PutWire(wire[idx:])
@@ -170,8 +175,8 @@ func (lh LongHeader) GetWire() (wire []byte, err error) {
 	return
 }
 
-func (lh LongHeader) GetConnectionIDPair() (uint64, uint64) {
-	return 1, 1 //TODO: implement
+func (lh LongHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
+	return lh.SrcConnID, lh.DestConnID
 }
 
 // Short Header
@@ -191,11 +196,11 @@ func (lh LongHeader) GetConnectionIDPair() (uint64, uint64) {
 
 type ShortHeader struct {
 	PacketType   byte
-	DestConnID   []byte
+	DestConnID   qtype.ConnectionID
 	PacketNumber uint32
 }
 
-func NewShortHeader(packetType byte, destConnID []byte, packetNumber uint32) *ShortHeader {
+func NewShortHeader(packetType byte, destConnID qtype.ConnectionID, packetNumber uint32) *ShortHeader {
 	return &ShortHeader{
 		PacketType:   packetType,
 		DestConnID:   destConnID,
@@ -204,15 +209,14 @@ func NewShortHeader(packetType byte, destConnID []byte, packetNumber uint32) *Sh
 }
 
 func ParseShortHeader(data []byte) (PacketHeader, int, error) {
+	var err error
 	idx := 0
 	sh := NewShortHeader(0, nil, 0)
 	sh.PacketType = data[idx]
 	idx++
-	// Connection ID length is depends on version, fix 64 bit as of now
-	// TOOD: more inteligent
-	sh.DestConnID = make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		sh.DestConnID[i] = data[idx+i]
+	sh.DestConnID, err = qtype.ReadConnectionID(data[idx:], 8)
+	if err != nil {
+		return nil, 0, err
 	}
 	idx += 8
 
@@ -227,20 +231,19 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 }
 
 func (sh ShortHeader) GetWire() (wire []byte, err error) {
-	// TODO: connIDLen is fixed as of now
-	connIDLen := 8
 	packetNumLen := int(math.Pow(2, float64(sh.PacketType&ShortHeaderPacketTypeMask)))
+	connIDLen := len(sh.DestConnID)
 	wire = make([]byte, 1+connIDLen+packetNumLen)
 	wire[0] = sh.PacketType
 	idx := 1
-	for i := 0; i < 8; i++ {
-		wire[idx+i] = sh.DestConnID[i]
+	if connIDLen != 0 {
+		copy(wire[idx:idx+connIDLen], sh.DestConnID)
+		idx += connIDLen
 	}
-	idx += 8
 	idx += utils.MyPutUint32(wire[idx:], sh.PacketNumber, packetNumLen)
 	return
 }
 
-func (sh ShortHeader) GetConnectionIDPair() (uint64, uint64) {
-	return 0, 1 //TODO: implement
+func (sh ShortHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
+	return nil, sh.DestConnID
 }
