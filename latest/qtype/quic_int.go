@@ -52,8 +52,9 @@ func (v *QuicInt) GetValue() uint64 {
 	return 0
 }
 
-func (v *QuicInt) PutWire(wire []byte) {
+func (v *QuicInt) PutWire(wire []byte) int {
 	utils.MyPutUint64(wire, v.Value, v.ByteLen)
+	return v.ByteLen
 }
 
 func ParseQuicInt(data []byte) (*QuicInt, error) {

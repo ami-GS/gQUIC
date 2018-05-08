@@ -184,11 +184,8 @@ func ParseConnectionCloseFrame(data []byte) (Frame, int, error) {
 func (f *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 3+f.ReasonLength.ByteLen+len(f.Reason))
 	wire[0] = byte(ConnectionCloseFrameType)
-	idx := 1
-	binary.BigEndian.PutUint16(wire[idx:], f.ErrorCode)
-	idx += 2
-	f.ReasonLength.PutWire(wire[idx:])
-	idx += f.ReasonLength.ByteLen
+	binary.BigEndian.PutUint16(wire[1:], f.ErrorCode)
+	idx := f.ReasonLength.PutWire(wire[3:]) + 3
 	copy(wire[idx:], []byte(f.Reason))
 	return
 }
@@ -243,11 +240,8 @@ func ParseApplicationCloseFrame(data []byte) (Frame, int, error) {
 func (f *ApplicationCloseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 3+f.ReasonLength.ByteLen+len(f.Reason))
 	wire[0] = byte(ApplicationCloseFrameType)
-	idx := 1
-	binary.BigEndian.PutUint16(wire[idx:], f.ErrorCode)
-	idx += 2
-	f.ReasonLength.PutWire(wire[idx:])
-	idx += f.ReasonLength.ByteLen
+	binary.BigEndian.PutUint16(wire[1:], f.ErrorCode)
+	idx := f.ReasonLength.PutWire(wire[3:]) + 3
 	copy(wire[idx:], []byte(f.Reason))
 	return
 }
@@ -306,13 +300,10 @@ func ParseRstStreamFrame(data []byte) (Frame, int, error) {
 func (f *RstStreamFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen+2+f.FinalOffset.ByteLen)
 	wire[0] = byte(RstStreamFrameType)
-	idx := 1
-	f.StreamID.PutWire(wire[idx:])
-	idx += f.StreamID.ByteLen
+	idx := f.StreamID.PutWire(wire[1:]) + 1
 	binary.BigEndian.PutUint16(wire[idx:], f.ErrorCode)
 	idx += 2
-	f.FinalOffset.PutWire(wire[idx:])
-	idx += f.FinalOffset.ByteLen
+	idx += f.FinalOffset.PutWire(wire[idx:])
 	return wire, nil
 }
 
@@ -443,8 +434,8 @@ func ParseMaxStreamDataFrame(data []byte) (Frame, int, error) {
 func (f *MaxStreamDataFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen+f.Data.ByteLen)
 	wire[0] = byte(MaxStreamDataFrameType)
-	f.StreamID.PutWire(wire)
-	f.Data.PutWire(wire[f.StreamID.ByteLen:])
+	idx := f.StreamID.PutWire(wire[1:]) + 1
+	f.Data.PutWire(wire[idx:])
 	return
 }
 
@@ -620,6 +611,7 @@ func ParseStreamIDBlockedFrame(data []byte) (Frame, int, error) {
 
 func (f *StreamIDBlockedFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen)
+	wire[0] = byte(StreamIDBlockedFrameType)
 	f.StreamID.PutWire(wire[1:])
 	return
 }
@@ -690,9 +682,7 @@ func ParseNewConnectionIDFrame(data []byte) (Frame, int, error) {
 func (f *NewConnectionIDFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 18+len(f.ConnID)+f.Sequence.ByteLen)
 	wire[0] = byte(NewConnectionIDFrameType)
-	idx := 1
-	f.Sequence.PutWire(wire)
-	idx += f.Sequence.ByteLen
+	idx := f.Sequence.PutWire(wire) + 1
 	wire[idx] += f.Length
 	copy(wire[idx+1:], f.ConnID.Bytes())
 	idx += len(f.ConnID) + 1
@@ -847,22 +837,15 @@ func (f *AckFrame) GetWire() (wire []byte, err error) {
 	}
 	wire = make([]byte, 1+f.LargestAcked.ByteLen+f.AckDelay.ByteLen+f.AckBlockCount.ByteLen+blockByteLen)
 	wire[0] = byte(AckFrameType)
-	idx := 0
-	f.LargestAcked.PutWire(wire)
-	idx += f.LargestAcked.ByteLen
-	f.AckDelay.PutWire(wire[idx:])
-	idx += f.AckDelay.ByteLen
-	f.AckBlockCount.PutWire(wire[idx:])
-	idx += f.AckBlockCount.ByteLen
+	idx := f.LargestAcked.PutWire(wire[1:]) + 1
+	idx += f.AckDelay.PutWire(wire[idx:])
+	idx += f.AckBlockCount.PutWire(wire[idx:])
 
-	f.AckBlocks[0].AckBlock.PutWire(wire[idx:])
-	idx += f.AckBlocks[0].AckBlock.ByteLen
+	idx += f.AckBlocks[0].AckBlock.PutWire(wire[idx:])
 	for i := uint64(1); i < f.AckBlockCount.GetValue(); i++ {
 		v := f.AckBlocks[i]
-		v.Gap.PutWire(wire[idx:])
-		idx += v.Gap.ByteLen
-		v.AckBlock.PutWire(wire[idx:])
-		idx += v.AckBlock.ByteLen
+		idx += v.Gap.PutWire(wire[idx:])
+		idx += v.AckBlock.PutWire(wire[idx:])
 	}
 
 	return
@@ -1034,16 +1017,12 @@ func (f *StreamFrame) GetWire() (wire []byte, err error) {
 	}
 	wire = make([]byte, wireLen)
 	wire[0] = flag
-	idx := 1
-	f.StreamID.PutWire(wire[idx:])
-	idx += f.StreamID.ByteLen
+	idx := f.StreamID.PutWire(wire[1:]) + 1
 	if flag&0x40 == 0x40 {
-		f.Offset.PutWire(wire[idx:])
-		idx += f.Offset.ByteLen
+		idx += f.Offset.PutWire(wire[idx:])
 	}
 	if flag&0x20 == 0x20 {
-		f.Length.PutWire(wire[idx:])
-		idx += f.Length.ByteLen
+		idx += f.Length.PutWire(wire[idx:])
 	}
 	copy(wire[idx:], f.Data)
 	return
