@@ -85,7 +85,7 @@ type InitialPacket struct {
 	*BasePacket
 }
 
-func NewInitialPacket(version qtype.Version, destConnID, srcConnID []byte, packetNumber qtype.PacketNumber, payloadLen uint64) *InitialPacket {
+func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64) *InitialPacket {
 	return &InitialPacket{
 		BasePacket: &BasePacket{
 			Header: NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
@@ -103,7 +103,7 @@ type RetryPacket struct {
 	*BasePacket
 }
 
-func NewRetryPacket(version qtype.Version, destConnID, srcConnID []byte, packetNumber qtype.PacketNumber, payloadLen uint64) *RetryPacket {
+func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64) *RetryPacket {
 	return &RetryPacket{
 		BasePacket: &BasePacket{
 			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
@@ -120,7 +120,7 @@ type HandshakePacket struct {
 	*BasePacket
 }
 
-func NewHandshakePacket(version qtype.Version, destConnID, srcConnID []byte, packetNumber qtype.PacketNumber, payloadLen uint64) *HandshakePacket {
+func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64) *HandshakePacket {
 	return &HandshakePacket{
 		BasePacket: &BasePacket{
 			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
@@ -142,7 +142,7 @@ type ZeroRTTProtectedPacket struct {
 	*BasePacket
 }
 
-func NewZeroRTTProtectedPacket(version qtype.Version, destConnID, srcConnID []byte, packetNumber qtype.PacketNumber, payloadLen uint64) *ZeroRTTProtectedPacket {
+func NewZeroRTTProtectedPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64) *ZeroRTTProtectedPacket {
 	return &ZeroRTTProtectedPacket{
 		BasePacket: &BasePacket{
 			Header: NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
@@ -158,7 +158,7 @@ type OneRTTProtectedPacket struct {
 	*BasePacket
 }
 
-func NewOneRTTProtectedPacket(packetType byte, destConnID []byte, packetNumber qtype.PacketNumber) *OneRTTProtectedPacket {
+func NewOneRTTProtectedPacket(packetType byte, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *OneRTTProtectedPacket {
 	return &OneRTTProtectedPacket{
 		BasePacket: &BasePacket{
 			Header: NewShortHeader(packetType, destConnID, packetNumber),
@@ -250,7 +250,7 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 		idx += scil
 	}
 	numVersions := (len(data) - idx) / 4
-	packet.SupportedVersions = make([]uint32, numVersions)
+	packet.SupportedVersions = make([]qtype.Version, numVersions)
 	for i := 0; i < numVersions; i++ {
 		packet.SupportedVersions[i] = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
 		idx += 4
