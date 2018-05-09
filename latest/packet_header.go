@@ -79,7 +79,7 @@ var PacketHeaderParserMap = map[PacketHeaderType]PacketHeaderPerser{
 */
 type LongHeader struct {
 	PacketType   LongHeaderPacketType
-	Version      uint32
+	Version      qtype.Version
 	DCIL         byte
 	SCIL         byte
 	DestConnID   qtype.ConnectionID
@@ -120,7 +120,7 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	lh := NewLongHeader(0, 0, nil, nil, 0, 0)
 	lh.PacketType = LongHeaderPacketType(data[idx] & 0x7f)
 	idx++
-	lh.Version = binary.BigEndian.Uint32(data[idx:])
+	lh.Version = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
 	idx += 4
 	lh.DCIL = data[idx] >> 4
 	lh.SCIL = data[idx] & 0x0f
@@ -158,7 +158,7 @@ func (lh LongHeader) GetWire() (wire []byte, err error) {
 	}
 	wire = make([]byte, wireLen)
 	wire[0] = 0x80 | byte(lh.PacketType)
-	binary.BigEndian.PutUint32(wire[1:], lh.Version)
+	binary.BigEndian.PutUint32(wire[1:], uint32(lh.Version))
 	wire[5] = (lh.DCIL << 4) | lh.SCIL
 	idx := 5
 	if lh.DCIL != 0 {

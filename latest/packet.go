@@ -85,7 +85,7 @@ type InitialPacket struct {
 	*BasePacket
 }
 
-func NewInitialPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadLen uint64) *InitialPacket {
+func NewInitialPacket(version qtype.Version, destConnID, srcConnID []byte, packetNumber qtype.PacketNumber, payloadLen uint64) *InitialPacket {
 	return &InitialPacket{
 		BasePacket: &BasePacket{
 			Header: NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
@@ -103,7 +103,7 @@ type RetryPacket struct {
 	*BasePacket
 }
 
-func NewRetryPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadLen uint64) *RetryPacket {
+func NewRetryPacket(version qtype.Version, destConnID, srcConnID []byte, packetNumber qtype.PacketNumber, payloadLen uint64) *RetryPacket {
 	return &RetryPacket{
 		BasePacket: &BasePacket{
 			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
@@ -120,7 +120,7 @@ type HandshakePacket struct {
 	*BasePacket
 }
 
-func NewHandshakePacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadLen uint64) *HandshakePacket {
+func NewHandshakePacket(version qtype.Version, destConnID, srcConnID []byte, packetNumber qtype.PacketNumber, payloadLen uint64) *HandshakePacket {
 	return &HandshakePacket{
 		BasePacket: &BasePacket{
 			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
@@ -142,7 +142,7 @@ type ZeroRTTProtectedPacket struct {
 	*BasePacket
 }
 
-func NewZeroRTTProtectedPacket(version uint32, destConnID, srcConnID []byte, packetNumber uint32, payloadLen uint64) *ZeroRTTProtectedPacket {
+func NewZeroRTTProtectedPacket(version qtype.Version, destConnID, srcConnID []byte, packetNumber qtype.PacketNumber, payloadLen uint64) *ZeroRTTProtectedPacket {
 	return &ZeroRTTProtectedPacket{
 		BasePacket: &BasePacket{
 			Header: NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
@@ -158,7 +158,7 @@ type OneRTTProtectedPacket struct {
 	*BasePacket
 }
 
-func NewOneRTTProtectedPacket(packetType byte, destConnID []byte, packetNumber uint32) *OneRTTProtectedPacket {
+func NewOneRTTProtectedPacket(packetType byte, destConnID []byte, packetNumber qtype.PacketNumber) *OneRTTProtectedPacket {
 	return &OneRTTProtectedPacket{
 		BasePacket: &BasePacket{
 			Header: NewShortHeader(packetType, destConnID, packetNumber),
@@ -195,15 +195,15 @@ func ParseOneRTTProtectedPacket(data []byte) (p Packet, length int, err error) {
 
 // Version negotiation doesn't use long header, but have similar form
 type VersionNegotiationPacket struct {
-	Version           uint32
+	Version           qtype.Version
 	DCIL              byte
 	SCIL              byte
 	DestConnID        qtype.ConnectionID
 	SrcConnID         qtype.ConnectionID
-	SupportedVersions []uint32
+	SupportedVersions []qtype.Version
 }
 
-func NewVersionNegotiationPacket(destConnID, srcConnID qtype.ConnectionID, supportedVersions []uint32) *VersionNegotiationPacket {
+func NewVersionNegotiationPacket(destConnID, srcConnID qtype.ConnectionID, supportedVersions []qtype.Version) *VersionNegotiationPacket {
 	dcil := 0
 	if destConnID != nil {
 		dcil = len(destConnID) - 3
@@ -230,7 +230,7 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 		//TODO: error
 	}
 	idx++
-	packet.Version = binary.BigEndian.Uint32(data[idx:])
+	packet.Version = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
 	if packet.Version != 0 {
 		// must be zero
 		// TODO: error
@@ -252,7 +252,7 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 	numVersions := (len(data) - idx) / 4
 	packet.SupportedVersions = make([]uint32, numVersions)
 	for i := 0; i < numVersions; i++ {
-		packet.SupportedVersions[i] = binary.BigEndian.Uint32(data[idx:])
+		packet.SupportedVersions[i] = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
 		idx += 4
 	}
 	return packet, idx, nil
@@ -261,7 +261,7 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 func (p *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	wire = make([]byte, int(6+p.DCIL+p.SCIL)+len(p.SupportedVersions)*4)
 	wire[0] = 0x80
-	binary.BigEndian.PutUint32(wire[1:], p.Version)
+	binary.BigEndian.PutUint32(wire[1:], uint32(p.Version))
 	wire[5] = (p.DCIL << 4) | p.SCIL
 	idx := 5
 	if p.DCIL != 0 {
@@ -278,8 +278,9 @@ func (p *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	}
 
 	for i, version := range p.SupportedVersions {
-		binary.BigEndian.PutUint32(wire[idx+i*4:], version)
+		binary.BigEndian.PutUint32(wire[idx+i*4:], uint32(version))
 	}
+	// TODO: VersionNegotiationPacket fills MTU
 	return
 }
 
