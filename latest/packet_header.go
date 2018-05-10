@@ -85,10 +85,10 @@ type LongHeader struct {
 	DestConnID   qtype.ConnectionID
 	SrcConnID    qtype.ConnectionID
 	PayloadLen   *qtype.QuicInt
-	PacketNumber uint32
+	PacketNumber qtype.PacketNumber
 }
 
-func NewLongHeader(packetType LongHeaderPacketType, version uint32, destConnID, srcConnID qtype.ConnectionID, packetNumber uint32, payloadlen uint64) *LongHeader {
+func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadlen uint64) *LongHeader {
 	paylen, err := qtype.NewQuicInt(uint64(payloadlen))
 	if err != nil {
 		//error
@@ -143,8 +143,8 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	}
 	lh.PayloadLen, _ = qtype.ParseQuicInt(data[idx:])
 	idx += lh.PayloadLen.ByteLen
-	lh.PacketNumber = binary.BigEndian.Uint32(data[idx:])
-	return lh, idx, nil
+	lh.PacketNumber = qtype.PacketNumber(binary.BigEndian.Uint32(data[idx:]))
+	return lh, idx + 4, nil
 }
 
 func (lh LongHeader) GetWire() (wire []byte, err error) {
@@ -171,7 +171,7 @@ func (lh LongHeader) GetWire() (wire []byte, err error) {
 	}
 	lh.PayloadLen.PutWire(wire[idx:])
 	idx += lh.PayloadLen.ByteLen
-	binary.BigEndian.PutUint32(wire[idx:], lh.PacketNumber)
+	binary.BigEndian.PutUint32(wire[idx:], uint32(lh.PacketNumber))
 	return
 }
 
@@ -197,10 +197,10 @@ func (lh LongHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.Connection
 type ShortHeader struct {
 	PacketType   byte
 	DestConnID   qtype.ConnectionID
-	PacketNumber uint32
+	PacketNumber qtype.PacketNumber
 }
 
-func NewShortHeader(packetType byte, destConnID qtype.ConnectionID, packetNumber uint32) *ShortHeader {
+func NewShortHeader(packetType byte, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *ShortHeader {
 	return &ShortHeader{
 		PacketType:   packetType,
 		DestConnID:   destConnID,
@@ -225,7 +225,7 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 		// TODO: error
 		return nil, 0, nil
 	}
-	sh.PacketNumber = utils.MyUint32(data[idx:], packetNumLen)
+	sh.PacketNumber = qtype.PacketNumber(utils.MyUint64(data[idx:], packetNumLen))
 	idx += packetNumLen
 	return sh, idx, nil
 }
@@ -240,7 +240,7 @@ func (sh ShortHeader) GetWire() (wire []byte, err error) {
 		copy(wire[idx:idx+connIDLen], sh.DestConnID)
 		idx += connIDLen
 	}
-	idx += utils.MyPutUint32(wire[idx:], sh.PacketNumber, packetNumLen)
+	idx += utils.MyPutUint32(wire[idx:], uint32(sh.PacketNumber), packetNumLen)
 	return
 }
 
