@@ -1,10 +1,15 @@
 package quiclatest
 
-import "net"
+import (
+	"net"
+
+	"github.com/ami-GS/gQUIC/latest/qtype"
+)
 
 type Server struct {
-	conn     net.PacketConn
-	sessions map[string]*Session //ConnectionID.String():Session
+	conn              net.PacketConn
+	sessions          map[string]*Session //ConnectionID.String():Session
+	SupportedVersions []qtype.Version
 }
 
 func (s *Server) Serve() error {
@@ -25,11 +30,42 @@ func (s *Server) Serve() error {
 			s.conn.Close()
 			return err
 		}
-		srcID, destID := packet.GetHeader().GetConnectionIDPair()
-		sess, ok := s.sessions[srcID.String()]
+		ph := packet.GetHeader()
+		srcID, destID := ph.GetConnectionIDPair()
+		lh, ok := ph.(LongHeader)
+		// need to check session existence?
+		if ok && !s.IsVersionSupported(lh.Version) {
+			err := s.SendVersionNegotiationPacket(srcID, destID, remoteAddr)
+			if err != nil {
+			}
+			continue
+		}
+
+		sess, ok := s.sessions[destID.String()]
 		if !ok {
 			sess = NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID)
+			// might be deleted after handling packet
+			s.sessions[destID.String()] = sess
 		}
-		sess.ReceivePacket(packet)
+		sess.HandlePacket(packet)
 	}
+}
+
+func (s *Server) IsVersionSupported(version qtype.Version) bool {
+	for _, v := range s.SupportedVersions {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) SendVersionNegotiationPacket(srcID, destID qtype.ConnectionID, remoteAddr net.Addr) error {
+	p := NewVersionNegotiationPacket(srcID, destID, s.SupportedVersions)
+	wire, err := p.GetWire()
+	if err != nil {
+		//
+	}
+	_, err = s.conn.WriteTo(wire, remoteAddr)
+	return err
 }
