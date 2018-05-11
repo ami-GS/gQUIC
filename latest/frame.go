@@ -28,8 +28,8 @@ var FrameParserMap = map[FrameType]FrameParser{
 	NewConnectionIDFrameType:  ParseNewConnectionIDFrame,
 	StopSendingFrameType:      ParseStopSendingFrame,
 	AckFrameType:              ParseAckFrame,
-	PathChallengeFrameType:    ParsePathChallenge,
-	PathResponseFrameType:     ParsePathResponse,
+	PathChallengeFrameType:    ParsePathChallengeFrame,
+	PathResponseFrameType:     ParsePathResponseFrame,
 
 	// type should be (type & StreamFrameTypeCommon)
 	StreamFrameType: ParseStreamFrame,
