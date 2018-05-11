@@ -26,19 +26,19 @@ type QuicInt struct {
 	ByteLen int
 }
 
-func NewQuicInt(value uint64) (*QuicInt, error) {
+func NewQuicInt(value uint64) (QuicInt, error) {
 	val, flag, err := EncodeToValue(value)
 	if err != nil {
-		return nil, err
+		return QuicInt{0, 0, 0}, err
 	}
-	return &QuicInt{
+	return QuicInt{
 		Value:   val,
 		Flag:    flag,
 		ByteLen: int(math.Pow(2, float64(flag))),
 	}, nil
 }
 
-func (v *QuicInt) GetValue() uint64 {
+func (v QuicInt) GetValue() uint64 {
 	switch v.Flag {
 	case 0x00:
 		return v.Value
@@ -52,14 +52,14 @@ func (v *QuicInt) GetValue() uint64 {
 	return 0
 }
 
-func (v *QuicInt) PutWire(wire []byte) int {
+func (v QuicInt) PutWire(wire []byte) int {
 	utils.MyPutUint64(wire, v.Value, v.ByteLen)
 	return v.ByteLen
 }
 
-func ParseQuicInt(data []byte) (*QuicInt, error) {
+func ParseQuicInt(data []byte) (QuicInt, error) {
 	flag := (data[0] & 0xc0) >> 6
-	ret := &QuicInt{
+	ret := QuicInt{
 		Flag:    flag,
 		ByteLen: int(math.Pow(2, float64(flag))),
 		Value:   0,
