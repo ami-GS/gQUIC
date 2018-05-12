@@ -862,50 +862,50 @@ func (f *AckFrame) GetWire() (wire []byte, err error) {
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
 
-type PathChallenge struct {
+type PathChallengeFrame struct {
 	*BaseFrame
 	Data [8]byte
 }
 
-func NewPathChallenge(data [8]byte) *PathChallenge {
-	return &PathChallenge{
+func NewPathChallengeFrame(data [8]byte) *PathChallenge {
+	return &PathChallengeFrame{
 		BaseFrame: NewBaseFrame(PathChallengeFrameType),
 		Data:      data,
 	}
 }
 
-func ParsePathChallenge(data []byte) (Frame, int, error) {
-	f := NewPathChallenge([8]byte{})
+func ParsePathChallengeFrame(data []byte) (Frame, int, error) {
+	f := NewPathChallengeFrame([8]byte{})
 	copy(f.Data[:], data[1:9])
 	return f, 9, nil
 }
 
-func (f *PathChallenge) GetWire() (wire []byte, err error) {
+func (f PathChallengeFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 9)
 	wire[0] = byte(PathChallengeFrameType)
 	copy(wire[1:], f.Data[:])
 	return wire, nil
 }
 
-type PathResponse struct {
+type PathResponseFrame struct {
 	*BaseFrame
 	Data [8]byte
 }
 
-func NewPathResponse(data [8]byte) *PathResponse {
-	return &PathResponse{
+func NewPathResponseFrame(data [8]byte) *PathResponseFrame {
+	return &PathResponseFrame{
 		BaseFrame: NewBaseFrame(PathResponseFrameType),
 		Data:      data,
 	}
 }
 
-func ParsePathResponse(data []byte) (Frame, int, error) {
-	f := NewPathResponse([8]byte{})
+func ParsePathResponseFrame(data []byte) (Frame, int, error) {
+	f := NewPathResponseFrame([8]byte{})
 	copy(f.Data[:], data[1:9])
 	return f, 9, nil
 }
 
-func (f *PathResponse) GetWire() (wire []byte, err error) {
+func (f PathResponseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 9)
 	wire[0] = byte(PathResponseFrameType)
 	copy(wire[1:], f.Data[:])
