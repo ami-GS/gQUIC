@@ -84,7 +84,7 @@ type LongHeader struct {
 	SCIL         byte
 	DestConnID   qtype.ConnectionID
 	SrcConnID    qtype.ConnectionID
-	PayloadLen   *qtype.QuicInt
+	PayloadLen   qtype.QuicInt
 	PacketNumber qtype.PacketNumber
 }
 
