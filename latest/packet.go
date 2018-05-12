@@ -19,6 +19,7 @@ type Packet interface {
 	GetWire() ([]byte, error)
 	GetHeader() PacketHeader
 	SetHeader(ph PacketHeader)
+	GetFrames() []Frame
 	SetFrames(fs []Frame)
 }
 
@@ -65,6 +66,10 @@ func (bp *BasePacket) SetHeader(h PacketHeader) {
 
 func (bp *BasePacket) SetFrames(fs []Frame) {
 	bp.Frames = fs
+}
+
+func (bp *BasePacket) GetFrames() []Frame {
+	return bp.Frames
 }
 
 func (bp *BasePacket) GetWire() (wire []byte, err error) {
@@ -292,6 +297,9 @@ func (p *VersionNegotiationPacket) SetHeader(h PacketHeader) {
 }
 func (p *VersionNegotiationPacket) SetFrames(fs []Frame) {
 	// no op?
+}
+func (p *VersionNegotiationPacket) GetFrames() []Frame {
+	return nil
 }
 func (p *VersionNegotiationPacket) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
 	return p.SrcConnID, p.DestConnID
