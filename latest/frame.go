@@ -181,7 +181,7 @@ func ParseConnectionCloseFrame(data []byte) (Frame, int, error) {
 	return f, idx + int(f.ReasonLength.GetValue()), nil
 }
 
-func (f *ConnectionCloseFrame) GetWire() (wire []byte, err error) {
+func (f ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 3+f.ReasonLength.ByteLen+len(f.Reason))
 	wire[0] = byte(ConnectionCloseFrameType)
 	binary.BigEndian.PutUint16(wire[1:], f.ErrorCode)
@@ -237,7 +237,7 @@ func ParseApplicationCloseFrame(data []byte) (Frame, int, error) {
 	return f, idx + int(f.ReasonLength.GetValue()), nil
 }
 
-func (f *ApplicationCloseFrame) GetWire() (wire []byte, err error) {
+func (f ApplicationCloseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 3+f.ReasonLength.ByteLen+len(f.Reason))
 	wire[0] = byte(ApplicationCloseFrameType)
 	binary.BigEndian.PutUint16(wire[1:], f.ErrorCode)
@@ -297,7 +297,7 @@ func ParseRstStreamFrame(data []byte) (Frame, int, error) {
 	return frame, idx + frame.FinalOffset.ByteLen, nil
 }
 
-func (f *RstStreamFrame) GetWire() (wire []byte, err error) {
+func (f RstStreamFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen+2+f.FinalOffset.ByteLen)
 	wire[0] = byte(RstStreamFrameType)
 	idx := f.StreamID.PutWire(wire[1:]) + 1
@@ -325,7 +325,7 @@ func ParsePaddingFrame(data []byte) (Frame, int, error) {
 	}
 	return frame, len(data), nil
 }
-func (f *PaddingFrame) GetWire() (wire []byte, err error) {
+func (f PaddingFrame) GetWire() (wire []byte, err error) {
 	return []byte{0x00}, nil
 }
 
@@ -343,7 +343,7 @@ func ParsePingFrame(data []byte) (Frame, int, error) {
 	return NewPingFrame(), 1, nil // only header
 }
 
-func (f *PingFrame) GetWire() (wire []byte, err error) {
+func (f PingFrame) GetWire() (wire []byte, err error) {
 	return []byte{0x07}, nil
 }
 
@@ -381,7 +381,7 @@ func ParseMaxDataFrame(data []byte) (Frame, int, error) {
 	return f, 1 + f.Data.ByteLen, nil
 }
 
-func (f *MaxDataFrame) GetWire() (wire []byte, err error) {
+func (f MaxDataFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.Data.ByteLen)
 	wire[0] = byte(MaxDataFrameType)
 	f.Data.PutWire(wire[1:])
@@ -432,7 +432,7 @@ func ParseMaxStreamDataFrame(data []byte) (Frame, int, error) {
 	return f, 1 + f.StreamID.ByteLen + f.Data.ByteLen, nil
 }
 
-func (f *MaxStreamDataFrame) GetWire() (wire []byte, err error) {
+func (f MaxStreamDataFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen+f.Data.ByteLen)
 	wire[0] = byte(MaxStreamDataFrameType)
 	idx := f.StreamID.PutWire(wire[1:]) + 1
@@ -474,7 +474,7 @@ func ParseMaxStreamIDFrame(data []byte) (Frame, int, error) {
 	return f, 1 + f.StreamID.ByteLen, nil
 }
 
-func (f *MaxStreamIDFrame) GetWire() (wire []byte, err error) {
+func (f MaxStreamIDFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen)
 	wire[0] = byte(MaxStreamIDFrameType)
 	f.StreamID.PutWire(wire[1:])
@@ -515,7 +515,7 @@ func ParseBlockedFrame(data []byte) (Frame, int, error) {
 	return f, 1 + f.Offset.ByteLen, nil
 }
 
-func (f *BlockedFrame) GetWire() (wire []byte, err error) {
+func (f BlockedFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.Offset.ByteLen)
 	wire[0] = byte(BlockedFrameType)
 	f.Offset.PutWire(wire[1:])
@@ -568,7 +568,7 @@ func ParseStreamBlockedFrame(data []byte) (Frame, int, error) {
 	return f, 1 + f.StreamID.ByteLen + f.Offset.ByteLen, nil
 }
 
-func (f *StreamBlockedFrame) GetWire() (wire []byte, err error) {
+func (f StreamBlockedFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen+f.Offset.ByteLen)
 	wire[0] = byte(StreamBlockedFrameType)
 	f.StreamID.PutWire(wire[1:])
@@ -610,7 +610,7 @@ func ParseStreamIDBlockedFrame(data []byte) (Frame, int, error) {
 	return f, 1 + f.StreamID.ByteLen, nil
 }
 
-func (f *StreamIDBlockedFrame) GetWire() (wire []byte, err error) {
+func (f StreamIDBlockedFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen)
 	wire[0] = byte(StreamIDBlockedFrameType)
 	f.StreamID.PutWire(wire[1:])
@@ -680,7 +680,7 @@ func ParseNewConnectionIDFrame(data []byte) (Frame, int, error) {
 	return f, idx + 16, nil
 }
 
-func (f *NewConnectionIDFrame) GetWire() (wire []byte, err error) {
+func (f NewConnectionIDFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 18+len(f.ConnID)+f.Sequence.ByteLen)
 	wire[0] = byte(NewConnectionIDFrameType)
 	idx := f.Sequence.PutWire(wire) + 1
@@ -730,7 +730,7 @@ func ParseStopSendingFrame(data []byte) (Frame, int, error) {
 	return f, f.StreamID.ByteLen + 3, nil
 }
 
-func (f *StopSendingFrame) GetWire() (wire []byte, err error) {
+func (f StopSendingFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, f.StreamID.ByteLen+3)
 	wire[0] = byte(StopSendingFrameType)
 	f.StreamID.PutWire(wire[1:])
@@ -831,7 +831,7 @@ func ParseAckFrame(data []byte) (Frame, int, error) {
 	return f, idx, nil
 }
 
-func (f *AckFrame) GetWire() (wire []byte, err error) {
+func (f AckFrame) GetWire() (wire []byte, err error) {
 	blockByteLen := 0
 	for _, v := range f.AckBlocks {
 		blockByteLen += v.AckBlock.ByteLen + v.Gap.ByteLen
@@ -1002,7 +1002,7 @@ func ParseStreamFrame(data []byte) (Frame, int, error) {
 	return f, idx, nil
 }
 
-func (f *StreamFrame) GetWire() (wire []byte, err error) {
+func (f StreamFrame) GetWire() (wire []byte, err error) {
 	wireLen := 1 + f.StreamID.ByteLen + len(f.Data)
 	flag := byte(StreamFrameType)
 	if f.Offset.ByteLen != 0 {

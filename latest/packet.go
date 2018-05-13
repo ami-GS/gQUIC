@@ -263,7 +263,7 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 	return packet, idx, nil
 }
 
-func (p *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
+func (p VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	wire = make([]byte, int(6+p.DCIL+p.SCIL)+len(p.SupportedVersions)*4)
 	wire[0] = 0x80
 	binary.BigEndian.PutUint32(wire[1:], uint32(p.Version))
@@ -289,18 +289,18 @@ func (p *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	return
 }
 
-func (p *VersionNegotiationPacket) GetHeader() PacketHeader {
+func (p VersionNegotiationPacket) GetHeader() PacketHeader {
 	return nil
 }
-func (p *VersionNegotiationPacket) SetHeader(h PacketHeader) {
+func (p VersionNegotiationPacket) SetHeader(h PacketHeader) {
 	// no op?
 }
-func (p *VersionNegotiationPacket) SetFrames(fs []Frame) {
+func (p VersionNegotiationPacket) SetFrames(fs []Frame) {
 	// no op?
 }
-func (p *VersionNegotiationPacket) GetFrames() []Frame {
+func (p VersionNegotiationPacket) GetFrames() []Frame {
 	return nil
 }
-func (p *VersionNegotiationPacket) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
+func (p VersionNegotiationPacket) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
 	return p.SrcConnID, p.DestConnID
 }
