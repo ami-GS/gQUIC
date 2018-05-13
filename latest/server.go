@@ -7,8 +7,10 @@ import (
 )
 
 type Server struct {
-	conn              net.PacketConn
+	conn net.PacketConn
+	// TODO: replace to SessionStore
 	sessions          map[string]*Session //ConnectionID.String():Session
+	addrSessions      map[string]*Session //remoteAddr.String():Session, for identifing single connection if zero-len dest ID
 	SupportedVersions []qtype.Version
 }
 
@@ -41,11 +43,21 @@ func (s *Server) Serve() error {
 			continue
 		}
 
-		sess, ok := s.sessions[destID.String()]
-		if !ok {
-			sess = NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID)
-			// might be deleted after handling packet
-			s.sessions[destID.String()] = sess
+		var sess *Session
+		if len(destID) != 0 {
+			sess, ok = s.sessions[destID.String()]
+			if !ok {
+				sess = NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID)
+				// might be deleted after handling packet
+				s.sessions[destID.String()] = sess
+				s.addrSessions[remoteAddr.String()] = sess
+			}
+		} else {
+			sess, ok = s.addrSessions[remoteAddr.String()]
+			if !ok {
+				// drop packet if no corresponding connection
+				continue
+			}
 		}
 		sess.HandlePacket(packet)
 	}
