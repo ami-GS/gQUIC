@@ -10,15 +10,22 @@ type Session struct {
 	DoneHandShake   bool
 	conn            *Connection
 	recvPacketChann chan Packet
+	streamManager   *StreamManager
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Session {
-	return &Session{
+	sess := &Session{
 		DestConnID:      dstConnID,
 		SrcConnID:       srcConnID,
 		conn:            conn,
 		recvPacketChann: make(chan Packet),
 	}
+	sess.streamManager = &StreamManager{
+		streamMap: make(map[uint64]Stream),
+		sess:      sess,
+	}
+	return sess
+
 }
 
 func (s *Session) SendPacket(packet Packet) error {
