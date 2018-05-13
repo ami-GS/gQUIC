@@ -40,12 +40,55 @@ func (s *Session) RecvPacketLoop() {
 		select {
 		case p := <-s.recvPacketChann:
 			// TODO: parallel?
-			s.ReceivePacket(p)
+			s.HandlePacket(p)
 		default:
 		}
 	}
 }
 
-func (s *Session) ReceivePacket(p Packet) {
-	//TODO: apply packets
+func (s *Session) HandlePacket(p Packet) {
+	switch p.(type) {
+	case InitialPacket:
+		// must come from only client
+		// RetryPacket
+	case RetryPacket:
+		// must come from only server
+		// InitialPacket again
+
+	}
+
+	s.HandleFrames(p.GetFrames())
+}
+
+func (s *Session) HandleFrames(fs []Frame) error {
+	for _, frame := range fs {
+		switch f := frame.(type) {
+		case PaddingFrame:
+		case ConnectionCloseFrame:
+		case ApplicationCloseFrame:
+		case MaxDataFrame:
+		case MaxStreamIDFrame:
+		case PingFrame:
+		case BlockedFrame:
+		case StreamIDBlockedFrame:
+		case NewConnectionIDFrame:
+		case AckFrame:
+		case PathChallengeFrame:
+		case PathResponseFrame:
+		case StreamFrame:
+			s.streamManager.handleStreamFrame(&f)
+		case RstStreamFrame:
+			s.streamManager.handleRstStreamFrame(&f)
+		case MaxStreamDataFrame:
+			s.streamManager.handleMaxStreamDataFrame(&f)
+		case StreamBlockedFrame:
+			s.streamManager.handleStreamBlockedFrame(&f)
+		case StopSendingFrame:
+			s.streamManager.handleStopSendingFrame(&f)
+		default:
+			// error
+			return nil
+		}
+	}
+	return nil
 }
