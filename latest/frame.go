@@ -80,6 +80,8 @@ func (frameType FrameType) String() string {
 	}
 	if 0x10 <= frameType && frameType <= 0x17 {
 		return "STREAM"
+	} else if frameType > 0x17 {
+		return "NO_SUCH_TYPE"
 	}
 	return names[int(frameType)]
 }
@@ -867,7 +869,7 @@ type PathChallengeFrame struct {
 	Data [8]byte
 }
 
-func NewPathChallengeFrame(data [8]byte) *PathChallenge {
+func NewPathChallengeFrame(data [8]byte) *PathChallengeFrame {
 	return &PathChallengeFrame{
 		BaseFrame: NewBaseFrame(PathChallengeFrameType),
 		Data:      data,
