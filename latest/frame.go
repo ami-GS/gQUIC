@@ -937,28 +937,40 @@ type StreamFrame struct {
 	Data     []byte
 }
 
-func NewStreamFrame(streamID, offset, length uint64, fin bool, data []byte) *StreamFrame {
+func NewStreamFrame(streamID, offset, length uint64, offF, lenF, fin bool, data []byte) *StreamFrame {
 	sid, err := qtype.NewQuicInt(streamID)
 	if err != nil {
 		// error
 	}
+	typeFlag := StreamFrameType
+
 	// TODO: zero for no offset and length should not be appropriate
-	ofst := qtype.QuicInt{0, 0, 0}
-	if offset != 0 {
-		ofst, err = qtype.NewQuicInt(offset)
-		if err != nil {
-			// error
+	ofst, _ := qtype.NewQuicInt(0)
+	if offF {
+		typeFlag |= 0x04
+		if offset != 0 {
+			ofst, err = qtype.NewQuicInt(offset)
+			if err != nil {
+				// error
+			}
 		}
 	}
-	lngth := qtype.QuicInt{0, 0, 0}
-	if length == 0 {
-		lngth, err = qtype.NewQuicInt(length)
-		if err != nil {
-			// error
+	lngth, _ := qtype.NewQuicInt(0)
+	if lenF {
+		typeFlag |= 0x02
+		if length != 0 {
+			lngth, err = qtype.NewQuicInt(length)
+			if err != nil {
+				// error
+			}
 		}
 	}
+	if fin {
+		typeFlag |= 0x01
+	}
+
 	return &StreamFrame{
-		BaseFrame: NewBaseFrame(StreamFrameType),
+		BaseFrame: NewBaseFrame(typeFlag),
 		StreamID:  qtype.StreamID(sid),
 		Offset:    ofst,
 		Length:    lngth,
@@ -968,9 +980,10 @@ func NewStreamFrame(streamID, offset, length uint64, fin bool, data []byte) *Str
 }
 
 func ParseStreamFrame(data []byte) (Frame, int, error) {
+	// TODO: Error, empty data is allowed only when FIN == 1 or offset == 0
 	idx := 1
-	flag := data[0] ^ 0x07
-	f := NewStreamFrame(0, 0, 0, false, nil)
+	flag := data[0] & 0x07
+	f := NewStreamFrame(0, 0, 0, false, false, false, nil)
 	sid, err := qtype.ParseQuicInt(data[idx:])
 	if err != nil {
 		return nil, 0, err
@@ -979,6 +992,7 @@ func ParseStreamFrame(data []byte) (Frame, int, error) {
 	idx += f.StreamID.ByteLen
 	// OFF bit
 	if flag&0x04 == 0x04 {
+		f.Type |= 0x04
 		f.Offset, err = qtype.ParseQuicInt(data[idx:])
 		if err != nil {
 			return nil, 0, err
@@ -988,17 +1002,26 @@ func ParseStreamFrame(data []byte) (Frame, int, error) {
 
 	// LEN bit
 	if flag&0x02 == 0x02 {
+		f.Type |= 0x02
 		f.Length, err = qtype.ParseQuicInt(data[idx:])
 		if err != nil {
 			return nil, 0, err
 		}
 		idx += f.Length.ByteLen
+		f.Data = data[idx : uint64(idx)+f.Length.GetValue()]
+		idx += int(f.Length.GetValue())
+	} else {
+		if len(data)-idx == 0 {
+			f.Data = nil
+		} else {
+			f.Data = data[idx:]
+			idx += len(data) - idx
+		}
 	}
-	f.Data = data[idx : uint64(idx)+f.Length.GetValue()]
-	idx += int(f.Length.GetValue())
 
 	// FIN bit
 	if flag&0x01 == 0x01 {
+		f.Type |= 0x01
 		f.Finish = true
 	}
 	return f, idx, nil
@@ -1006,25 +1029,19 @@ func ParseStreamFrame(data []byte) (Frame, int, error) {
 
 func (f StreamFrame) GetWire() (wire []byte, err error) {
 	wireLen := 1 + f.StreamID.ByteLen + len(f.Data)
-	flag := byte(StreamFrameType)
-	if f.Offset.ByteLen != 0 {
+	if f.Type&0x04 == 0x04 {
 		wireLen += f.Offset.ByteLen
-		flag |= 0x04
 	}
-	if f.Length.ByteLen != 0 {
+	if f.Type&0x02 == 0x02 {
 		wireLen += f.Length.ByteLen
-		flag |= 0x02
-	}
-	if f.Finish {
-		flag |= 0x01
 	}
 	wire = make([]byte, wireLen)
-	wire[0] = flag
+	wire[0] = byte(f.Type)
 	idx := f.StreamID.PutWire(wire[1:]) + 1
-	if flag&0x40 == 0x40 {
+	if f.Type&0x04 == 0x04 {
 		idx += f.Offset.PutWire(wire[idx:])
 	}
-	if flag&0x20 == 0x20 {
+	if f.Type&0x02 == 0x02 {
 		idx += f.Length.PutWire(wire[idx:])
 	}
 	copy(wire[idx:], f.Data)
