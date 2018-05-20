@@ -148,12 +148,12 @@ func GetFrameWires(frames []Frame) (allWire []byte, err error) {
 
 type ConnectionCloseFrame struct {
 	*BaseFrame
-	ErrorCode    uint16
+	ErrorCode    qtype.TransportError
 	ReasonLength qtype.QuicInt
 	Reason       string
 }
 
-func NewConnectionCloseFrame(errorCode uint16, reason string) *ConnectionCloseFrame {
+func NewConnectionCloseFrame(errorCode qtype.TransportError, reason string) *ConnectionCloseFrame {
 	rLen, err := qtype.NewQuicInt(uint64(len(reason)))
 	if err != nil {
 		// error
@@ -170,7 +170,7 @@ func ParseConnectionCloseFrame(data []byte) (Frame, int, error) {
 	var err error
 	f := NewConnectionCloseFrame(0, "")
 	idx := 1
-	f.ErrorCode = binary.BigEndian.Uint16(data[idx:])
+	f.ErrorCode = qtype.TransportError(binary.BigEndian.Uint16(data[idx:]))
 	// TODO: check whether the code exists
 	idx += 2
 	f.ReasonLength, err = qtype.ParseQuicInt(data[idx:])
@@ -186,7 +186,7 @@ func ParseConnectionCloseFrame(data []byte) (Frame, int, error) {
 func (f ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 3+f.ReasonLength.ByteLen+len(f.Reason))
 	wire[0] = byte(ConnectionCloseFrameType)
-	binary.BigEndian.PutUint16(wire[1:], f.ErrorCode)
+	binary.BigEndian.PutUint16(wire[1:], uint16(f.ErrorCode))
 	idx := f.ReasonLength.PutWire(wire[3:]) + 3
 	copy(wire[idx:], []byte(f.Reason))
 	return
@@ -204,12 +204,12 @@ func (f ConnectionCloseFrame) GetWire() (wire []byte, err error) {
 
 type ApplicationCloseFrame struct {
 	*BaseFrame
-	ErrorCode    uint16
+	ErrorCode    qtype.ApplicationError
 	ReasonLength qtype.QuicInt
 	Reason       string
 }
 
-func NewApplicationCloseFrame(errorCode uint16, reason string) *ApplicationCloseFrame {
+func NewApplicationCloseFrame(errorCode qtype.ApplicationError, reason string) *ApplicationCloseFrame {
 	rLen, err := qtype.NewQuicInt(uint64(len(reason)))
 	if err != nil {
 		// error
@@ -226,7 +226,7 @@ func ParseApplicationCloseFrame(data []byte) (Frame, int, error) {
 	var err error
 	f := NewApplicationCloseFrame(0, "")
 	idx := 1
-	f.ErrorCode = binary.BigEndian.Uint16(data[idx:])
+	f.ErrorCode = qtype.ApplicationError(binary.BigEndian.Uint16(data[idx:]))
 	// TODO: check whether the code exists
 	idx += 2
 	f.ReasonLength, err = qtype.ParseQuicInt(data[idx:])
@@ -242,7 +242,7 @@ func ParseApplicationCloseFrame(data []byte) (Frame, int, error) {
 func (f ApplicationCloseFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 3+f.ReasonLength.ByteLen+len(f.Reason))
 	wire[0] = byte(ApplicationCloseFrameType)
-	binary.BigEndian.PutUint16(wire[1:], f.ErrorCode)
+	binary.BigEndian.PutUint16(wire[1:], uint16(f.ErrorCode))
 	idx := f.ReasonLength.PutWire(wire[3:]) + 3
 	copy(wire[idx:], []byte(f.Reason))
 	return
@@ -263,11 +263,11 @@ func (f ApplicationCloseFrame) GetWire() (wire []byte, err error) {
 type RstStreamFrame struct {
 	*BaseFrame
 	StreamID    qtype.StreamID
-	ErrorCode   uint16
+	ErrorCode   qtype.ApplicationError
 	FinalOffset qtype.QuicInt
 }
 
-func NewRstStreamFrame(streamID uint64, errorCode uint16, offset uint64) *RstStreamFrame {
+func NewRstStreamFrame(streamID uint64, errorCode qtype.ApplicationError, offset uint64) *RstStreamFrame {
 	sid, err := qtype.NewQuicInt(streamID)
 	if err != nil {
 		// error
@@ -293,7 +293,7 @@ func ParseRstStreamFrame(data []byte) (Frame, int, error) {
 		return nil, 0, err
 	}
 	idx += frame.StreamID.ByteLen
-	frame.ErrorCode = binary.BigEndian.Uint16(data[idx:])
+	frame.ErrorCode = qtype.ApplicationError(binary.BigEndian.Uint16(data[idx:]))
 	idx += 2
 	frame.FinalOffset, err = qtype.ParseQuicInt(data[idx:])
 	return frame, idx + frame.FinalOffset.ByteLen, nil
@@ -303,7 +303,7 @@ func (f RstStreamFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, 1+f.StreamID.ByteLen+2+f.FinalOffset.ByteLen)
 	wire[0] = byte(RstStreamFrameType)
 	idx := f.StreamID.PutWire(wire[1:]) + 1
-	binary.BigEndian.PutUint16(wire[idx:], f.ErrorCode)
+	binary.BigEndian.PutUint16(wire[idx:], uint16(f.ErrorCode))
 	idx += 2
 	idx += f.FinalOffset.PutWire(wire[idx:])
 	return wire, nil
@@ -706,10 +706,10 @@ func (f NewConnectionIDFrame) GetWire() (wire []byte, err error) {
 type StopSendingFrame struct {
 	*BaseFrame
 	StreamID  qtype.StreamID
-	ErrorCode uint16
+	ErrorCode qtype.ApplicationError
 }
 
-func NewStopSendingFrame(streamID uint64, errCode uint16) *StopSendingFrame {
+func NewStopSendingFrame(streamID uint64, errCode qtype.ApplicationError) *StopSendingFrame {
 	sid, err := qtype.NewQuicInt(streamID)
 	if err != nil {
 		// error
@@ -728,7 +728,7 @@ func ParseStopSendingFrame(data []byte) (Frame, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	f.ErrorCode = binary.BigEndian.Uint16(data[1+f.StreamID.ByteLen:])
+	f.ErrorCode = qtype.ApplicationError(binary.BigEndian.Uint16(data[1+f.StreamID.ByteLen:]))
 	return f, f.StreamID.ByteLen + 3, nil
 }
 
@@ -736,7 +736,7 @@ func (f StopSendingFrame) GetWire() (wire []byte, err error) {
 	wire = make([]byte, f.StreamID.ByteLen+3)
 	wire[0] = byte(StopSendingFrameType)
 	f.StreamID.PutWire(wire[1:])
-	binary.BigEndian.PutUint16(wire[1+f.StreamID.ByteLen:], f.ErrorCode)
+	binary.BigEndian.PutUint16(wire[1+f.StreamID.ByteLen:], uint16(f.ErrorCode))
 	return
 }
 
