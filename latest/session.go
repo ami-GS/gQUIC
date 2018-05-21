@@ -20,10 +20,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 		conn:            conn,
 		recvPacketChann: make(chan Packet),
 	}
-	sess.streamManager = &StreamManager{
-		streamMap: make(map[uint64]Stream),
-		sess:      sess,
-	}
+	sess.streamManager = NewStreamManager(sess)
 	return sess
 
 }

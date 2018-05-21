@@ -7,6 +7,13 @@ type StreamManager struct {
 	sess      *Session
 }
 
+func NewStreamManager(sess *Session) *StreamManager {
+	return &StreamManager{
+		streamMap: make(map[uint64]Stream),
+		sess:      sess,
+	}
+}
+
 func (s *StreamManager) GetOrNewRecvStream(streamID qtype.StreamID, sess *Session) (*RecvStream, error) {
 	sidVal := streamID.GetValue()
 
