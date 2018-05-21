@@ -14,90 +14,137 @@ func NewStreamManager(sess *Session) *StreamManager {
 	}
 }
 
-func (s *StreamManager) GetOrNewRecvStream(streamID qtype.StreamID, sess *Session) (*RecvStream, error) {
+func (s *StreamManager) IsValidID(streamID *qtype.StreamID) error {
+	if streamID.GetValue() <= s.maxStreamID.GetValue() {
+		return nil
+	}
+	return qtype.StreamIDError
+}
+
+func (s *StreamManager) GetOrNewRecvStream(streamID *qtype.StreamID, sess *Session) (*RecvStream, bool, error) {
+	err := s.IsValidID(streamID)
+	if err != nil {
+		return nil, false, err
+	}
 	sidVal := streamID.GetValue()
+	if sidVal&0x3 != 0x2 {
+		// error, uni directional should be 0x2 or 0x3
+		return nil, false, nil
+	}
 
 	stream, ok := s.streamMap[sidVal]
 	if ok {
-		st, ok := stream.(RecvStream)
+		st, ok := stream.(*RecvStream)
 		if !ok {
 			// TODO: what error?
-			return nil, nil
+			return nil, false, nil
 		}
-		return &st, nil
+		return st, false, nil
 	}
 	st := newRecvStream(streamID, sess)
 	s.streamMap[sidVal] = st
-	return st, nil
+	return st, true, nil
 }
 
-func (s *StreamManager) GetOrNewSendStream(streamID qtype.StreamID, sess *Session) (*SendStream, error) {
+func (s *StreamManager) GetOrNewSendStream(streamID *qtype.StreamID, sess *Session) (*SendStream, bool, error) {
+	err := s.IsValidID(streamID)
+	if err != nil {
+		return nil, false, err
+	}
 	sidVal := streamID.GetValue()
+	if sidVal&0x2 != 0x2 {
+		// error, uni directional should be 0x2 or 0x3
+		return nil, false, nil
+	}
 
 	stream, ok := s.streamMap[sidVal]
 	if ok {
-		st, ok := stream.(SendStream)
+		st, ok := stream.(*SendStream)
 		if !ok {
 			// TODO: what error?
-			return nil, nil
+			return nil, false, nil
 		}
-		return &st, nil
+		return st, false, nil
 	}
 	st := newSendStream(streamID, sess)
 	s.streamMap[sidVal] = st
-	return st, nil
+	return st, true, nil
 }
 
-func (s *StreamManager) GetOrNewSendRecvStream(streamID qtype.StreamID, sess *Session) (*SendRecvStream, error) {
+func (s *StreamManager) GetOrNewSendRecvStream(streamID *qtype.StreamID, sess *Session) (*SendRecvStream, bool, error) {
+	err := s.IsValidID(streamID)
+	if err != nil {
+		return nil, false, err
+	}
 	sidVal := streamID.GetValue()
+	if sidVal&0x2 == 0x2 {
+		// error, bi directional should be 0x0 or 0x1
+		return nil, false, nil
+	}
 
 	stream, ok := s.streamMap[sidVal]
 	if ok {
-		st, ok := stream.(SendRecvStream)
+		st, ok := stream.(*SendRecvStream)
 		if !ok {
 			// TODO: what error?
-			return nil, nil
+			return nil, false, nil
 		}
-		return &st, nil
+		return st, false, nil
 	}
 	st := newSendRecvStream(streamID, sess)
 	s.streamMap[sidVal] = st
-	return st, nil
+	return st, true, nil
 }
 func (s *StreamManager) handleStreamFrame(frame *StreamFrame) error {
-	stream, err := s.GetOrNewRecvStream(frame.StreamID, s.sess)
+	stream, _, err := s.GetOrNewRecvStream(&frame.StreamID, s.sess)
 	if err != nil {
 		return err
 	}
 	return stream.handleStreamFrame(frame)
 }
 func (s *StreamManager) handleStreamBlockedFrame(frame *StreamBlockedFrame) error {
-	stream, err := s.GetOrNewRecvStream(frame.StreamID, s.sess)
+	stream, _, err := s.GetOrNewRecvStream(&frame.StreamID, s.sess)
 	if err != nil {
 		return err
 	}
 	return stream.handleStreamBlockedFrame(frame)
 }
 func (s *StreamManager) handleRstStreamFrame(frame *RstStreamFrame) error {
-	stream, err := s.GetOrNewRecvStream(frame.StreamID, s.sess)
+	stream, _, err := s.GetOrNewRecvStream(&frame.StreamID, s.sess)
 	if err != nil {
 		return err
 	}
 	return stream.handleRstStreamFrame(frame)
 
 }
+
 func (s *StreamManager) handleStopSendingFrame(frame *StopSendingFrame) error {
-	// TODO: This MUST not crenate New Stream
-	stream, err := s.GetOrNewSendStream(frame.StreamID, s.sess)
+	stream, isNew, err := s.GetOrNewSendStream(&frame.StreamID, s.sess)
 	if err != nil {
 		return err
+	}
+	// Receiving a STOP_SENDING frame for a send stream that is "Ready" or
+	// non-existent MUST be treated as a connection error of type
+	// PROTOCOL_VIOLATION.
+	if isNew {
+		sid := frame.StreamID.GetValue()
+		delete(s.streamMap, sid)
+		return qtype.ProtocolViolation
 	}
 	return stream.handleStopSendingFrame(frame)
 }
 func (s *StreamManager) handleMaxStreamDataFrame(frame *MaxStreamDataFrame) error {
-	stream, err := s.GetOrNewSendStream(frame.StreamID, s.sess)
+	stream, isNew, err := s.GetOrNewSendStream(&frame.StreamID, s.sess)
 	if err != nil {
 		return err
+	}
+	// An endpoint that receives a MAX_STREAM_DATA frame for a send-only
+	// stream it has not opened MUST terminate the connection with error
+	// PROTOCOL_VIOLATION.
+	if isNew {
+		sid := frame.StreamID.GetValue()
+		delete(s.streamMap, sid)
+		return qtype.ProtocolViolation
 	}
 	return stream.handleMaxStreamDataFrame(frame)
 }
@@ -138,6 +185,10 @@ func newSendStream(streamID qtype.StreamID, sess *Session) *SendStream {
 		//Window:              NewWindow(conn.Window.initialSize),
 		//FlowControllBlocked: false,
 	}
+}
+
+func (s SendStream) IsTerminated() bool {
+	return s.State == qtype.StreamDataRecvd || s.State == qtype.StreamResetRecvd
 }
 
 func (s *SendStream) sendFrame(f Frame) (err error) {
