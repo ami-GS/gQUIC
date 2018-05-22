@@ -157,6 +157,13 @@ func (s *StreamManager) handleMaxStreamDataFrame(frame *MaxStreamDataFrame) erro
 type Stream interface {
 	GetState() qtype.StreamState
 	GetID() qtype.StreamID
+	IsTerminated() bool
+	handleMaxStreamDataFrame(f *MaxStreamDataFrame) error
+	handleStopSendingFrame(f *StopSendingFrame) error
+	//handleAckFrame(f *AckFrame) error
+	handleRstStreamFrame(f *RstStreamFrame) error
+	handleStreamFrame(f *StreamFrame) error
+	handleStreamBlockedFrame(f *StreamBlockedFrame) error
 }
 
 type BaseStream struct {
@@ -260,11 +267,10 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 // SendStream handle StopSending for receiving abondon request
 func (s *SendStream) handleStopSendingFrame(f *StopSendingFrame) error {
 	if s.State == qtype.StreamReady {
-		// TODO: connection error of type PROTOCOL_VIOLATION
-		return nil
+		return qtype.ProtocolViolation
 	}
-	// respond by RstStreamFrame
-	//s.sendRstStreamFrame(NewRstStreamFrame(f.StreamID, 0, 0))
+	// respond by RstStreamFrame with error code of STOPPING
+	//s.sendRstStreamFrame(NewRstStreamFrame(f.StreamID, qtype.Stopping, 0))
 	return nil
 }
 
@@ -277,6 +283,18 @@ func (s *SendStream) handleAckFrame(f *AckFrame) error {
 		s.State = qtype.StreamResetRecvd
 	}
 	return nil
+}
+
+func (s *SendStream) handleStreamFrame(f *StreamFrame) error {
+	return qtype.ProtocolViolation
+}
+
+func (s *SendStream) handleRstStreamFrame(f *RstStreamFrame) error {
+	return qtype.ProtocolViolation
+}
+
+func (s *SendStream) handleStreamBlockedFrame(f *StreamBlockedFrame) error {
+	return qtype.ProtocolViolation
 }
 
 func (s *SendStream) ackedAllStreamData() {
@@ -342,6 +360,18 @@ func (s *RecvStream) sendStopSendingFrame(f *StopSendingFrame) error {
 	}
 
 	return nil
+}
+
+/*
+// need to check implementation
+func (s *RecvStream) handleAckFrame(f *AckFrame) error                     { return nil }
+*/
+func (s *RecvStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
+	return qtype.ProtocolViolation
+}
+
+func (s *RecvStream) handleStopSendingFrame(f *StopSendingFrame) error {
+	return qtype.ProtocolViolation
 }
 
 func (s *RecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
