@@ -163,6 +163,9 @@ type BaseStream struct {
 	ID    qtype.StreamID
 	State qtype.StreamState
 	sess  *Session
+
+	DataSizeLimit uint64
+	DataSizeUsed  uint64
 }
 
 func (s BaseStream) GetState() qtype.StreamState {
@@ -179,10 +182,10 @@ type SendStream struct {
 	SendBuffer []byte
 }
 
-func newSendStream(streamID qtype.StreamID, sess *Session) *SendStream {
+func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 	return &SendStream{
 		BaseStream: &BaseStream{
-			ID:    streamID,
+			ID:    *streamID,
 			State: qtype.StreamReady,
 			sess:  sess,
 		},
@@ -291,12 +294,16 @@ func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
 	heap.Init(h)
 	return &RecvStream{
 		BaseStream: &BaseStream{
-			ID:    streamID,
+			ID:    *streamID,
 			State: qtype.StreamRecv,
 			sess:  sess,
 		},
 		ReorderBuffer: h,
 	}
+}
+
+func (s RecvStream) IsTerminated() bool {
+	return s.State == qtype.StreamDataRead || s.State == qtype.StreamResetRead
 }
 
 // returns data, is_reset
@@ -376,10 +383,10 @@ type SendRecvStream struct {
 	*BaseStream
 }
 
-func newSendRecvStream(streamID qtype.StreamID, sess *Session) *SendRecvStream {
+func newSendRecvStream(streamID *qtype.StreamID, sess *Session) *SendRecvStream {
 	return &SendRecvStream{
 		BaseStream: &BaseStream{
-			ID:    streamID,
+			ID:    *streamID,
 			State: qtype.StreamIdle,
 			sess:  sess,
 		},
