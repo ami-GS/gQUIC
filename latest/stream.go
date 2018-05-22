@@ -1,6 +1,11 @@
 package quiclatest
 
-import "github.com/ami-GS/gQUIC/latest/qtype"
+import (
+	"container/heap"
+
+	"github.com/ami-GS/gQUIC/latest/qtype"
+	"github.com/ami-GS/gQUIC/latest/utils"
+)
 
 type StreamManager struct {
 	streamMap map[uint64]Stream
@@ -277,16 +282,20 @@ func (s *SendStream) ackedAllStreamData() {
 
 type RecvStream struct {
 	*BaseStream
-	ReorderBuffer map[uint64][]byte
+	ReorderBuffer *utils.Heap
+	DataSize      uint64 // will be known after receiving all data
 }
 
-func newRecvStream(streamID qtype.StreamID, sess *Session) *RecvStream {
+func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
+	h := &utils.Heap{}
+	heap.Init(h)
 	return &RecvStream{
 		BaseStream: &BaseStream{
 			ID:    streamID,
 			State: qtype.StreamRecv,
 			sess:  sess,
 		},
+		ReorderBuffer: h,
 	}
 }
 
@@ -298,8 +307,15 @@ func (s *RecvStream) ReadData() ([]byte, bool) {
 		s.State = qtype.StreamResetRead
 		return nil, true
 	}
+
+	out := make([]byte, s.DataSize)
+	for s.ReorderBuffer.Len() > 0 {
+		item := heap.Pop(s.ReorderBuffer).(*utils.Item)
+		copy(out[item.Offset:], item.Data)
+	}
+
 	s.State = qtype.StreamDataRead
-	return nil, false
+	return out, false
 }
 
 func (s *RecvStream) sendMaxStreamDataFrame(f *MaxStreamDataFrame) error {
@@ -341,7 +357,7 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 	if f.Finish {
 		s.State = qtype.StreamSizeKnown
 	}
-	//s.ReorderBuffer f.Data
+	heap.Push(s.ReorderBuffer, &utils.Item{f.Offset.GetValue(), f.Data})
 
 	// do something
 	s.State = qtype.StreamDataRecvd
