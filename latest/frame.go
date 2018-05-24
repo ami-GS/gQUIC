@@ -1075,8 +1075,8 @@ func (f PathResponseFrame) genWire() (wire []byte, err error) {
 type StreamFrame struct {
 	*BaseFrame
 	StreamID qtype.StreamID
-	Offset   qtype.QuicInt
-	Length   qtype.QuicInt
+	Offset   *qtype.QuicInt
+	Length   *qtype.QuicInt
 	Finish   bool
 	Data     []byte
 }
@@ -1088,25 +1088,23 @@ func NewStreamFrame(streamID, offset, length uint64, offF, lenF, fin bool, data 
 	}
 	typeFlag := StreamFrameType
 
-	ofst, _ := qtype.NewQuicInt(0)
+	ofst := (*qtype.QuicInt)(nil)
 	if offF {
 		typeFlag |= 0x04
-		if offset != 0 {
-			ofst, err = qtype.NewQuicInt(offset)
-			if err != nil {
-				// error
-			}
+		tmp, err := qtype.NewQuicInt(offset)
+		if err != nil {
+			// error
 		}
+		ofst = &tmp
 	}
-	lngth, _ := qtype.NewQuicInt(0)
+	lngth := (*qtype.QuicInt)(nil)
 	if lenF {
 		typeFlag |= 0x02
-		if length != 0 {
-			lngth, err = qtype.NewQuicInt(length)
-			if err != nil {
-				// error
-			}
+		tmp, err := qtype.NewQuicInt(length)
+		if err != nil {
+			// error
 		}
+		lngth = &tmp
 	}
 	if fin {
 		typeFlag |= 0x01
@@ -1132,7 +1130,7 @@ func ParseStreamFrame(data []byte) (Frame, int, error) {
 	idx := 1
 	flag := data[0] & 0x07
 	f := &StreamFrame{
-		BaseFrame: NewBaseFrame(FrameType(flag)),
+		BaseFrame: NewBaseFrame(StreamFrameType | FrameType(flag)),
 	}
 	sid, err := qtype.ParseQuicInt(data[idx:])
 	if err != nil {
@@ -1143,20 +1141,22 @@ func ParseStreamFrame(data []byte) (Frame, int, error) {
 	// OFF bit
 	if flag&0x04 == 0x04 {
 		f.Type |= 0x04
-		f.Offset, err = qtype.ParseQuicInt(data[idx:])
+		tmp, err := qtype.ParseQuicInt(data[idx:])
 		if err != nil {
 			return nil, 0, err
 		}
+		f.Offset = &tmp
 		idx += f.Offset.ByteLen
 	}
 
 	// LEN bit
 	if flag&0x02 == 0x02 {
 		f.Type |= 0x02
-		f.Length, err = qtype.ParseQuicInt(data[idx:])
+		tmp, err := qtype.ParseQuicInt(data[idx:])
 		if err != nil {
 			return nil, 0, err
 		}
+		f.Length = &tmp
 		idx += f.Length.ByteLen
 		f.Data = data[idx : uint64(idx)+f.Length.GetValue()]
 		idx += int(f.Length.GetValue())

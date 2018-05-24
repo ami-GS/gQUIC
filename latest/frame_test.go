@@ -47,10 +47,10 @@ func TestStreamFrame(t *testing.T) {
 	Convey("NewStreamFrame returns stream frame", t, func() {
 		sf1 := NewStreamFrame(0, 0, 1, false, true, false, []byte{0x01})
 		sid, _ := qtype.NewQuicInt(0)
-		ofst, _ := qtype.NewQuicInt(0)
 		lngt, _ := qtype.NewQuicInt(1)
 		sType := 0x12
-		sfexpect := StreamFrame{NewBaseFrame(FrameType(sType)), qtype.StreamID(sid), ofst, lngt, false, []byte{0x01}}
+		sfexpect := StreamFrame{NewBaseFrame(FrameType(sType)), qtype.StreamID(sid), nil, &lngt, false, []byte{0x01}}
+		sfexpect.wire = []byte{0x12, 0, 1, 1}
 		So(sf1, ShouldResemble, &sfexpect)
 	})
 }
@@ -107,50 +107,44 @@ func TestParseStreamFrame(t *testing.T) {
 	})
 }
 
-func TestGetWireOfStreamFrame(t *testing.T) {
+func TestGenWireOfStreamFrame(t *testing.T) {
 	Convey("streamframetype:0x10, streamID:0, offset:absent, length:absent, data:fill all(only 0x00)", t, func() {
 		eWire := []byte{0x10, 0x00, 0x00}
 		Frame := NewStreamFrame(0, 0, 0, false, false, false, []byte{0x00})
-		aWire, err := Frame.GetWire()
-		So(err, ShouldBeNil)
+		aWire := Frame.GetWire()
 		So(aWire, ShouldResemble, eWire)
 	})
 	Convey("streamframetype:0x14, streamID:0, offset:1, length:absent, data:fill all(only 0x00)", t, func() {
 		eWire := []byte{0x14, 0x00, 0x01, 0x00}
 		Frame := NewStreamFrame(0, 1, 0, true, false, false, []byte{0x00})
-		aWire, err := Frame.GetWire()
-		So(err, ShouldBeNil)
+		aWire := Frame.GetWire()
 		So(aWire, ShouldResemble, eWire)
 	})
 
 	Convey("streamframetype:0x14, streamID:0, offset:0, length:absent, data:nil", t, func() {
 		eWire := []byte{0x14, 0x00, 0x00}
 		Frame := NewStreamFrame(0, 0, 0, true, false, false, nil)
-		aWire, err := Frame.GetWire()
-		So(err, ShouldBeNil)
+		aWire := Frame.GetWire()
 		So(aWire, ShouldResemble, eWire)
 	})
 	Convey("streamframetype:0x12, streamID:0, offset:absent, length:1, data:0x00", t, func() {
 		eWire := []byte{0x12, 0x00, 0x01, 0x00}
 		Frame := NewStreamFrame(0, 0, 1, false, true, false, []byte{0x00})
-		aWire, err := Frame.GetWire()
-		So(err, ShouldBeNil)
+		aWire := Frame.GetWire()
 		So(aWire, ShouldResemble, eWire)
 	})
 
 	Convey("streamframetype:0x17, streamID:0, offset:absent, length:absent, data:nil", t, func() {
 		eWire := []byte{0x11, 0x00}
 		Frame := NewStreamFrame(0, 0, 0, false, false, true, nil)
-		aWire, err := Frame.GetWire()
-		So(err, ShouldBeNil)
+		aWire := Frame.GetWire()
 		So(aWire, ShouldResemble, eWire)
 	})
 
 	Convey("streamframetype:0x16, streamID:0, offset:0, length:0, data:fill all(only 0x00)", t, func() {
 		eWire := []byte{0x14, 0x00, 0x00, 0x00}
 		Frame := NewStreamFrame(0, 0, 0, true, false, false, []byte{0x00})
-		aWire, err := Frame.GetWire()
-		So(err, ShouldBeNil)
+		aWire := Frame.GetWire()
 		So(aWire, ShouldResemble, eWire)
 	})
 }
