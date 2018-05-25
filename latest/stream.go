@@ -124,13 +124,36 @@ func (s *StreamManager) handleStreamBlockedFrame(frame *StreamBlockedFrame) erro
 	}
 	return stream.handleStreamBlockedFrame(frame)
 }
+func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) error {
+	// peer needs new stream with larger streamID than maximum streamID
+	return nil
+}
 func (s *StreamManager) handleRstStreamFrame(frame *RstStreamFrame) error {
 	stream, _, err := s.GetOrNewRecvStream(&frame.StreamID, s.sess)
 	if err != nil {
 		return err
 	}
 	return stream.handleRstStreamFrame(frame)
+}
+func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
+	sid := frame.StreamID.GetValue()
 
+	if sid&0x2 == 0x2 {
+		// unidirectional
+		if sid < s.maxStreamIDUni.GetValue() {
+			// ignored
+			return nil
+		}
+		s.maxStreamIDUni = frame.StreamID
+	} else {
+		//bidirectional
+		if sid < s.maxStreamIDBidi.GetValue() {
+			// ignored
+			return nil
+		}
+		s.maxStreamIDBidi = frame.StreamID
+	}
+	return nil
 }
 
 func (s *StreamManager) handleStopSendingFrame(frame *StopSendingFrame) error {

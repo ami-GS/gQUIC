@@ -58,34 +58,54 @@ func (s *Session) HandlePacket(p Packet) {
 }
 
 func (s *Session) HandleFrames(fs []Frame) error {
+	var err error
 	for _, frame := range fs {
 		switch f := frame.(type) {
 		case PaddingFrame:
 		case ConnectionCloseFrame:
+			err = s.handleConnectionCloseFrame(&f)
 		case ApplicationCloseFrame:
 		case MaxDataFrame:
+			err = s.handleMaxDataFrame(&f)
 		case MaxStreamIDFrame:
+			err = s.streamManager.handleMaxStreamIDFrame(&f)
 		case PingFrame:
 		case BlockedFrame:
 		case StreamIDBlockedFrame:
+			err = s.streamManager.handleStreamIDBlockedFrame(&f)
 		case NewConnectionIDFrame:
 		case AckFrame:
 		case PathChallengeFrame:
 		case PathResponseFrame:
 		case StreamFrame:
-			s.streamManager.handleStreamFrame(&f)
+			err = s.streamManager.handleStreamFrame(&f)
 		case RstStreamFrame:
-			s.streamManager.handleRstStreamFrame(&f)
+			err = s.streamManager.handleRstStreamFrame(&f)
 		case MaxStreamDataFrame:
-			s.streamManager.handleMaxStreamDataFrame(&f)
+			err = s.streamManager.handleMaxStreamDataFrame(&f)
 		case StreamBlockedFrame:
-			s.streamManager.handleStreamBlockedFrame(&f)
+			err = s.streamManager.handleStreamBlockedFrame(&f)
 		case StopSendingFrame:
-			s.streamManager.handleStopSendingFrame(&f)
+			err = s.streamManager.handleStopSendingFrame(&f)
 		default:
 			// error
 			return nil
 		}
+		if err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func (s *Session) handleConnectionCloseFrame(frame *ConnectionCloseFrame) error {
+	// implicitely close streams
+	// close connection(session)
+	//return frame.ErrorCode
+	return nil
+}
+
+func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
+	//s.DataSizeLimit = frame.Data
 	return nil
 }
