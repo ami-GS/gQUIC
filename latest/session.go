@@ -11,6 +11,8 @@ type Session struct {
 	conn            *Connection
 	recvPacketChann chan Packet
 	streamManager   *StreamManager
+
+	flowContoller *ConnectionFlowController
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Session {
@@ -19,6 +21,8 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 		SrcConnID:       srcConnID,
 		conn:            conn,
 		recvPacketChann: make(chan Packet),
+
+		flowContoller:     &ConnectionFlowController{},
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess

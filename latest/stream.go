@@ -204,8 +204,7 @@ type BaseStream struct {
 	State qtype.StreamState
 	sess  *Session
 
-	DataSizeLimit uint64
-	DataSizeUsed  uint64
+	flowcontroller *StreamFlowController
 }
 
 func (s BaseStream) GetState() qtype.StreamState {
@@ -223,11 +222,17 @@ type SendStream struct {
 }
 
 func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
+	sid := streamID.GetValue()
 	return &SendStream{
 		BaseStream: &BaseStream{
 			ID:    *streamID,
 			State: qtype.StreamReady,
 			sess:  sess,
+			// TODO: need to check default MAX_DATA
+			flowcontroller: &StreamFlowController{
+				IsStreamZero: sid == 0,
+				connFC:       sess.flowContoller,
+			},
 		},
 		// TODO : need to be able to set initial windowsize
 		//Window:              NewWindow(conn.Window.initialSize),
@@ -294,6 +299,8 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 		// ignore after being "Sent" state
 		return nil
 	}
+	s.flowcontroller.MaxDataLimit = f.Data.GetValue()
+	// TODO: send
 	return nil
 }
 
@@ -341,6 +348,7 @@ type RecvStream struct {
 }
 
 func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
+	sid := streamID.GetValue()
 	h := &utils.Heap{}
 	heap.Init(h)
 	return &RecvStream{
@@ -348,6 +356,11 @@ func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
 			ID:    *streamID,
 			State: qtype.StreamRecv,
 			sess:  sess,
+			// TODO: need to check default MAX_DATA
+			flowcontroller: &StreamFlowController{
+				IsStreamZero: sid == 0,
+				connFC:       sess.flowContoller,
+			},
 		},
 		ReorderBuffer: h,
 	}
@@ -447,11 +460,17 @@ type SendRecvStream struct {
 }
 
 func newSendRecvStream(streamID *qtype.StreamID, sess *Session) *SendRecvStream {
+	sid := streamID.GetValue()
 	return &SendRecvStream{
 		BaseStream: &BaseStream{
 			ID:    *streamID,
 			State: qtype.StreamIdle,
 			sess:  sess,
+			// TODO: need to check default MAX_DATA
+			flowcontroller: &StreamFlowController{
+				IsStreamZero: sid == 0,
+				connFC:       sess.flowContoller,
+			},
 		},
 	}
 }
