@@ -219,6 +219,8 @@ type SendStream struct {
 	*BaseStream
 	// application data can be buffered at "Ready" state
 	SendBuffer []byte
+	// used for storing frame for blocked frames. can be chan *StreamFrame?
+	BlockedFramesChan chan Frame
 }
 
 func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
@@ -234,6 +236,8 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 				connFC:       sess.flowContoller,
 			},
 		},
+		// TODO: be careful for the size
+		BlockedFramesChan: make(chan Frame, 10),
 		// TODO : need to be able to set initial windowsize
 		//Window:              NewWindow(conn.Window.initialSize),
 		//FlowControllBlocked: false,
@@ -242,6 +246,22 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 
 func (s SendStream) IsTerminated() bool {
 	return s.State == qtype.StreamDataRecvd || s.State == qtype.StreamResetRecvd
+}
+
+func (s *SendStream) resendBlockedFrames() error {
+	// TODO: be careful for multithread
+	var blockedFrames []Frame
+	for frame := range s.BlockedFramesChan {
+		blockedFrames = append(blockedFrames, frame)
+	}
+
+	for _, frame := range blockedFrames {
+		err := s.sendFrame(frame)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *SendStream) sendFrame(f Frame) (err error) {
@@ -256,6 +276,15 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 			return nil
 		}
 		err = s.sendStreamFrame(&frame)
+		dataOffset := frame.Offset.GetValue()
+		if s.flowcontroller.SendableBySize(dataOffset) {
+			s.flowcontroller.updateLargestSent(dataOffset)
+		} else {
+			// STREAM_BLOCKED　?
+			// queue the frame until MAX_DATA will be sent
+			s.sendFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
+			s.BlockedFramesChan <- frame
+		}
 	case StreamBlockedFrame:
 		if s.State == qtype.StreamResetSent {
 			// MUST NOT send any frame in the states above
@@ -268,6 +297,7 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 		// TODO: error
 		return nil
 	}
+	s.sess.sendFrameChan <- f
 	return err
 }
 
@@ -300,7 +330,9 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 		return nil
 	}
 	s.flowcontroller.MaxDataLimit = f.Data.GetValue()
-	// TODO: send
+
+	// doesn't send anything for the first MAX_STREAM frame for first setting
+	s.resendBlockedFrames()
 	return nil
 }
 
@@ -310,8 +342,7 @@ func (s *SendStream) handleStopSendingFrame(f *StopSendingFrame) error {
 		return qtype.ProtocolViolation
 	}
 	// respond by RstStreamFrame with error code of STOPPING
-	//s.sendRstStreamFrame(NewRstStreamFrame(f.StreamID, qtype.Stopping, 0))
-	return nil
+	return s.sendFrame(NewRstStreamFrame(f.StreamID.GetValue(), qtype.Stopping, 0))
 }
 
 // AckFrame comes via connection level handling

@@ -15,6 +15,10 @@ type StreamFlowController struct {
 	connFC *ConnectionFlowController
 }
 
+func (s *StreamFlowController) SendableBySize(largestOffset uint64) bool {
+	return largestOffset <= s.MaxDataLimit
+}
+
 func (s *StreamFlowController) updateLargestReceived(offset uint64) {
 	s.largestReceived = offset
 	if !s.IsStreamZero {
