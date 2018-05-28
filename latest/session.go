@@ -33,8 +33,13 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 		conn:           conn,
 		recvPacketChan: make(chan Packet),
 		// channel size should be configured or detect filled
-		sendFrameChan:     make(chan Frame, 100),
-		flowContoller:     &ConnectionFlowController{},
+		sendFrameChan: make(chan Frame, 100),
+		flowContoller: &ConnectionFlowController{
+			baseFlowController: baseFlowController{
+				MaxDataLimit: 1024, //TODO: set appropriately
+			},
+		},
+		// used for send frame ASAP after generate frame
 		AssembleFrameChan: make(chan struct{}),
 		// TODO: this would be configurable
 		WaitFrameTimeout: time.NewTicker(10 * time.Millisecond),
