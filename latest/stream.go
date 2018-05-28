@@ -191,6 +191,10 @@ type Stream interface {
 	GetState() qtype.StreamState
 	GetID() qtype.StreamID
 	IsTerminated() bool
+	UpdateConnectionByteSent()
+	UpdateConnectionByteReceived()
+	UpdateStreamOffsetSent(offset uint64)
+	UpdateStreamOffsetReceived(offset uint64)
 	handleMaxStreamDataFrame(f *MaxStreamDataFrame) error
 	handleStopSendingFrame(f *StopSendingFrame) error
 	//handleAckFrame(f *AckFrame) error
@@ -215,6 +219,22 @@ func (s BaseStream) GetID() qtype.StreamID {
 	return s.ID
 }
 
+func (s BaseStream) UpdateConnectionByteSent() {
+	s.flowcontroller.connFC.updateByteSent(s.flowcontroller.largestSent)
+}
+
+func (s BaseStream) UpdateConnectionByteReceived() {
+	s.flowcontroller.connFC.updateByteReceived(s.flowcontroller.largestReceived)
+}
+
+func (s BaseStream) UpdateStreamOffsetSent(offset uint64) {
+	s.flowcontroller.updateLargestSent(offset)
+}
+
+func (s BaseStream) UpdateStreamOffsetReceived(offset uint64) {
+	s.flowcontroller.updateLargestReceived(offset)
+}
+
 type SendStream struct {
 	*BaseStream
 	// application data can be buffered at "Ready" state
@@ -230,10 +250,13 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 			ID:    *streamID,
 			State: qtype.StreamReady,
 			sess:  sess,
-			// TODO: need to check default MAX_DATA
+			// TODO: need to check default MAX_STREAM_DATA
 			flowcontroller: &StreamFlowController{
 				IsStreamZero: sid == 0,
 				connFC:       sess.flowContoller,
+				baseFlowController: baseFlowController{
+					MaxDataLimit: 1024, // TODO: set appropriately
+				},
 			},
 		},
 		// TODO: be careful for the size
@@ -265,7 +288,7 @@ func (s *SendStream) resendBlockedFrames() error {
 }
 
 func (s *SendStream) sendFrame(f Frame) (err error) {
-	if s.State == qtype.StreamDataRecvd || s.State == qtype.StreamResetRecvd {
+	if s.IsTerminated() {
 		// MUST NOT send any frame in the states above
 		return nil
 	}
@@ -277,8 +300,8 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 		}
 		err = s.sendStreamFrame(&frame)
 		dataOffset := frame.Offset.GetValue()
-		if s.flowcontroller.SendableBySize(dataOffset) {
-			s.flowcontroller.updateLargestSent(dataOffset)
+		if s.flowcontroller.SendableByOffset(dataOffset, frame.Finish) {
+			s.UpdateStreamOffsetSent(dataOffset)
 		} else {
 			// STREAM_BLOCKED　?
 			// queue the frame until MAX_DATA will be sent
@@ -297,6 +320,11 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 		// TODO: error
 		return nil
 	}
+
+	if s.IsTerminated() {
+		s.UpdateConnectionByteSent()
+	}
+
 	s.sess.sendFrameChan <- f
 	return err
 }
@@ -391,6 +419,9 @@ func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
 			flowcontroller: &StreamFlowController{
 				IsStreamZero: sid == 0,
 				connFC:       sess.flowContoller,
+				baseFlowController: baseFlowController{
+					MaxDataLimit: 1024, // TODO: set appropriately
+				},
 			},
 		},
 		ReorderBuffer: h,
@@ -467,6 +498,10 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 		// ignore after receiving all data
 		return nil
 	}
+	err := s.flowcontroller.ReceivableByOffset(f.Offset.GetValue(), f.Finish)
+	if err != nil {
+		return err
+	}
 
 	if f.Finish {
 		s.State = qtype.StreamSizeKnown
@@ -501,6 +536,9 @@ func newSendRecvStream(streamID *qtype.StreamID, sess *Session) *SendRecvStream 
 			flowcontroller: &StreamFlowController{
 				IsStreamZero: sid == 0,
 				connFC:       sess.flowContoller,
+				baseFlowController: baseFlowController{
+					MaxDataLimit: 1024, // TODO: set appropriately
+				},
 			},
 		},
 	}
