@@ -132,26 +132,15 @@ func (s *Session) HandleFrames(fs []Frame) error {
 		case ApplicationCloseFrame:
 		case MaxDataFrame:
 			err = s.handleMaxDataFrame(&f)
-		case MaxStreamIDFrame:
-			err = s.streamManager.handleMaxStreamIDFrame(&f)
 		case PingFrame:
 		case BlockedFrame:
-		case StreamIDBlockedFrame:
-			err = s.streamManager.handleStreamIDBlockedFrame(&f)
 		case NewConnectionIDFrame:
 		case AckFrame:
 		case PathChallengeFrame:
 		case PathResponseFrame:
-		case StreamFrame:
-			err = s.streamManager.handleStreamFrame(&f)
-		case RstStreamFrame:
-			err = s.streamManager.handleRstStreamFrame(&f)
-		case MaxStreamDataFrame:
-			err = s.streamManager.handleMaxStreamDataFrame(&f)
-		case StreamBlockedFrame:
-			err = s.streamManager.handleStreamBlockedFrame(&f)
-		case StopSendingFrame:
-			err = s.streamManager.handleStopSendingFrame(&f)
+		case MaxStreamIDFrame, StreamIDBlockedFrame, StreamFrame, RstStreamFrame,
+			MaxStreamDataFrame, StreamBlockedFrame, StopSendingFrame:
+			err = s.streamManager.handleFrame(frame)
 		default:
 			// error
 			return nil

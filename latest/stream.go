@@ -110,56 +110,90 @@ func (s *StreamManager) GetOrNewSendRecvStream(streamID *qtype.StreamID, sess *S
 	s.streamMap[sidVal] = st
 	return st, true, nil
 }
-func (s *StreamManager) handleStreamFrame(frame *StreamFrame) error {
+
+func (s *StreamManager) handleFrame(f Frame) error {
+	var err error
+	var stream Stream
+	switch frame := f.(type) {
+	case MaxStreamIDFrame:
+		stream, err = s.handleMaxStreamIDFrame(&frame)
+	case StreamIDBlockedFrame:
+		stream, err = s.handleStreamIDBlockedFrame(&frame)
+	case StreamFrame:
+		stream, err = s.handleStreamFrame(&frame)
+		if err != nil {
+			return err
+		}
+		stream.UpdateStreamOffsetReceived(frame.Offset.GetValue())
+	case RstStreamFrame:
+		stream, err = s.handleRstStreamFrame(&frame)
+	case MaxStreamDataFrame:
+		stream, err = s.handleMaxStreamDataFrame(&frame)
+		return err
+	case StreamBlockedFrame:
+		stream, err = s.handleStreamBlockedFrame(&frame)
+	case StopSendingFrame:
+		stream, err = s.handleStopSendingFrame(&frame)
+	default:
+		// error, but impossible to reach here
+		return nil
+	}
+	if stream.IsTerminated() {
+		stream.UpdateConnectionByteReceived()
+	}
+	return err
+}
+
+func (s *StreamManager) handleStreamFrame(frame *StreamFrame) (Stream, error) {
 	stream, _, err := s.GetOrNewRecvStream(&frame.StreamID, s.sess)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return stream.handleStreamFrame(frame)
+	return stream, stream.handleStreamFrame(frame)
 }
-func (s *StreamManager) handleStreamBlockedFrame(frame *StreamBlockedFrame) error {
+func (s *StreamManager) handleStreamBlockedFrame(frame *StreamBlockedFrame) (Stream, error) {
 	stream, _, err := s.GetOrNewRecvStream(&frame.StreamID, s.sess)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return stream.handleStreamBlockedFrame(frame)
+	return stream, stream.handleStreamBlockedFrame(frame)
 }
-func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) error {
 	// peer needs new stream with larger streamID than maximum streamID
-	return nil
+func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) (Stream, error) {
+	return nil, nil
 }
-func (s *StreamManager) handleRstStreamFrame(frame *RstStreamFrame) error {
+func (s *StreamManager) handleRstStreamFrame(frame *RstStreamFrame) (Stream, error) {
 	stream, _, err := s.GetOrNewRecvStream(&frame.StreamID, s.sess)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return stream.handleRstStreamFrame(frame)
+	return stream, stream.handleRstStreamFrame(frame)
 }
-func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
+func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) (Stream, error) {
 	sid := frame.StreamID.GetValue()
 
 	if sid&0x2 == 0x2 {
 		// unidirectional
 		if sid < s.maxStreamIDUni.GetValue() {
 			// ignored
-			return nil
+			return nil, nil
 		}
 		s.maxStreamIDUni = frame.StreamID
 	} else {
 		//bidirectional
 		if sid < s.maxStreamIDBidi.GetValue() {
 			// ignored
-			return nil
+			return nil, nil
 		}
 		s.maxStreamIDBidi = frame.StreamID
 	}
-	return nil
+	return nil, nil
 }
 
-func (s *StreamManager) handleStopSendingFrame(frame *StopSendingFrame) error {
+func (s *StreamManager) handleStopSendingFrame(frame *StopSendingFrame) (Stream, error) {
 	stream, isNew, err := s.GetOrNewSendStream(&frame.StreamID, s.sess)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Receiving a STOP_SENDING frame for a send stream that is "Ready" or
 	// non-existent MUST be treated as a connection error of type
@@ -167,14 +201,14 @@ func (s *StreamManager) handleStopSendingFrame(frame *StopSendingFrame) error {
 	if isNew {
 		sid := frame.StreamID.GetValue()
 		delete(s.streamMap, sid)
-		return qtype.ProtocolViolation
+		return nil, qtype.ProtocolViolation
 	}
-	return stream.handleStopSendingFrame(frame)
+	return stream, stream.handleStopSendingFrame(frame)
 }
-func (s *StreamManager) handleMaxStreamDataFrame(frame *MaxStreamDataFrame) error {
+func (s *StreamManager) handleMaxStreamDataFrame(frame *MaxStreamDataFrame) (Stream, error) {
 	stream, isNew, err := s.GetOrNewSendStream(&frame.StreamID, s.sess)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// An endpoint that receives a MAX_STREAM_DATA frame for a send-only
 	// stream it has not opened MUST terminate the connection with error
@@ -182,9 +216,9 @@ func (s *StreamManager) handleMaxStreamDataFrame(frame *MaxStreamDataFrame) erro
 	if isNew {
 		sid := frame.StreamID.GetValue()
 		delete(s.streamMap, sid)
-		return qtype.ProtocolViolation
+		return nil, qtype.ProtocolViolation
 	}
-	return stream.handleMaxStreamDataFrame(frame)
+	return stream, stream.handleMaxStreamDataFrame(frame)
 }
 
 type Stream interface {
