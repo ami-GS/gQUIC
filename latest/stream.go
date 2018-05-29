@@ -158,8 +158,9 @@ func (s *StreamManager) handleStreamBlockedFrame(frame *StreamBlockedFrame) (Str
 	}
 	return stream, stream.handleStreamBlockedFrame(frame)
 }
-	// peer needs new stream with larger streamID than maximum streamID
 func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) (Stream, error) {
+	// should be from sender stream which needs new ID, but could not open due to limit
+	s.sess.sendFrameChan <- NewMaxStreamIDFrame(frame.StreamID.GetValue() + 1)
 	return nil, nil
 }
 func (s *StreamManager) handleRstStreamFrame(frame *RstStreamFrame) (Stream, error) {
@@ -296,7 +297,6 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 		// TODO: be careful for the size
 		BlockedFramesChan: make(chan Frame, 10),
 		// TODO : need to be able to set initial windowsize
-		//Window:              NewWindow(conn.Window.initialSize),
 		//FlowControllBlocked: false,
 	}
 }
@@ -329,7 +329,7 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 	switch frame := f.(type) {
 	case StreamFrame:
 		if s.State == qtype.StreamResetSent {
-			// MUST NOT send any frame in the states above
+			// MUST NOT send Stream frame in the states above
 			return nil
 		}
 		err = s.sendStreamFrame(&frame)
@@ -339,12 +339,13 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 		} else {
 			// STREAM_BLOCKED　?
 			// queue the frame until MAX_DATA will be sent
-			s.sendFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
+			err = s.sendFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
 			s.BlockedFramesChan <- frame
+			return nil
 		}
 	case StreamBlockedFrame:
 		if s.State == qtype.StreamResetSent {
-			// MUST NOT send any frame in the states above
+			// MUST NOT send StreamBlocked frame in the states above
 			return nil
 		}
 		err = s.sendStreamBlockedFrame(&frame)
@@ -393,7 +394,7 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 	}
 	s.flowcontroller.MaxDataLimit = f.Data.GetValue()
 
-	// doesn't send anything for the first MAX_STREAM frame for first setting
+	// this doesn't send anything for the first MAX_STREAM frame for first setting
 	s.resendBlockedFrames()
 	return nil
 }
@@ -438,6 +439,8 @@ type RecvStream struct {
 	*BaseStream
 	ReorderBuffer *utils.Heap
 	DataSize      uint64 // will be known after receiving all data
+
+	LargestOffset qtype.QuicInt
 }
 
 func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
@@ -458,6 +461,7 @@ func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
 				},
 			},
 		},
+		LargestOffset: qtype.QuicInt{0, 0, 1},
 		ReorderBuffer: h,
 	}
 }
@@ -517,12 +521,18 @@ func (s *RecvStream) handleStopSendingFrame(f *StopSendingFrame) error {
 }
 
 func (s *RecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
+	if f.FinalOffset.Less(&s.LargestOffset) ||
+		s.State == qtype.StreamSizeKnown && !f.FinalOffset.Equal(&s.LargestOffset) {
+		return qtype.FinalOffsetError
+	}
+
 	if s.State == qtype.StreamDataRecvd {
 		// Optional
 		s.State = qtype.StreamResetRecvd
 	} else if s.State == qtype.StreamRecv || s.State == qtype.StreamSizeKnown {
 		s.State = qtype.StreamResetRecvd
 	}
+
 	// TODO: discard data received?
 	return nil
 }
@@ -537,9 +547,19 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 		return err
 	}
 
+	if s.State == qtype.StreamSizeKnown {
+		if s.LargestOffset.Less(f.Offset) {
+			return qtype.FinalOffsetError
+		}
+	}
+
 	if f.Finish {
 		s.State = qtype.StreamSizeKnown
 	}
+	if s.LargestOffset.Less(f.Offset) {
+		s.LargestOffset = *f.Offset
+	}
+
 	heap.Push(s.ReorderBuffer, &utils.Item{f.Offset.GetValue(), f.Data})
 
 	// do something

@@ -52,6 +52,14 @@ func (v QuicInt) GetValue() uint64 {
 	return 0
 }
 
+func (v QuicInt) Less(right *QuicInt) bool {
+	return v.GetValue() < right.GetValue()
+}
+
+func (v QuicInt) Equal(right *QuicInt) bool {
+	return v.GetValue() == right.GetValue()
+}
+
 func (v QuicInt) PutWire(wire []byte) int {
 	utils.MyPutUint64(wire, v.Value, v.ByteLen)
 	return v.ByteLen
