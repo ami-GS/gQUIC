@@ -16,6 +16,11 @@ package qtype
 
 type StreamID QuicInt
 
+const (
+	BidirectionalStream  = 0x0
+	UnidirectionalStream = 0x2
+)
+
 func NewStreamID(id uint64) (StreamID, error) {
 	sid, err := NewQuicInt(id)
 	if err != nil {

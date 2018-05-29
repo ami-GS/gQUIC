@@ -29,7 +29,7 @@ func NewStreamManager(sess *Session) *StreamManager {
 
 func (s *StreamManager) IsValidID(streamID *qtype.StreamID) error {
 	sid := streamID.GetValue()
-	if sid&0x2 == 0x2 {
+	if sid&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
 		if streamID.GetValue() > s.maxStreamIDUni.GetValue() {
 			return qtype.StreamIDError
@@ -45,7 +45,7 @@ func (s *StreamManager) IsValidID(streamID *qtype.StreamID) error {
 
 func (s *StreamManager) GetOrNewRecvStream(streamID *qtype.StreamID, sess *Session) (*RecvStream, bool, error) {
 	sidVal := streamID.GetValue()
-	if sidVal&0x3 != 0x2 {
+	if sidVal&qtype.UnidirectionalStream != qtype.UnidirectionalStream {
 		// error, uni directional should be 0x2 or 0x3
 		return nil, false, nil
 	}
@@ -71,7 +71,7 @@ func (s *StreamManager) GetOrNewRecvStream(streamID *qtype.StreamID, sess *Sessi
 
 func (s *StreamManager) GetOrNewSendStream(streamID *qtype.StreamID, sess *Session) (*SendStream, bool, error) {
 	sidVal := streamID.GetValue()
-	if sidVal&0x2 != 0x2 {
+	if sidVal&qtype.UnidirectionalStream != qtype.UnidirectionalStream {
 		// error, uni directional should be 0x2 or 0x3
 		return nil, false, nil
 	}
@@ -92,7 +92,7 @@ func (s *StreamManager) GetOrNewSendStream(streamID *qtype.StreamID, sess *Sessi
 
 func (s *StreamManager) GetOrNewSendRecvStream(streamID *qtype.StreamID, sess *Session) (*SendRecvStream, bool, error) {
 	sidVal := streamID.GetValue()
-	if sidVal&0x2 == 0x2 {
+	if sidVal&qtype.UnidirectionalStream != qtype.UnidirectionalStream {
 		// error, bi directional should be 0x0 or 0x1
 		return nil, false, nil
 	}
@@ -173,7 +173,7 @@ func (s *StreamManager) handleRstStreamFrame(frame *RstStreamFrame) (Stream, err
 func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) (Stream, error) {
 	sid := frame.StreamID.GetValue()
 
-	if sid&0x2 == 0x2 {
+	if sid&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
 		if sid < s.maxStreamIDUni.GetValue() {
 			// ignored
