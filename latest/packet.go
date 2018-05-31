@@ -163,7 +163,7 @@ type OneRTTProtectedPacket struct {
 	*BasePacket
 }
 
-func NewOneRTTProtectedPacket(packetType byte, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *OneRTTProtectedPacket {
+func NewOneRTTProtectedPacket(packetType ShortHeaderPacketType, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *OneRTTProtectedPacket {
 	return &OneRTTProtectedPacket{
 		BasePacket: &BasePacket{
 			Header: NewShortHeader(packetType, destConnID, packetNumber),

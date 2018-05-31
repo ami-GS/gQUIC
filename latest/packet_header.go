@@ -225,7 +225,7 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	var err error
 	idx := 0
 	sh := NewShortHeader(0, nil, 0)
-	sh.PacketType = data[idx]
+	sh.PacketType = ShortHeaderPacketType(data[idx])
 	idx++
 	sh.DestConnID, err = qtype.ReadConnectionID(data[idx:], 8)
 	if err != nil {
@@ -247,7 +247,7 @@ func (sh ShortHeader) GetWire() (wire []byte, err error) {
 	packetNumLen := int(math.Pow(2, float64(sh.PacketType&ShortHeaderPacketTypeMask)))
 	connIDLen := len(sh.DestConnID)
 	wire = make([]byte, 1+connIDLen+packetNumLen)
-	wire[0] = sh.PacketType
+	wire[0] = byte(sh.PacketType)
 	idx := 1
 	if connIDLen != 0 {
 		copy(wire[idx:idx+connIDLen], sh.DestConnID)
