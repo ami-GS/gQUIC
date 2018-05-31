@@ -44,6 +44,21 @@ const (
 type PacketHeader interface {
 	GetWire() ([]byte, error)
 	GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) // srcID, destID
+	GetPacketNumber() qtype.PacketNumber
+}
+
+type BasePacketHeader struct {
+	DestConnID   qtype.ConnectionID
+	SrcConnID    qtype.ConnectionID
+	PacketNumber qtype.PacketNumber
+}
+
+func (ph *BasePacketHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
+	return ph.SrcConnID, ph.DestConnID
+}
+
+func (ph *BasePacketHeader) GetPacketNumber() qtype.PacketNumber {
+	return ph.PacketNumber
 }
 
 // before passing data, need to check whether data[1:5] == 0x00 or not
@@ -78,14 +93,12 @@ var PacketHeaderParserMap = map[PacketHeaderType]PacketHeaderPerser{
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
 type LongHeader struct {
-	PacketType   LongHeaderPacketType
-	Version      qtype.Version
-	DCIL         byte
-	SCIL         byte
-	DestConnID   qtype.ConnectionID
-	SrcConnID    qtype.ConnectionID
-	PayloadLen   qtype.QuicInt
-	PacketNumber qtype.PacketNumber
+	*BasePacketHeader
+	PacketType LongHeaderPacketType
+	Version    qtype.Version
+	DCIL       byte
+	SCIL       byte
+	PayloadLen qtype.QuicInt
 }
 
 func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadlen uint64) *LongHeader {
@@ -103,14 +116,16 @@ func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destC
 	}
 
 	return &LongHeader{
-		PacketType:   packetType,
-		Version:      version,
-		DCIL:         byte(dcil),
-		SCIL:         byte(scil),
-		DestConnID:   destConnID,
-		SrcConnID:    srcConnID,
-		PayloadLen:   paylen,
-		PacketNumber: packetNumber,
+		BasePacketHeader: &BasePacketHeader{
+			DestConnID:   destConnID,
+			SrcConnID:    srcConnID,
+			PacketNumber: packetNumber,
+		},
+		PacketType: packetType,
+		Version:    version,
+		DCIL:       byte(dcil),
+		SCIL:       byte(scil),
+		PayloadLen: paylen,
 	}
 }
 
@@ -175,10 +190,6 @@ func (lh LongHeader) GetWire() (wire []byte, err error) {
 	return
 }
 
-func (lh LongHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
-	return lh.SrcConnID, lh.DestConnID
-}
-
 // Short Header
 /*
     0                   1                   2                   3
@@ -195,16 +206,18 @@ func (lh LongHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.Connection
 */
 
 type ShortHeader struct {
-	PacketType   byte
-	DestConnID   qtype.ConnectionID
-	PacketNumber qtype.PacketNumber
+	*BasePacketHeader
+	PacketType ShortHeaderPacketType
 }
 
-func NewShortHeader(packetType byte, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *ShortHeader {
+func NewShortHeader(packetType ShortHeaderPacketType, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *ShortHeader {
 	return &ShortHeader{
-		PacketType:   packetType,
-		DestConnID:   destConnID,
-		PacketNumber: packetNumber,
+		BasePacketHeader: &BasePacketHeader{
+			DestConnID:   destConnID,
+			SrcConnID:    nil,
+			PacketNumber: packetNumber,
+		},
+		PacketType: packetType,
 	}
 }
 
@@ -242,8 +255,4 @@ func (sh ShortHeader) GetWire() (wire []byte, err error) {
 	}
 	idx += utils.MyPutUint32(wire[idx:], uint32(sh.PacketNumber), packetNumLen)
 	return
-}
-
-func (sh ShortHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
-	return nil, sh.DestConnID
 }

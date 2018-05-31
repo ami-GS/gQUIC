@@ -200,11 +200,10 @@ func ParseOneRTTProtectedPacket(data []byte) (p Packet, length int, err error) {
 
 // Version negotiation doesn't use long header, but have similar form
 type VersionNegotiationPacket struct {
+	*BasePacketHeader
 	Version           qtype.Version
 	DCIL              byte
 	SCIL              byte
-	DestConnID        qtype.ConnectionID
-	SrcConnID         qtype.ConnectionID
 	SupportedVersions []qtype.Version
 }
 
@@ -219,11 +218,14 @@ func NewVersionNegotiationPacket(destConnID, srcConnID qtype.ConnectionID, suppo
 	}
 
 	return &VersionNegotiationPacket{
+		BasePacketHeader: &BasePacketHeader{
+			DestConnID:   destConnID,
+			SrcConnID:    srcConnID,
+			PacketNumber: 0,
+		},
 		Version:           0,
 		DCIL:              byte(dcil),
 		SCIL:              byte(scil),
-		DestConnID:        destConnID,
-		SrcConnID:         srcConnID,
 		SupportedVersions: supportedVersions,
 	}
 }
@@ -300,7 +302,4 @@ func (p VersionNegotiationPacket) SetFrames(fs []Frame) {
 }
 func (p VersionNegotiationPacket) GetFrames() []Frame {
 	return nil
-}
-func (p VersionNegotiationPacket) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
-	return p.SrcConnID, p.DestConnID
 }
