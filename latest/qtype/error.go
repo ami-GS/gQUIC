@@ -16,6 +16,10 @@ const (
 	VersionNegotiationError
 	ProtocolViolation
 	UnsolicitedPathResponse
+
+	// not defined the value in spec 11
+	FlowControlReceivedTooMuchData
+
 	FrameError = 0x100 // 0x1XX, the XX will be frame type
 )
 
