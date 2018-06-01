@@ -15,8 +15,11 @@ type Session struct {
 	conn          *Connection
 	// from server/client to here
 	recvPacketChan chan Packet
-	// to fill sendFrameBuffer till timeout or filled by about MTU?
-	sendFrameChan chan Frame
+	// channel should have potential issue
+	// use priority queue with Frame which has priority?
+	// or prepare several channel for priority based channels ?
+	sendFrameChan  chan Frame
+	sendPacketChan chan Packet
 
 	streamManager *StreamManager
 
@@ -33,7 +36,8 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 		conn:           conn,
 		recvPacketChan: make(chan Packet),
 		// channel size should be configured or detect filled
-		sendFrameChan: make(chan Frame, 100),
+		sendFrameChan:  make(chan Frame, 100),
+		sendPacketChan: make(chan Packet, 100),
 		flowContoller: &ConnectionFlowController{
 			baseFlowController: baseFlowController{
 				MaxDataLimit: 1024, //TODO: set appropriately
@@ -43,13 +47,15 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 		AssembleFrameChan: make(chan struct{}),
 		// TODO: this would be configurable
 		WaitFrameTimeout: time.NewTicker(10 * time.Millisecond),
+		versionDecided:   qtype.VersionPlaceholder,
+		LastPacketNumber: qtype.InitialPacketNumber(),
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess
 
 }
 
-func (s *Session) AssembleFrameLoop() {
+func (s *Session) SendPacketLoop() {
 	assemble := func() []byte {
 		out := make([]byte, qtype.MTUIPv4)
 		byteSize := 0
@@ -64,6 +70,7 @@ func (s *Session) AssembleFrameLoop() {
 					return out[:byteSize]
 				}
 				copy(out[byteSize:], frame.GetWire())
+				// TODO: consider encrypted wire
 				byteSize += size
 			default:
 				// If sendFrameChan is empty
@@ -72,19 +79,24 @@ func (s *Session) AssembleFrameLoop() {
 		}
 	}
 
+	var err error
 	var wire []byte
 	for {
 		select {
+		case <-s.WaitFrameTimeout.C:
+			s.AssembleFrameChan <- struct{}{}
 		case <-s.AssembleFrameChan:
 			wire = assemble()
-		case <-s.WaitFrameTimeout.C:
-			wire = assemble()
+			// 1. make Packet wire
+			if len(wire) == 0 {
+				continue
+			}
+		case p := <-s.sendPacketChan:
+			err = s.SendPacket(p)
 		}
-		if len(wire) == 0 {
-			continue
+		if err != nil {
+			// error
 		}
-		// 1. make Packet
-		// 2. send Packet
 	}
 	s.WaitFrameTimeout.Stop()
 }
@@ -102,6 +114,7 @@ func (s *Session) RecvPacketLoop() {
 		select {
 		case p := <-s.recvPacketChan:
 			// TODO: parallel?
+			// would be possible, but need to use Mutex Lock
 			s.HandlePacket(p)
 		default:
 		}
