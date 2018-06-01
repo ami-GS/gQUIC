@@ -27,6 +27,10 @@ type Session struct {
 
 	AssembleFrameChan chan struct{}
 	WaitFrameTimeout  *time.Ticker
+
+	versionDecided qtype.Version
+
+	LastPacketNumber qtype.PacketNumber
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Session {

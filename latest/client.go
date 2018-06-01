@@ -81,17 +81,37 @@ func (c *Client) handlePacket(p Packet) error {
 }
 
 func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket) {
+	// TODO: should be written in session?
+	if c.versionNegotiated {
+		// Once a client receives a packet from the server which is not a Version Negotiation
+		// packet, it MUST discard other Version Negotiation packets on the same connection.
+		return
+	}
+	if !c.session.SrcConnID.Equal(packet.DestConnID) || !c.session.DestConnID.Equal(packet.SrcConnID) {
+		// If this check fails, the packet MUST be discarded.
+		return
+	}
+
 	// TODO: priority queue?
+	found := false
+	versionTBD := qtype.Version(0)
 	for _, version := range packet.SupportedVersions {
-		for _, supportedVersion := range qtype.SupportedVersions {
-			if version == supportedVersion {
-				c.versionDecided = version
-				goto FOUND_VERSION
+		if version == c.versionOffer {
+			// MUST ignore a Version Negotiation packet that lists the client's chosen version.
+			return
+		}
+
+		if !found {
+			for _, supportedVersion := range qtype.SupportedVersions {
+				if version == supportedVersion {
+					found = true
+					versionTBD = version
+				}
 			}
 		}
 	}
-FOUND_VERSION:
-	// Do something
+	c.session.versionDecided = versionTBD
+	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, c.session.LastPacketNumber.Increase(), 0)
 }
 
 func (c *Client) handleRetryPacket(packet *RetryPacket) {

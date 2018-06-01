@@ -6,6 +6,8 @@ import (
 
 type PacketNumber uint64
 
+const PacketNumberIncreaseSize = 1
+
 const (
 	InitialPacketNumberMin = 0
 	// 2^32-1025
@@ -14,4 +16,9 @@ const (
 
 func InitialPacketNumber() PacketNumber {
 	return PacketNumber(uint64(rand.Int63n(InitialPacketNumberMax-InitialPacketNumberMin)) + InitialPacketNumberMin)
+}
+
+func (pn *PacketNumber) Increase() PacketNumber {
+	*pn += PacketNumberIncreaseSize
+	return *pn
 }
