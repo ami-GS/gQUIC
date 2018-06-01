@@ -10,7 +10,6 @@ type Client struct {
 	remoteAddr        net.Addr
 	session           *Session
 	versionOffer      qtype.Version
-	versionDecided    qtype.Version
 	versionNegotiated bool
 }
 
@@ -33,7 +32,6 @@ func DialAddr(addr string) (*Client, error) {
 		remoteAddr:        remoteAddr,
 		session:           NewSession(&Connection{conn: udpConn, remoteAddr: remoteAddr}, srcConnID, destConnID),
 		versionOffer:      qtype.VersionZero,
-		versionDecided:    qtype.VersionPlaceholder,
 		versionNegotiated: false,
 	}
 	go cli.run()

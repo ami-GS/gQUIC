@@ -16,8 +16,8 @@ type Server struct {
 
 func (s *Server) Serve() error {
 	// TODO: set MTU
-	buffer := make([]byte, 1500)
-	data := make([]byte, 1500)
+	buffer := make([]byte, qtype.MTUIPv4)
+	data := make([]byte, qtype.MTUIPv4)
 	for {
 		length, remoteAddr, err := s.conn.ReadFrom(buffer)
 		if err != nil {
