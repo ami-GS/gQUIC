@@ -7,6 +7,8 @@ import (
 )
 
 type Client struct {
+	*BasePacketHandler
+
 	remoteAddr        net.Addr
 	session           *Session
 	versionOffer      qtype.Version
@@ -65,31 +67,21 @@ func (c *Client) run() {
 }
 
 func (c *Client) handlePacket(p Packet) error {
-	switch packet := p.(type) {
-	case VersionNegotiationPacket:
-		c.handleVersionNegotiationPacket(&packet)
-	case RetryPacket:
-		c.versionNegotiated = true
-		c.handleRetryPacket(&packet)
-	case HandshakePacket:
-		c.versionNegotiated = true
-		c.handleHandshakePacket(&packet)
-	default:
-		return nil
-	}
-	return nil
+	// preprocess if needed
+
+	return c.session.HandlePacket(p)
 }
 
-func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket) {
+func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket) error {
 	// TODO: should be written in session?
 	if c.versionNegotiated {
 		// Once a client receives a packet from the server which is not a Version Negotiation
 		// packet, it MUST discard other Version Negotiation packets on the same connection.
-		return
+		return nil
 	}
 	if !c.session.SrcConnID.Equal(packet.DestConnID) || !c.session.DestConnID.Equal(packet.SrcConnID) {
 		// If this check fails, the packet MUST be discarded.
-		return
+		return nil
 	}
 
 	// TODO: priority queue?
@@ -98,7 +90,7 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 	for _, version := range packet.SupportedVersions {
 		if version == c.versionOffer {
 			// MUST ignore a Version Negotiation packet that lists the client's chosen version.
-			return
+			return nil
 		}
 
 		if !found {
@@ -112,18 +104,27 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 	}
 	c.session.versionDecided = versionTBD
 	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, c.session.LastPacketNumber.Increase(), 0)
+	return nil
 }
 
-func (c *Client) handleRetryPacket(packet *RetryPacket) {
-	ph := packet.GetHeader()
-	srcConnID, _ := ph.GetConnectionIDPair()
-	c.session.DestConnID = srcConnID
+func (c *Client) handleRetryPacket(packet *RetryPacket) error {
+	c.versionNegotiated = true
+	// second initial packet
 
 	// RetryPacket MUST contain at least two frames
 	// one is STREAM frame with ID of 0 and ofsset of 0
 	c.session.HandleFrames(packet.GetFrames())
+
+	srcID, _ := c.PrevRetryPacket.GetHeader().GetConnectionIDPair()
+	// TODO: no need to be random for destID
+	c.session.DestConnID = srcID
+
+	// try again with new transport, but MUST remember the results of any version negotiation that occurred
+	NewInitialPacket(c.session.versionDecided, srcID, c.session.DestConnID, c.PrevRetryPacket.GetHeader().GetPacketNumber()+1, 0)
+	return nil
 }
 
-func (c *Client) handleHandshakePacket(packet *HandshakePacket) {
-
+func (c *Client) handleHandshakePacket(packet *HandshakePacket) error {
+	c.versionNegotiated = true
+	return nil
 }

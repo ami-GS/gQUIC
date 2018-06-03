@@ -7,6 +7,8 @@ import (
 )
 
 type Session struct {
+	*BasePacketHandler
+
 	// tls config
 	// connection
 	DestConnID    qtype.ConnectionID
@@ -31,6 +33,8 @@ type Session struct {
 	versionDecided qtype.Version
 
 	LastPacketNumber qtype.PacketNumber
+
+	packetHandler PacketHandler
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Session {
@@ -125,18 +129,44 @@ func (s *Session) RecvPacketLoop() {
 	}
 }
 
-func (s *Session) HandlePacket(p Packet) {
-	switch p.(type) {
+func (s *Session) HandlePacket(p Packet) error {
+	var err error
+	switch packet := p.(type) {
 	case InitialPacket:
 		// must come from only client
-		// RetryPacket
+		err = s.packetHandler.handleInitialPacket(&packet)
 	case RetryPacket:
 		// must come from only server
-		// InitialPacket again
+		err = s.packetHandler.handleRetryPacket(&packet)
+	case VersionNegotiationPacket:
+		// must come from only server
+		err = s.packetHandler.handleVersionNegotiationPacket(&packet)
+	case ProtectedPacket:
+		err = s.handleProtectedPacket(&packet)
+		// should be 0 or 1 RTT packet
 
 	}
+	if err != nil {
+		return err
+	}
 
-	s.HandleFrames(p.GetFrames())
+	err = s.HandleFrames(p.GetFrames())
+	if err != nil {
+		return err
+	}
+	s.maybeAckPacket(p)
+	return nil
+}
+
+func (s *Session) maybeAckPacket(p Packet) {
+	// Retry and VersionNegotiation packets are acked by next Initial Packet
+	if _, ok := p.(RetryPacket); ok {
+		return
+	}
+	if _, ok := p.(VersionNegotiationPacket); ok {
+		return
+	}
+
 }
 
 func (s *Session) HandleFrames(fs []Frame) error {

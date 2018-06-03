@@ -32,35 +32,50 @@ func (s *Server) Serve() error {
 			s.conn.Close()
 			return err
 		}
-		ph := packet.GetHeader()
-		srcID, destID := ph.GetConnectionIDPair()
-		lh, ok := ph.(LongHeader)
-		// need to check session existence?
-		if ok && !s.IsVersionSupported(lh.Version) {
-			err := s.SendVersionNegotiationPacket(srcID, destID, remoteAddr)
-			if err != nil {
-			}
-			continue
-		}
 
-		var sess *Session
-		if len(destID) != 0 {
-			sess, ok = s.sessions[destID.String()]
-			if !ok {
-				sess = NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID)
-				// might be deleted after handling packet
-				s.sessions[destID.String()] = sess
-				s.addrSessions[remoteAddr.String()] = sess
-			}
-		} else {
-			sess, ok = s.addrSessions[remoteAddr.String()]
-			if !ok {
-				// drop packet if no corresponding connection
-				continue
-			}
+		err = s.handlePacket(remoteAddr, packet)
+		if err != nil {
+			s.conn.Close()
+			return err
 		}
-		sess.HandlePacket(packet)
 	}
+}
+
+func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
+	ph := packet.GetHeader()
+	srcID, destID := ph.GetConnectionIDPair()
+	lh, ok := ph.(LongHeader)
+	// need to check session existence?
+	if ok && !s.IsVersionSupported(lh.Version) {
+		err := s.SendVersionNegotiationPacket(srcID, destID, remoteAddr)
+		if err != nil {
+		}
+		return nil
+	}
+
+	var sess *Session
+	if len(destID) != 0 {
+		sess, ok = s.sessions[destID.String()]
+		if !ok {
+			sess = NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID)
+			// packet handler for each session on server is now defined in session.go
+			sess.packetHandler = sess
+			// TODO: be careful to use lh
+			sess.versionDecided = lh.Version
+
+			// might be deleted after handling packet
+			s.sessions[destID.String()] = sess
+			s.addrSessions[remoteAddr.String()] = sess
+		}
+	} else {
+		sess, ok = s.addrSessions[remoteAddr.String()]
+		if !ok {
+			// drop packet if no corresponding connection
+			return nil
+		}
+	}
+	sess.HandlePacket(packet)
+	return nil
 }
 
 func (s *Server) IsVersionSupported(version qtype.Version) bool {
