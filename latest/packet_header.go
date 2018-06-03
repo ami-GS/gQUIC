@@ -38,7 +38,7 @@ type PacketHeaderType byte
 
 const (
 	LongHeaderType  PacketHeaderType = 0x80
-	ShortHeaderType                  = 0x00
+	ShortHeaderType PacketHeaderType = 0x30
 )
 
 type PacketHeader interface {
@@ -210,21 +210,21 @@ type ShortHeader struct {
 	PacketType ShortHeaderPacketType
 }
 
-func NewShortHeader(packetType ShortHeaderPacketType, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *ShortHeader {
+func NewShortHeader(destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *ShortHeader {
 	return &ShortHeader{
 		BasePacketHeader: &BasePacketHeader{
 			DestConnID:   destConnID,
 			SrcConnID:    nil,
 			PacketNumber: packetNumber,
 		},
-		PacketType: packetType,
+		PacketType: ShortHeaderPacketType(packetNumber.Size()),
 	}
 }
 
 func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	var err error
 	idx := 0
-	sh := NewShortHeader(0, nil, 0)
+	sh := NewShortHeader(nil, 0)
 	sh.PacketType = ShortHeaderPacketType(data[idx])
 	idx++
 	sh.DestConnID, err = qtype.ReadConnectionID(data[idx:], 8)

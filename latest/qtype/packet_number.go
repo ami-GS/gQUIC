@@ -22,3 +22,15 @@ func (pn *PacketNumber) Increase() PacketNumber {
 	*pn += PacketNumberIncreaseSize
 	return *pn
 }
+
+func (pn PacketNumber) Size() int {
+	switch {
+	case pn <= 255:
+		return 1
+	case pn <= (1<<16)-1:
+		return 2
+	case pn <= (1<<32)-1:
+		return 4
+	}
+	panic("")
+}
