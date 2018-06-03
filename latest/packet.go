@@ -6,15 +6,6 @@ import (
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
 
-type PacketParser func(data []byte) (p Packet, length int, err error)
-
-var LongHeaderPacketParserMap = map[LongHeaderPacketType]PacketParser{
-	InitialPacketType:          ParseInitialPacket,
-	RetryPacketType:            ParseRetryPacket,
-	HandshakePacketType:        ParseHandshakePacket,
-	ZeroRTTProtectedPacketType: ParseZeroRTTProtectedPacket,
-}
-
 type Packet interface {
 	GetWire() ([]byte, error)
 	GetHeader() PacketHeader
@@ -26,25 +17,19 @@ type Packet interface {
 func ParsePacket(data []byte) (packet Packet, idx int, err error) {
 	version := binary.BigEndian.Uint32(data[1:5])
 	if version == 0 {
+		// VersionNegotiationPacket use all UDP datagram (doesn't have frame)
 		return ParseVersionNegotiationPacket(data)
 	}
+
 	header, idx, err := PacketHeaderParserMap[PacketHeaderType(data[0]&0x80)](data) // ParseHeader
 	if err != nil {
 		return nil, 0, err
 	}
-	lh, ok := header.(LongHeader)
-	var idxTmp int
-	if ok {
-		// long header
-		packet, idxTmp, err = LongHeaderPacketParserMap[LongHeaderPacketType(lh.PacketType&0x7f)](data)
-	} else {
-		// short header
-		packet, idxTmp, err = ParseOneRTTProtectedPacket(data)
+	packet, err = newPacket(data[0], header)
+	if err != nil {
+		return nil, 0, err
 	}
-	packet.SetHeader(header)
-	idx += idxTmp
-	var fs []Frame
-	fs, idxTmp, err = ParseFrames(data[idx:])
+	fs, idxTmp, err := ParseFrames(data[idx:])
 	if err != nil {
 		return nil, 0, err
 	}
@@ -85,6 +70,50 @@ func (bp *BasePacket) GetWire() (wire []byte, err error) {
 	return append(hWire, fsWire...), nil
 }
 
+func newPacket(firstByte byte, ph PacketHeader) (Packet, error) {
+	if firstByte&byte(LongHeaderType) == byte(LongHeaderType) {
+		switch LongHeaderPacketType(firstByte & 0x7f) {
+		case InitialPacketType:
+			return &InitialPacket{
+				&BasePacket{
+					Header: ph,
+				},
+			}, nil
+		case RetryPacketType:
+			return &RetryPacket{
+				&BasePacket{
+					Header: ph,
+				},
+			}, nil
+		case HandshakePacketType:
+			return &HandshakePacket{
+				&BasePacket{
+					Header: ph,
+				},
+			}, nil
+		case ZeroRTTProtectedPacketType:
+			return &ProtectedPacket{
+				BasePacket: &BasePacket{
+					Header: ph,
+				},
+				RTT: 0,
+			}, nil
+		default:
+			// error
+			return nil, nil
+		}
+	} else if firstByte&byte(ShortHeaderType) == byte(ShortHeaderType) {
+		return &ProtectedPacket{
+			BasePacket: &BasePacket{
+				Header: ph,
+			},
+			RTT: 1,
+		}, nil
+	}
+	// error
+	return nil, nil
+}
+
 // long header with type of 0x7F
 type InitialPacket struct {
 	*BasePacket
@@ -97,10 +126,6 @@ func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.Connect
 		},
 	}
 
-}
-
-func ParseInitialPacket(data []byte) (p Packet, length int, err error) {
-	return
 }
 
 // long header with type of 0x7E
@@ -116,10 +141,6 @@ func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.Connectio
 	}
 }
 
-func ParseRetryPacket(data []byte) (p Packet, length int, err error) {
-	return
-}
-
 // long header with type of 0x7D
 type HandshakePacket struct {
 	*BasePacket
@@ -133,46 +154,29 @@ func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.Conne
 	}
 }
 
-func ParseHandshakePacket(data []byte) (p Packet, length int, err error) {
-	return
-}
-
 // long header with 0-RTT (type:0x7C)
 // short header with 1-RTT
-// interface?
-type ProtectedPacket interface {
-	GetRTT() int
-}
-type ZeroRTTProtectedPacket struct {
+type ProtectedPacket struct {
 	*BasePacket
+	RTT byte
 }
 
-func NewZeroRTTProtectedPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64) *ZeroRTTProtectedPacket {
-	return &ZeroRTTProtectedPacket{
-		BasePacket: &BasePacket{
-			Header: NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
-		},
+func NewProtectedPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64, rtt byte) *ProtectedPacket {
+	var header PacketHeader
+	if rtt == 0 {
+		header = NewShortHeader(destConnID, packetNumber)
+	} else if rtt == 1 {
+		header = NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, payloadLen)
+	} else {
+		// error
 	}
-}
 
-func ParseZeroRTTProtectedPacket(data []byte) (p Packet, length int, err error) {
-	return
-}
-
-type OneRTTProtectedPacket struct {
-	*BasePacket
-}
-
-func NewOneRTTProtectedPacket(packetType ShortHeaderPacketType, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *OneRTTProtectedPacket {
-	return &OneRTTProtectedPacket{
+	return &ProtectedPacket{
 		BasePacket: &BasePacket{
-			Header: NewShortHeader(packetType, destConnID, packetNumber),
+			Header: header,
 		},
+		RTT: rtt,
 	}
-}
-
-func ParseOneRTTProtectedPacket(data []byte) (p Packet, length int, err error) {
-	return
 }
 
 /*
