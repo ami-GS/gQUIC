@@ -42,7 +42,11 @@ const (
 )
 
 type PacketHeader interface {
-	GetWire() ([]byte, error)
+	// TODO: can be defined as different interface, like WireObject?
+	GetWire() []byte
+	GetWireSize() int
+	genWire() ([]byte, error)
+
 	GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) // srcID, destID
 	GetPacketNumber() qtype.PacketNumber
 }
@@ -51,6 +55,7 @@ type BasePacketHeader struct {
 	DestConnID   qtype.ConnectionID
 	SrcConnID    qtype.ConnectionID
 	PacketNumber qtype.PacketNumber
+	wire         []byte
 }
 
 func (ph *BasePacketHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) {
@@ -59,6 +64,14 @@ func (ph *BasePacketHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.Con
 
 func (ph *BasePacketHeader) GetPacketNumber() qtype.PacketNumber {
 	return ph.PacketNumber
+}
+
+func (ph *BasePacketHeader) GetWire() []byte {
+	return ph.wire
+}
+
+func (ph *BasePacketHeader) GetWireSize() int {
+	return len(ph.wire)
 }
 
 // before passing data, need to check whether data[1:5] == 0x00 or not
@@ -102,7 +115,7 @@ type LongHeader struct {
 }
 
 func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadlen uint64) *LongHeader {
-	paylen, err := qtype.NewQuicInt(uint64(payloadlen))
+	paylen, err := qtype.NewQuicInt(payloadlen)
 	if err != nil {
 		//error
 	}
@@ -115,7 +128,7 @@ func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destC
 		scil = len(srcConnID) - 3
 	}
 
-	return &LongHeader{
+	lh := &LongHeader{
 		BasePacketHeader: &BasePacketHeader{
 			DestConnID:   destConnID,
 			SrcConnID:    srcConnID,
@@ -127,6 +140,12 @@ func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destC
 		SCIL:       byte(scil),
 		PayloadLen: paylen,
 	}
+	lh.wire, err = lh.genWire()
+	if err != nil {
+		// error
+		return nil
+	}
+	return lh
 }
 
 func ParseLongHeader(data []byte) (PacketHeader, int, error) {
@@ -159,10 +178,11 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	lh.PayloadLen, _ = qtype.ParseQuicInt(data[idx:])
 	idx += lh.PayloadLen.ByteLen
 	lh.PacketNumber = qtype.PacketNumber(binary.BigEndian.Uint32(data[idx:]))
+	lh.wire = data[:idx+4]
 	return lh, idx + 4, nil
 }
 
-func (lh LongHeader) GetWire() (wire []byte, err error) {
+func (lh LongHeader) genWire() (wire []byte, err error) {
 	wireLen := int(10 + lh.PayloadLen.ByteLen)
 
 	if lh.DCIL != 0 {
@@ -210,21 +230,32 @@ type ShortHeader struct {
 	PacketType ShortHeaderPacketType
 }
 
-func NewShortHeader(destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *ShortHeader {
-	return &ShortHeader{
+func NewShortHeader(key bool, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *ShortHeader {
+	packetType := ShortHeaderPacketType(ShortHeaderType) | ShortHeaderPacketType(packetNumber.Flag())
+	if key {
+		packetType |= KeyPhase
+	}
+
+	sh := &ShortHeader{
 		BasePacketHeader: &BasePacketHeader{
 			DestConnID:   destConnID,
 			SrcConnID:    nil,
 			PacketNumber: packetNumber,
 		},
-		PacketType: ShortHeaderPacketType(packetNumber.Size()),
+		PacketType: packetType,
 	}
+	var err error
+	sh.wire, err = sh.genWire()
+	if err != nil {
+		// error
+	}
+	return sh
 }
 
 func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	var err error
 	idx := 0
-	sh := NewShortHeader(nil, 0)
+	sh := NewShortHeader(false, nil, 0)
 	sh.PacketType = ShortHeaderPacketType(data[idx])
 	idx++
 	sh.DestConnID, err = qtype.ReadConnectionID(data[idx:], 8)
@@ -240,10 +271,11 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	}
 	sh.PacketNumber = qtype.PacketNumber(utils.MyUint64(data[idx:], packetNumLen))
 	idx += packetNumLen
+	sh.wire = data[:idx]
 	return sh, idx, nil
 }
 
-func (sh ShortHeader) GetWire() (wire []byte, err error) {
+func (sh ShortHeader) genWire() (wire []byte, err error) {
 	packetNumLen := int(math.Pow(2, float64(sh.PacketType&ShortHeaderPacketTypeMask)))
 	connIDLen := len(sh.DestConnID)
 	wire = make([]byte, 1+connIDLen+packetNumLen)
