@@ -36,21 +36,34 @@ func DialAddr(addr string) (*Client, error) {
 		versionOffer:      qtype.VersionZero,
 		versionNegotiated: false,
 	}
+	cli.session.packetHandler = cli
 	go cli.run()
 	return cli, nil
 }
 
+func (c *Client) Connect() {
+	// version negotiation
+	// wait response
+
+	// first initial packet
+	destID, _ := qtype.NewConnectionID(nil)
+	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x00, 0x00})
+	NewInitialPacket(c.session.versionDecided, destID, destID, c.session.LastPacketNumber, streamFrame)
+	c.session.DestConnID = destID
+	c.session.SrcConnID = destID
+
+	//
+}
+
 func (c *Client) run() {
-	buffer := make([]byte, 1500)
-	data := make([]byte, 1500)
+	buffer := make([]byte, qtype.MTUIPv4)
 	for {
 		length, _, err := c.session.conn.Read(buffer)
 		if err != nil {
 			//
 		}
-		copy(data[:length], buffer[:length])
 
-		packet, _, err := ParsePacket(data)
+		packet, _, err := ParsePacket(buffer[:length])
 		if err != nil {
 			//
 		}

@@ -12,22 +12,19 @@ type Server struct {
 	sessions          map[string]*Session //ConnectionID.String():Session
 	addrSessions      map[string]*Session //remoteAddr.String():Session, for identifing single connection if zero-len dest ID
 	SupportedVersions []qtype.Version
+	NumHandshake      int
 }
 
 func (s *Server) Serve() error {
-	// TODO: set MTU
 	buffer := make([]byte, qtype.MTUIPv4)
-	data := make([]byte, qtype.MTUIPv4)
 	for {
 		length, remoteAddr, err := s.conn.ReadFrom(buffer)
 		if err != nil {
 			s.conn.Close()
 			return err
 		}
-		// TODO:copy should be slow
-		copy(data[:length], buffer[:length])
 
-		packet, _, err := ParsePacket(data)
+		packet, _, err := ParsePacket(buffer[:length])
 		if err != nil {
 			s.conn.Close()
 			return err
