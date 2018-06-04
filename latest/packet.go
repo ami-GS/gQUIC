@@ -20,26 +20,28 @@ func ParsePacket(data []byte) (packet Packet, idx int, err error) {
 		// VersionNegotiationPacket use all UDP datagram (doesn't have frame)
 		return ParseVersionNegotiationPacket(data)
 	}
-
 	header, idx, err := PacketHeaderParserMap[PacketHeaderType(data[0]&0x80)](data) // ParseHeader
 	if err != nil {
 		return nil, 0, err
 	}
-	packet, err = newPacket(data[0], header)
-	if err != nil {
-		return nil, 0, err
-	}
+
 	fs, idxTmp, err := ParseFrames(data[idx:])
 	if err != nil {
 		return nil, 0, err
 	}
-	packet.SetFrames(fs)
+
+	packet, err = newPacket(data[0], header, fs)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	return packet, idx + idxTmp, err
 }
 
 type BasePacket struct {
-	Header PacketHeader
-	Frames []Frame
+	Header     PacketHeader
+	Frames     []Frame
+	PaddingNum int
 }
 
 func (bp *BasePacket) GetHeader() PacketHeader {
@@ -66,35 +68,50 @@ func (bp *BasePacket) GetWire() (wire []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if bp.PaddingNum != 0 {
+		fsWire = append(fsWire, make([]byte, bp.PaddingNum)...)
+	}
 	// TODO: protect for short header?
 	return append(hWire, fsWire...), nil
 }
 
-func newPacket(firstByte byte, ph PacketHeader) (Packet, error) {
+func newPacket(firstByte byte, ph PacketHeader, fs []Frame) (Packet, error) {
+	// TODO: needs frame type validation for each packet type
 	if firstByte&byte(LongHeaderType) == byte(LongHeaderType) {
+		payloadLen := 0
+		for _, frame := range fs {
+			payloadLen += frame.GetWireSize()
+		}
+
 		switch LongHeaderPacketType(firstByte & 0x7f) {
 		case InitialPacketType:
+			// TODO: check whether it is stream frame or not
 			return &InitialPacket{
-				&BasePacket{
-					Header: ph,
+				BasePacket: &BasePacket{
+					Header:     ph,
+					Frames:     fs,
+					PaddingNum: InitialPacketMinimumPayloadSize - payloadLen,
 				},
 			}, nil
 		case RetryPacketType:
 			return &RetryPacket{
 				&BasePacket{
 					Header: ph,
+					Frames: fs,
 				},
 			}, nil
 		case HandshakePacketType:
 			return &HandshakePacket{
 				&BasePacket{
 					Header: ph,
+					Frames: fs,
 				},
 			}, nil
 		case ZeroRTTProtectedPacketType:
 			return &ProtectedPacket{
 				BasePacket: &BasePacket{
 					Header: ph,
+					Frames: fs,
 				},
 				RTT: 0,
 			}, nil
@@ -106,6 +123,7 @@ func newPacket(firstByte byte, ph PacketHeader) (Packet, error) {
 		return &ProtectedPacket{
 			BasePacket: &BasePacket{
 				Header: ph,
+				Frames: fs,
 			},
 			RTT: 1,
 		}, nil
