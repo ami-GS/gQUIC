@@ -366,12 +366,8 @@ func ParsePaddingFrame(data []byte) (Frame, int, error) {
 	frame := &PaddingFrame{
 		BaseFrame: NewBaseFrame(PaddingFrameType),
 	}
-	if len(data) != 0 {
-		// TODO: padding should have flag 0x00 only
-		return nil, 0, nil
-	}
-	frame.wire = data
-	return frame, len(data), nil
+	frame.wire = data[:1]
+	return frame, 1, nil
 }
 func (f PaddingFrame) genWire() (wire []byte, err error) {
 	return []byte{0x00}, nil
@@ -877,6 +873,22 @@ type AckBlock struct {
 	Gap      qtype.QuicInt
 }
 
+func NewAckBlock(ackBlock, gap uint64) *AckBlock {
+	blk, err := qtype.NewQuicInt(ackBlock)
+	if err != nil {
+		return nil
+	}
+	gp, err := qtype.NewQuicInt(gap)
+	if err != nil {
+		return nil
+	}
+
+	return &AckBlock{
+		AckBlock: blk,
+		Gap:      gp,
+	}
+}
+
 type AckFrame struct {
 	*BaseFrame
 	LargestAcked  qtype.QuicInt
@@ -885,7 +897,7 @@ type AckFrame struct {
 	AckBlocks     []AckBlock
 }
 
-func NewAckFrame(lAcked, ackDelay, ackBlockCount uint64, ackBlocks []AckBlock) *AckFrame {
+func NewAckFrame(lAcked, ackDelay uint64, ackBlocks []AckBlock) *AckFrame {
 	lakd, err := qtype.NewQuicInt(lAcked)
 	if err != nil {
 		// err
@@ -894,7 +906,11 @@ func NewAckFrame(lAcked, ackDelay, ackBlockCount uint64, ackBlocks []AckBlock) *
 	if err != nil {
 		//
 	}
-	acbc, err := qtype.NewQuicInt(ackBlockCount)
+	if ackBlocks == nil {
+		return nil
+	}
+
+	acbc, err := qtype.NewQuicInt(uint64(len(ackBlocks) - 1))
 	if err != nil {
 		//
 	}
@@ -1081,7 +1097,7 @@ type StreamFrame struct {
 	Data     []byte
 }
 
-func NewStreamFrame(streamID, offset, length uint64, offF, lenF, fin bool, data []byte) *StreamFrame {
+func NewStreamFrame(streamID, offset uint64, offF, lenF, fin bool, data []byte) *StreamFrame {
 	sid, err := qtype.NewQuicInt(streamID)
 	if err != nil {
 		// error
@@ -1100,6 +1116,10 @@ func NewStreamFrame(streamID, offset, length uint64, offF, lenF, fin bool, data 
 	lngth := (*qtype.QuicInt)(nil)
 	if lenF {
 		typeFlag |= 0x02
+		length := uint64(0)
+		if data != nil {
+			length = uint64(len(data))
+		}
 		tmp, err := qtype.NewQuicInt(length)
 		if err != nil {
 			// error

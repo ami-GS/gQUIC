@@ -60,7 +60,7 @@ func (bp *BasePacket) GetFrames() []Frame {
 }
 
 func (bp *BasePacket) GetWire() (wire []byte, err error) {
-	hWire, err := bp.Header.GetWire()
+	hWire := bp.Header.GetWire()
 	if err != nil {
 		return nil, err
 	}

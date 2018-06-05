@@ -195,7 +195,7 @@ func (lh LongHeader) genWire() (wire []byte, err error) {
 	wire[0] = 0x80 | byte(lh.PacketType)
 	binary.BigEndian.PutUint32(wire[1:], uint32(lh.Version))
 	wire[5] = (lh.DCIL << 4) | lh.SCIL
-	idx := 5
+	idx := 6
 	if lh.DCIL != 0 {
 		copy(wire[idx:], lh.DestConnID.Bytes())
 		idx += int(lh.DCIL + 3)
@@ -258,11 +258,11 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	sh := NewShortHeader(false, nil, 0)
 	sh.PacketType = ShortHeaderPacketType(data[idx])
 	idx++
-	sh.DestConnID, err = qtype.ReadConnectionID(data[idx:], 8)
+	sh.DestConnID, err = qtype.ReadConnectionID(data[idx:], qtype.ConnectionIDLen)
 	if err != nil {
 		return nil, 0, err
 	}
-	idx += 8
+	idx += qtype.ConnectionIDLen
 
 	packetNumLen := int(math.Pow(2, float64(sh.PacketType&ShortHeaderPacketTypeMask)))
 	if packetNumLen == 8 {
