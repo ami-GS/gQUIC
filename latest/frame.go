@@ -116,6 +116,9 @@ func ParseFrame(data []byte) (f Frame, idx int, err error) {
 		// TODO: error needed
 		return nil, 0, err
 	}
+	if data[0] == 0x00 {
+		return &PaddingFrame{}, 1, nil
+	}
 	if data[0]&StreamFrameTypeCommon == StreamFrameTypeCommon {
 		return FrameParserMap[StreamFrameTypeCommon](data)
 	}
@@ -129,6 +132,12 @@ func ParseFrames(data []byte) (fs []Frame, idx int, err error) {
 		if err != nil {
 			return nil, idx + oneLen, err
 		}
+		if _, ok := f.(*PaddingFrame); ok {
+			// skip when padding frame to reduce cost
+			idx++
+			continue
+		}
+
 		fs = append(fs, f)
 		idx += oneLen
 	}
