@@ -137,13 +137,30 @@ type InitialPacket struct {
 	*BasePacket
 }
 
-func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64) *InitialPacket {
-	return &InitialPacket{
+const InitialPacketMinimumPayloadSize = 1200
+
+func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, sFrame *StreamFrame) *InitialPacket {
+	sFrameLen := sFrame.GetWireSize()
+	var frames []Frame
+	var lh *LongHeader
+	paddingNum := 0
+	if InitialPacketMinimumPayloadSize <= sFrameLen {
+		// TODO: need to check when sFrameLen is over MTUIPv4
+		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, uint64(sFrameLen))
+		frames = []Frame{sFrame}
+	} else {
+		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, InitialPacketMinimumPayloadSize)
+		frames = []Frame{sFrame}
+		paddingNum = InitialPacketMinimumPayloadSize - sFrameLen
+	}
+	p := &InitialPacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
+			Header:     lh,
+			Frames:     frames,
+			PaddingNum: paddingNum,
 		},
 	}
-
+	return p
 }
 
 // long header with type of 0x7E
@@ -151,10 +168,31 @@ type RetryPacket struct {
 	*BasePacket
 }
 
-func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64) *RetryPacket {
+func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *RetryPacket {
+	if len(frames) < 2 {
+		return nil
+	}
+	if _, ok := frames[0].(*StreamFrame); !ok {
+		return nil
+	}
+	if _, ok := frames[1].(*AckFrame); !ok {
+		return nil
+	}
+	for i := 2; i < len(frames); i++ {
+		if _, ok := frames[i].(*PaddingFrame); !ok {
+			return nil
+		}
+	}
+
+	payloadLen := 0
+	for i := 0; i < len(frames); i++ {
+		payloadLen += frames[i].GetWireSize()
+	}
+
 	return &RetryPacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
+			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, uint64(payloadLen)),
+			Frames: frames,
 		},
 	}
 }
@@ -164,10 +202,28 @@ type HandshakePacket struct {
 	*BasePacket
 }
 
-func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64) *HandshakePacket {
+func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *HandshakePacket {
+	minimumReq := false
+	payloadLen := 0
+	for i := 0; i < len(frames); i++ {
+		switch frames[i].(type) {
+		case *StreamFrame:
+			minimumReq = true
+			payloadLen += frames[i].GetWireSize()
+		case *AckFrame, *PathChallengeFrame /*or*/, *PathResponseFrame, *ConnectionCloseFrame:
+			payloadLen += frames[i].GetWireSize()
+		default:
+			return nil
+		}
+	}
+	if !minimumReq {
+		return nil
+	}
+
 	return &HandshakePacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, payloadLen),
+			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, uint64(payloadLen)),
+			Frames: frames,
 		},
 	}
 }
@@ -179,12 +235,16 @@ type ProtectedPacket struct {
 	RTT byte
 }
 
-func NewProtectedPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadLen uint64, rtt byte) *ProtectedPacket {
+func NewProtectedPacket(version qtype.Version, key bool, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, rtt byte, frames []Frame) *ProtectedPacket {
 	var header PacketHeader
 	if rtt == 0 {
-		header = NewShortHeader(destConnID, packetNumber)
+		payloadLen := 0
+		for _, frame := range frames {
+			payloadLen += frame.GetWireSize()
+		}
+		header = NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, uint64(payloadLen))
 	} else if rtt == 1 {
-		header = NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, payloadLen)
+		header = NewShortHeader(key, destConnID, packetNumber)
 	} else {
 		// error
 	}
@@ -192,9 +252,11 @@ func NewProtectedPacket(version qtype.Version, destConnID, srcConnID qtype.Conne
 	return &ProtectedPacket{
 		BasePacket: &BasePacket{
 			Header: header,
+			Frames: frames,
 		},
 		RTT: rtt,
 	}
+
 }
 
 /*
