@@ -116,7 +116,9 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 		}
 	}
 	c.session.versionDecided = versionTBD
-	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, c.session.LastPacketNumber.Increase(), 0)
+	// WIP
+	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x00, 0x00})
+	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, c.session.LastPacketNumber.Increase(), streamFrame)
 	return nil
 }
 
@@ -131,9 +133,10 @@ func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 	srcID, _ := c.PrevRetryPacket.GetHeader().GetConnectionIDPair()
 	// TODO: no need to be random for destID
 	c.session.DestConnID = srcID
-
+	// WIP
+	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x00, 0x00})
 	// try again with new transport, but MUST remember the results of any version negotiation that occurred
-	NewInitialPacket(c.session.versionDecided, srcID, c.session.DestConnID, c.PrevRetryPacket.GetHeader().GetPacketNumber()+1, 0)
+	NewInitialPacket(c.session.versionDecided, srcID, c.session.DestConnID, c.PrevRetryPacket.GetHeader().GetPacketNumber()+1, streamFrame)
 	return nil
 }
 
