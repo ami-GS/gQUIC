@@ -33,7 +33,7 @@ func DialAddr(addr string) (*Client, error) {
 	cli := &Client{
 		remoteAddr:        remoteAddr,
 		session:           NewSession(&Connection{conn: udpConn, remoteAddr: remoteAddr}, srcConnID, destConnID),
-		versionOffer:      qtype.VersionZero,
+		versionOffer:      qtype.VersionQuicTLS,
 		versionNegotiated: false,
 	}
 	cli.session.packetHandler = cli
@@ -48,7 +48,7 @@ func (c *Client) Connect() {
 	// first initial packet
 	destID, _ := qtype.NewConnectionID(nil)
 	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x00, 0x00})
-	NewInitialPacket(c.session.versionDecided, destID, destID, c.session.LastPacketNumber, streamFrame)
+	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, destID, destID, c.session.LastPacketNumber, streamFrame)
 	c.session.DestConnID = destID
 	c.session.SrcConnID = destID
 
@@ -62,12 +62,10 @@ func (c *Client) run() {
 		if err != nil {
 			//
 		}
-
 		packet, _, err := ParsePacket(buffer[:length])
 		if err != nil {
 			//
 		}
-
 		/*
 			// TODO: Retry Packet ?
 						srcConnID, destConnID := packet.GetHeader().GetConnectionIDPair()
@@ -80,13 +78,16 @@ func (c *Client) run() {
 }
 
 func (c *Client) handlePacket(p Packet) error {
-	// preprocess if needed
+	if _, ok := p.(VersionNegotiationPacket); !ok && c.versionNegotiated == false {
+		c.versionNegotiated = true
+		c.session.versionDecided = c.versionOffer
+	}
 
 	return c.session.HandlePacket(p)
 }
 
 func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket) error {
-	// TODO: should be written in session?
+	// TODO: shoulsd be written in session?
 	if c.versionNegotiated {
 		// Once a client receives a packet from the server which is not a Version Negotiation
 		// packet, it MUST discard other Version Negotiation packets on the same connection.
@@ -115,19 +116,18 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 			}
 		}
 	}
-	c.session.versionDecided = versionTBD
+	c.versionOffer = versionTBD
 	// WIP
 	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x00, 0x00})
-	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, c.session.LastPacketNumber.Increase(), streamFrame)
+	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, c.session.DestConnID, c.session.SrcConnID, c.session.LastPacketNumber.Increase(), streamFrame)
 	return nil
 }
 
 func (c *Client) handleRetryPacket(packet *RetryPacket) error {
-	c.versionNegotiated = true
 	// second initial packet
 
 	// RetryPacket MUST contain at least two frames
-	// one is STREAM frame with ID of 0 and ofsset of 0
+	// one is STREAM frame with ID of 0 and offset of 0
 	c.session.HandleFrames(packet.GetFrames())
 
 	srcID, _ := c.PrevRetryPacket.GetHeader().GetConnectionIDPair()
@@ -141,6 +141,5 @@ func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 }
 
 func (c *Client) handleHandshakePacket(packet *HandshakePacket) error {
-	c.versionNegotiated = true
 	return nil
 }
