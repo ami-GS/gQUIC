@@ -110,24 +110,24 @@ func (s *StreamManager) handleFrame(f Frame) error {
 	var err error
 	var stream Stream
 	switch frame := f.(type) {
-	case MaxStreamIDFrame:
+	case *MaxStreamIDFrame:
 		stream, err = s.handleMaxStreamIDFrame(&frame)
-	case StreamIDBlockedFrame:
+	case *StreamIDBlockedFrame:
 		stream, err = s.handleStreamIDBlockedFrame(&frame)
-	case StreamFrame:
+	case *StreamFrame:
 		stream, err = s.handleStreamFrame(&frame)
 		if err != nil {
 			return err
 		}
 		stream.UpdateStreamOffsetReceived(frame.Offset.GetValue())
-	case RstStreamFrame:
+	case *RstStreamFrame:
 		stream, err = s.handleRstStreamFrame(&frame)
-	case MaxStreamDataFrame:
+	case *MaxStreamDataFrame:
 		stream, err = s.handleMaxStreamDataFrame(&frame)
 		return err
-	case StreamBlockedFrame:
+	case *StreamBlockedFrame:
 		stream, err = s.handleStreamBlockedFrame(&frame)
-	case StopSendingFrame:
+	case *StopSendingFrame:
 		stream, err = s.handleStopSendingFrame(&frame)
 	default:
 		// error, but impossible to reach here

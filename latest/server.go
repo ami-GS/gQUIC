@@ -41,7 +41,7 @@ func (s *Server) Serve() error {
 func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 	ph := packet.GetHeader()
 	srcID, destID := ph.GetConnectionIDPair()
-	lh, ok := ph.(LongHeader)
+	lh, ok := ph.(*LongHeader)
 	// need to check session existence?
 	if ok && !s.IsVersionSupported(lh.Version) {
 		err := s.SendVersionNegotiationPacket(srcID, destID, remoteAddr)

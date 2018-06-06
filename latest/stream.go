@@ -112,12 +112,12 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 		return nil
 	}
 	switch frame := f.(type) {
-	case StreamFrame:
+	case *StreamFrame:
 		if s.State == qtype.StreamResetSent {
 			// MUST NOT send Stream frame in the states above
 			return nil
 		}
-		err = s.sendStreamFrame(&frame)
+		err = s.sendStreamFrame(frame)
 		dataOffset := frame.Offset.GetValue()
 		if s.flowcontroller.SendableByOffset(dataOffset, frame.Finish) {
 			s.UpdateStreamOffsetSent(dataOffset)
@@ -128,14 +128,14 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 			s.BlockedFramesChan <- frame
 			return nil
 		}
-	case StreamBlockedFrame:
+	case *StreamBlockedFrame:
 		if s.State == qtype.StreamResetSent {
 			// MUST NOT send StreamBlocked frame in the states above
 			return nil
 		}
-		err = s.sendStreamBlockedFrame(&frame)
-	case RstStreamFrame:
-		err = s.sendRstStreamFrame(&frame)
+		err = s.sendStreamBlockedFrame(frame)
+	case *RstStreamFrame:
+		err = s.sendRstStreamFrame(frame)
 	default:
 		// TODO: error
 		return nil

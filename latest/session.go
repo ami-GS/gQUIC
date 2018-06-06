@@ -131,20 +131,22 @@ func (s *Session) RecvPacketLoop() {
 
 func (s *Session) HandlePacket(p Packet) error {
 	var err error
-	switch packet := p.(type) {
-	case InitialPacket:
-		// must come from only client
-		err = s.packetHandler.handleInitialPacket(&packet)
-	case RetryPacket:
-		// must come from only server
-		err = s.packetHandler.handleRetryPacket(&packet)
-	case VersionNegotiationPacket:
-		// must come from only server
-		err = s.packetHandler.handleVersionNegotiationPacket(&packet)
-	case ProtectedPacket:
-		err = s.handleProtectedPacket(&packet)
-		// should be 0 or 1 RTT packet
 
+	switch packet := p.(type) {
+	case *InitialPacket:
+		// must come from only client
+		err = s.packetHandler.handleInitialPacket(packet)
+	case *RetryPacket:
+		// must come from only server
+		err = s.packetHandler.handleRetryPacket(packet)
+	case *VersionNegotiationPacket:
+		// must come from only server
+		err = s.packetHandler.handleVersionNegotiationPacket(packet)
+	case *ProtectedPacket:
+		err = s.handleProtectedPacket(packet)
+	case *HandshakePacket:
+		err = s.packetHandler.handleHandshakePacket(packet)
+		// should be 0 or 1 RTT packet
 	}
 	if err != nil {
 		return err
@@ -173,21 +175,22 @@ func (s *Session) HandleFrames(fs []Frame) error {
 	var err error
 	for _, frame := range fs {
 		switch f := frame.(type) {
-		case PaddingFrame:
-		case ConnectionCloseFrame:
-			err = s.handleConnectionCloseFrame(&f)
-		case ApplicationCloseFrame:
-		case MaxDataFrame:
-			err = s.handleMaxDataFrame(&f)
-		case PingFrame:
-		case BlockedFrame:
-		case NewConnectionIDFrame:
-		case AckFrame:
-		case PathChallengeFrame:
-		case PathResponseFrame:
-		case MaxStreamIDFrame, StreamIDBlockedFrame, StreamFrame, RstStreamFrame,
-			MaxStreamDataFrame, StreamBlockedFrame, StopSendingFrame:
 			err = s.streamManager.handleFrame(frame)
+		case *PaddingFrame:
+		case *ConnectionCloseFrame:
+			err = s.handleConnectionCloseFrame(f)
+		case *ApplicationCloseFrame:
+		case *MaxDataFrame:
+			err = s.handleMaxDataFrame(f)
+		case *PingFrame:
+		case *BlockedFrame:
+		case *NewConnectionIDFrame:
+		case *AckFrame:
+			err = s.handleAckFrame(f)
+		case *PathChallengeFrame:
+		case *PathResponseFrame:
+		case *MaxStreamIDFrame, *StreamIDBlockedFrame, *StreamFrame, *RstStreamFrame,
+			*MaxStreamDataFrame, *StreamBlockedFrame, *StopSendingFrame:
 		default:
 			// error
 			return nil
