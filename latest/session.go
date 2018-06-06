@@ -30,6 +30,9 @@ type Session struct {
 	AssembleFrameChan chan struct{}
 	WaitFrameTimeout  *time.Ticker
 
+	PingTicker   *time.Ticker
+	timePingSent time.Time
+
 	versionDecided qtype.Version
 
 	LastPacketNumber qtype.PacketNumber
@@ -55,6 +58,8 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 		AssembleFrameChan: make(chan struct{}),
 		// TODO: this would be configurable
 		WaitFrameTimeout: time.NewTicker(10 * time.Millisecond),
+		// TODO: this should be configured by transport parameter
+		PingTicker:       time.NewTicker(15 * time.Second),
 		versionDecided:   qtype.VersionPlaceholder,
 		LastPacketNumber: qtype.InitialPacketNumber(),
 	}
@@ -99,6 +104,9 @@ func (s *Session) SendPacketLoop() {
 			if len(wire) == 0 {
 				continue
 			}
+		case <-s.PingTicker.C:
+			// currently 1 packet per 1 ping
+			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 1, []Frame{NewPingFrame()}))
 		case p := <-s.sendPacketChan:
 			err = s.SendPacket(p)
 		}
