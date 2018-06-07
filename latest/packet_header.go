@@ -11,10 +11,10 @@ import (
 type LongHeaderPacketType byte
 
 const (
-	InitialPacketType          LongHeaderPacketType = 0x7f
-	RetryPacketType                                 = 0x7e
-	HandshakePacketType                             = 0x7d
-	ZeroRTTProtectedPacketType                      = 0x7c
+	ZeroRTTProtectedPacketType LongHeaderPacketType = iota + 0x7c
+	HandshakePacketType
+	RetryPacketType
+	InitialPacketType
 )
 
 type ShortHeaderFlagType byte
@@ -28,10 +28,11 @@ const (
 type ShortHeaderPacketType byte
 
 const (
-	OneOctetType              ShortHeaderPacketType = 0x00
-	TwoOctetsType                                   = 0x01
-	FourOctetsType                                  = 0x02
-	ShortHeaderPacketTypeMask                       = 0x03
+	OneOctetType ShortHeaderPacketType = iota
+	TwoOctetsType
+	FourOctetsType
+	ShortHeaderPacketTypeMask
+	KeyPhase ShortHeaderPacketType = 0x40
 )
 
 type PacketHeaderType byte
