@@ -58,9 +58,8 @@ func (s BaseStream) UpdateStreamOffsetReceived(offset uint64) {
 type SendStream struct {
 	*BaseStream
 	// application data can be buffered at "Ready" state
-	SendBuffer []byte
-	// used for storing frame for blocked frames. can be chan *StreamFrame?
-	BlockedFramesChan chan Frame
+	SendBuffer       []byte
+	blockedFrameChan chan Frame
 }
 
 func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
@@ -79,8 +78,7 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 				},
 			},
 		},
-		// TODO: be careful for the size
-		BlockedFramesChan: make(chan Frame, 10),
+		blockedFrameChan: make(chan Frame, 100),
 		// TODO : need to be able to set initial windowsize
 		//FlowControllBlocked: false,
 	}
@@ -90,27 +88,12 @@ func (s SendStream) IsTerminated() bool {
 	return s.State == qtype.StreamDataRecvd || s.State == qtype.StreamResetRecvd
 }
 
-func (s *SendStream) resendBlockedFrames() error {
-	// TODO: be careful for multithread
-	var blockedFrames []Frame
-	for frame := range s.BlockedFramesChan {
-		blockedFrames = append(blockedFrames, frame)
-	}
-
-	for _, frame := range blockedFrames {
-		err := s.sendFrame(frame)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (s *SendStream) sendFrame(f Frame) (err error) {
 	if s.IsTerminated() {
 		// MUST NOT send any frame in the states above
 		return nil
 	}
+
 	switch frame := f.(type) {
 	case *StreamFrame:
 		if s.State == qtype.StreamResetSent {
@@ -149,6 +132,24 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 	return err
 }
 
+func (s *SendStream) resendBlockedFrames() error {
+	// TODO: be careful for multithread
+	var blockedFrames []Frame
+	for frame := range s.blockedFrameChan {
+		blockedFrames = append(blockedFrames, frame)
+	}
+
+	for _, frame := range blockedFrames {
+		err := s.sendFrame(frame)
+		if err != nil {
+			return err
+		}
+	}
+	// send quickly
+	s.sess.AssembleFrameChan <- struct{}{}
+	return nil
+}
+
 func (s *SendStream) sendStreamFrame(f *StreamFrame) error {
 	if s.State == qtype.StreamReady {
 		s.State = qtype.StreamSend
@@ -179,9 +180,9 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 	}
 	s.flowcontroller.MaxDataLimit = f.Data.GetValue()
 
-	// this doesn't send anything for the first MAX_STREAM frame for first setting
-	s.resendBlockedFrames()
-	return nil
+	// this doesn't send anything for the first MAX_STREAM_DATA frame for first setting
+	err := s.resendBlockedFrames()
+	return err
 }
 
 // SendStream handle StopSending for receiving abondon request
@@ -362,6 +363,7 @@ func (s *RecvStream) handleStreamBlockedFrame(f *StreamBlockedFrame) error {
 
 type SendRecvStream struct {
 	*BaseStream
+	*SendStream
 }
 
 func newSendRecvStream(streamID *qtype.StreamID, sess *Session) *SendRecvStream {

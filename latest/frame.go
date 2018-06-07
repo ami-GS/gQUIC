@@ -13,6 +13,18 @@ type Frame interface {
 	GetWireSize() int
 }
 
+type StreamLevelFrame interface {
+	GetStreamID() qtype.StreamID
+}
+
+type BaseStreamLevelFrame struct {
+	StreamID qtype.StreamID
+}
+
+func (s *BaseStreamLevelFrame) GetStreamID() qtype.StreamID {
+	return s.StreamID
+}
+
 type FrameParser func(data []byte) (Frame, int, error)
 
 var FrameParserMap = map[FrameType]FrameParser{
@@ -297,7 +309,7 @@ func (f ApplicationCloseFrame) genWire() (wire []byte, err error) {
 
 type RstStreamFrame struct {
 	*BaseFrame
-	StreamID    qtype.StreamID
+	*BaseStreamLevelFrame
 	ErrorCode   qtype.ApplicationError
 	FinalOffset qtype.QuicInt
 }
@@ -312,10 +324,10 @@ func NewRstStreamFrame(streamID uint64, errorCode qtype.ApplicationError, offset
 		// error
 	}
 	f := &RstStreamFrame{
-		BaseFrame:   NewBaseFrame(RstStreamFrameType),
-		StreamID:    qtype.StreamID(sid),
-		ErrorCode:   errorCode,
-		FinalOffset: ofst,
+		BaseFrame:            NewBaseFrame(RstStreamFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{qtype.StreamID(sid)},
+		ErrorCode:            errorCode,
+		FinalOffset:          ofst,
 	}
 	f.wire, err = f.genWire()
 	if err != nil {
@@ -327,7 +339,8 @@ func NewRstStreamFrame(streamID uint64, errorCode qtype.ApplicationError, offset
 func ParseRstStreamFrame(data []byte) (Frame, int, error) {
 	idx := 1
 	frame := &RstStreamFrame{
-		BaseFrame: NewBaseFrame(RstStreamFrameType),
+		BaseFrame:            NewBaseFrame(RstStreamFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{},
 	}
 	// TODO: bellow is not cool
 	sid, err := qtype.ParseQuicInt(data[idx:])
@@ -468,8 +481,8 @@ func (f MaxDataFrame) genWire() (wire []byte, err error) {
 
 type MaxStreamDataFrame struct {
 	*BaseFrame
-	StreamID qtype.StreamID
-	Data     qtype.QuicInt
+	*BaseStreamLevelFrame
+	Data qtype.QuicInt
 }
 
 func NewMaxStreamDataFrame(streamID uint64, val uint64) *MaxStreamDataFrame {
@@ -482,9 +495,9 @@ func NewMaxStreamDataFrame(streamID uint64, val uint64) *MaxStreamDataFrame {
 		// error
 	}
 	f := &MaxStreamDataFrame{
-		BaseFrame: NewBaseFrame(MaxStreamDataFrameType),
-		StreamID:  qtype.StreamID(sid),
-		Data:      data,
+		BaseFrame:            NewBaseFrame(MaxStreamDataFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{qtype.StreamID(sid)},
+		Data:                 data,
 	}
 	f.wire, err = f.genWire()
 	if err != nil {
@@ -496,7 +509,8 @@ func NewMaxStreamDataFrame(streamID uint64, val uint64) *MaxStreamDataFrame {
 func ParseMaxStreamDataFrame(data []byte) (Frame, int, error) {
 	var err error
 	f := &MaxStreamDataFrame{
-		BaseFrame: NewBaseFrame(MaxStreamDataFrameType),
+		BaseFrame:            NewBaseFrame(MaxStreamDataFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{},
 	}
 	sid, _ := qtype.ParseQuicInt(data[1:])
 	f.StreamID = qtype.StreamID(sid)
@@ -526,7 +540,7 @@ func (f MaxStreamDataFrame) genWire() (wire []byte, err error) {
 
 type MaxStreamIDFrame struct {
 	*BaseFrame
-	StreamID qtype.StreamID
+	*BaseStreamLevelFrame
 }
 
 func NewMaxStreamIDFrame(streamID uint64) *MaxStreamIDFrame {
@@ -535,8 +549,8 @@ func NewMaxStreamIDFrame(streamID uint64) *MaxStreamIDFrame {
 		// error
 	}
 	f := &MaxStreamIDFrame{
-		BaseFrame: NewBaseFrame(MaxStreamIDFrameType),
-		StreamID:  qtype.StreamID(sid),
+		BaseFrame:            NewBaseFrame(MaxStreamIDFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{qtype.StreamID(sid)},
 	}
 	f.wire, err = f.genWire()
 	if err != nil {
@@ -547,7 +561,8 @@ func NewMaxStreamIDFrame(streamID uint64) *MaxStreamIDFrame {
 
 func ParseMaxStreamIDFrame(data []byte) (Frame, int, error) {
 	f := &MaxStreamIDFrame{
-		BaseFrame: NewBaseFrame(MaxStreamIDFrameType),
+		BaseFrame:            NewBaseFrame(MaxStreamIDFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{},
 	}
 	sid, err := qtype.ParseQuicInt(data[1:])
 	f.StreamID = qtype.StreamID(sid)
@@ -626,8 +641,8 @@ func (f BlockedFrame) genWire() (wire []byte, err error) {
 
 type StreamBlockedFrame struct {
 	*BaseFrame
-	StreamID qtype.StreamID
-	Offset   qtype.QuicInt
+	*BaseStreamLevelFrame
+	Offset qtype.QuicInt
 }
 
 func NewStreamBlockedFrame(streamID uint64, val uint64) *StreamBlockedFrame {
@@ -640,9 +655,9 @@ func NewStreamBlockedFrame(streamID uint64, val uint64) *StreamBlockedFrame {
 		// error
 	}
 	f := &StreamBlockedFrame{
-		BaseFrame: NewBaseFrame(StreamBlockedFrameType),
-		StreamID:  qtype.StreamID(sid),
-		Offset:    data,
+		BaseFrame:            NewBaseFrame(StreamBlockedFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{qtype.StreamID(sid)},
+		Offset:               data,
 	}
 	f.wire, err = f.genWire()
 	if err != nil {
@@ -653,7 +668,8 @@ func NewStreamBlockedFrame(streamID uint64, val uint64) *StreamBlockedFrame {
 
 func ParseStreamBlockedFrame(data []byte) (Frame, int, error) {
 	f := &StreamBlockedFrame{
-		BaseFrame: NewBaseFrame(StreamBlockedFrameType),
+		BaseFrame:            NewBaseFrame(StreamBlockedFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{},
 	}
 	sid, err := qtype.ParseQuicInt(data[1:])
 	f.StreamID = qtype.StreamID(sid)
@@ -686,7 +702,7 @@ func (f StreamBlockedFrame) genWire() (wire []byte, err error) {
 
 type StreamIDBlockedFrame struct {
 	*BaseFrame
-	StreamID qtype.StreamID
+	*BaseStreamLevelFrame
 }
 
 func NewStreamIDBlockedFrame(streamID uint64) *StreamIDBlockedFrame {
@@ -695,8 +711,8 @@ func NewStreamIDBlockedFrame(streamID uint64) *StreamIDBlockedFrame {
 		// error
 	}
 	f := &StreamIDBlockedFrame{
-		BaseFrame: NewBaseFrame(StreamIDBlockedFrameType),
-		StreamID:  qtype.StreamID(sid),
+		BaseFrame:            NewBaseFrame(StreamIDBlockedFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{qtype.StreamID(sid)},
 	}
 	f.wire, err = f.genWire()
 	if err != nil {
@@ -707,7 +723,8 @@ func NewStreamIDBlockedFrame(streamID uint64) *StreamIDBlockedFrame {
 
 func ParseStreamIDBlockedFrame(data []byte) (Frame, int, error) {
 	f := &StreamIDBlockedFrame{
-		BaseFrame: NewBaseFrame(StreamIDBlockedFrameType),
+		BaseFrame:            NewBaseFrame(StreamIDBlockedFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{},
 	}
 	sid, err := qtype.ParseQuicInt(data[1:])
 	f.StreamID = qtype.StreamID(sid)
@@ -820,7 +837,7 @@ func (f NewConnectionIDFrame) genWire() (wire []byte, err error) {
 
 type StopSendingFrame struct {
 	*BaseFrame
-	StreamID  qtype.StreamID
+	*BaseStreamLevelFrame
 	ErrorCode qtype.ApplicationError
 }
 
@@ -830,9 +847,9 @@ func NewStopSendingFrame(streamID uint64, errCode qtype.ApplicationError) *StopS
 		// error
 	}
 	f := &StopSendingFrame{
-		BaseFrame: NewBaseFrame(StopSendingFrameType),
-		StreamID:  qtype.StreamID(sid),
-		ErrorCode: errCode,
+		BaseFrame:            NewBaseFrame(StopSendingFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{qtype.StreamID(sid)},
+		ErrorCode:            errCode,
 	}
 	f.wire, err = f.genWire()
 	if err != nil {
@@ -843,7 +860,8 @@ func NewStopSendingFrame(streamID uint64, errCode qtype.ApplicationError) *StopS
 
 func ParseStopSendingFrame(data []byte) (Frame, int, error) {
 	f := &StopSendingFrame{
-		BaseFrame: NewBaseFrame(StopSendingFrameType),
+		BaseFrame:            NewBaseFrame(StopSendingFrameType),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{},
 	}
 	sid, err := qtype.ParseQuicInt(data[1:])
 	f.StreamID = qtype.StreamID(sid)
@@ -1099,11 +1117,11 @@ func (f PathResponseFrame) genWire() (wire []byte, err error) {
 
 type StreamFrame struct {
 	*BaseFrame
-	StreamID qtype.StreamID
-	Offset   *qtype.QuicInt
-	Length   *qtype.QuicInt
-	Finish   bool
-	Data     []byte
+	*BaseStreamLevelFrame
+	Offset *qtype.QuicInt
+	Length *qtype.QuicInt
+	Finish bool
+	Data   []byte
 }
 
 func NewStreamFrame(streamID, offset uint64, offF, lenF, fin bool, data []byte) *StreamFrame {
@@ -1140,12 +1158,12 @@ func NewStreamFrame(streamID, offset uint64, offF, lenF, fin bool, data []byte) 
 	}
 
 	f := &StreamFrame{
-		BaseFrame: NewBaseFrame(typeFlag),
-		StreamID:  qtype.StreamID(sid),
-		Offset:    ofst,
-		Length:    lngth,
-		Finish:    fin,
-		Data:      data,
+		BaseFrame:            NewBaseFrame(typeFlag),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{qtype.StreamID(sid)},
+		Offset:               ofst,
+		Length:               lngth,
+		Finish:               fin,
+		Data:                 data,
 	}
 	f.wire, err = f.genWire()
 	if err != nil {
@@ -1159,13 +1177,15 @@ func ParseStreamFrame(data []byte) (Frame, int, error) {
 	idx := 1
 	flag := data[0] & 0x07
 	f := &StreamFrame{
-		BaseFrame: NewBaseFrame(StreamFrameType | FrameType(flag)),
+		BaseFrame:            NewBaseFrame(StreamFrameType | FrameType(flag)),
+		BaseStreamLevelFrame: &BaseStreamLevelFrame{},
 	}
 	sid, err := qtype.ParseQuicInt(data[idx:])
 	if err != nil {
 		return nil, 0, err
 	}
 	f.StreamID = qtype.StreamID(sid)
+
 	idx += f.StreamID.ByteLen
 	// OFF bit
 	if flag&0x04 == 0x04 {

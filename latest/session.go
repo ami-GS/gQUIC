@@ -23,6 +23,9 @@ type Session struct {
 	sendFrameChan  chan Frame
 	sendPacketChan chan Packet
 
+	//blockedFrameChan chan Frame
+	blockedStreamIDbyConnection chan *qtype.StreamID
+
 	streamManager *StreamManager
 
 	flowContoller *ConnectionFlowController
@@ -177,13 +180,15 @@ func (s *Session) maybeAckPacket(p Packet) {
 		return
 	}
 
+	// retrieve packet number from priority queue
+	// largest
+
 }
 
 func (s *Session) HandleFrames(fs []Frame) error {
 	var err error
 	for _, frame := range fs {
 		switch f := frame.(type) {
-			err = s.streamManager.handleFrame(frame)
 		case *PaddingFrame:
 		case *ConnectionCloseFrame:
 			err = s.handleConnectionCloseFrame(f)
@@ -199,6 +204,7 @@ func (s *Session) HandleFrames(fs []Frame) error {
 		case *PathResponseFrame:
 		case *MaxStreamIDFrame, *StreamIDBlockedFrame, *StreamFrame, *RstStreamFrame,
 			*MaxStreamDataFrame, *StreamBlockedFrame, *StopSendingFrame:
+			err = s.streamManager.handleFrame(f.(StreamLevelFrame))
 		default:
 			// error
 			return nil
@@ -218,6 +224,13 @@ func (s *Session) handleConnectionCloseFrame(frame *ConnectionCloseFrame) error 
 }
 
 func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
-	//s.DataSizeLimit = frame.Data
+	s.flowContoller.MaxDataLimit = frame.Data.GetValue()
+
+	for sid := range s.blockedStreamIDbyConnection {
+		err := s.streamManager.resendBlockedFrames(sid)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
