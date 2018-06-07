@@ -896,8 +896,8 @@ func (f StopSendingFrame) genWire() (wire []byte, err error) {
 */
 
 type AckBlock struct {
-	AckBlock qtype.QuicInt
-	Gap      qtype.QuicInt
+	Block qtype.QuicInt
+	Gap   qtype.QuicInt
 }
 
 func NewAckBlock(ackBlock, gap uint64) *AckBlock {
@@ -911,8 +911,8 @@ func NewAckBlock(ackBlock, gap uint64) *AckBlock {
 	}
 
 	return &AckBlock{
-		AckBlock: blk,
-		Gap:      gp,
+		Block: blk,
+		Gap:   gp,
 	}
 }
 
@@ -982,7 +982,7 @@ func ParseAckFrame(data []byte) (Frame, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	f.AckBlocks[0].AckBlock = block
+	f.AckBlocks[0].Block = block
 	idx += block.ByteLen
 	for i := uint64(1); i < f.AckBlockCount.GetValue(); i++ {
 		gap, err := qtype.ParseQuicInt(data[idx:])
@@ -995,7 +995,7 @@ func ParseAckFrame(data []byte) (Frame, int, error) {
 		if err != nil {
 			return nil, 0, err
 		}
-		f.AckBlocks[i].AckBlock = block
+		f.AckBlocks[i].Block = block
 		idx += block.ByteLen
 	}
 	f.wire = data[:idx]
@@ -1005,7 +1005,7 @@ func ParseAckFrame(data []byte) (Frame, int, error) {
 func (f AckFrame) genWire() (wire []byte, err error) {
 	blockByteLen := 0
 	for _, v := range f.AckBlocks {
-		blockByteLen += v.AckBlock.ByteLen + v.Gap.ByteLen
+		blockByteLen += v.Block.ByteLen + v.Gap.ByteLen
 	}
 	wire = make([]byte, 1+f.LargestAcked.ByteLen+f.AckDelay.ByteLen+f.AckBlockCount.ByteLen+blockByteLen)
 	wire[0] = byte(AckFrameType)
@@ -1013,11 +1013,11 @@ func (f AckFrame) genWire() (wire []byte, err error) {
 	idx += f.AckDelay.PutWire(wire[idx:])
 	idx += f.AckBlockCount.PutWire(wire[idx:])
 
-	idx += f.AckBlocks[0].AckBlock.PutWire(wire[idx:])
+	idx += f.AckBlocks[0].Block.PutWire(wire[idx:])
 	for i := uint64(1); i < f.AckBlockCount.GetValue(); i++ {
 		v := f.AckBlocks[i]
 		idx += v.Gap.PutWire(wire[idx:])
-		idx += v.AckBlock.PutWire(wire[idx:])
+		idx += v.Block.PutWire(wire[idx:])
 	}
 
 	return
