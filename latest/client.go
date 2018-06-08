@@ -56,6 +56,7 @@ func (c *Client) Connect() {
 }
 
 func (c *Client) run() {
+	go c.session.Run()
 	buffer := make([]byte, qtype.MTUIPv4)
 	for {
 		length, _, err := c.session.conn.Read(buffer)

@@ -71,7 +71,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 
 }
 
-func (s *Session) SendPacketLoop() {
+func (s *Session) Run() {
 	assemble := func() []byte {
 		out := make([]byte, qtype.MTUIPv4)
 		byteSize := 0
@@ -99,6 +99,9 @@ func (s *Session) SendPacketLoop() {
 	var wire []byte
 	for {
 		select {
+		//case <- s.CloseChan:
+		// 1. closing process
+		// 2. close
 		case <-s.WaitFrameTimeout.C:
 			s.AssembleFrameChan <- struct{}{}
 		case <-s.AssembleFrameChan:

@@ -59,6 +59,7 @@ func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 			sess.packetHandler = sess
 			// TODO: be careful to use lh
 			sess.versionDecided = lh.Version
+			go sess.Run()
 
 			// might be deleted after handling packet
 			s.sessions[destID.String()] = sess
