@@ -102,13 +102,22 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 		}
 		err = s.sendStreamFrame(frame)
 		dataOffset := frame.Offset.GetValue()
-		if s.flowcontroller.SendableByOffset(dataOffset, frame.Finish) {
-			s.UpdateStreamOffsetSent(dataOffset)
-		} else {
-			// STREAM_BLOCKED　?
-			// queue the frame until MAX_DATA will be sent
+		sendFlag := s.flowcontroller.SendableByOffset(dataOffset, frame.Finish)
+		switch sendFlag {
+		case Sendable:
+			//s.UpdateStreamOffsetSent(dataOffset)
+		case StreamBlocked:
+			s.blockedFrameChan <- frame
 			err = s.sendFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
-			s.BlockedFramesChan <- frame
+			return nil
+		case ConnectionBlocked:
+			s.blockedFrameChan <- frame
+			err = s.sendFrame(NewBlockedFrame(dataOffset))
+			return nil
+		case BothBlocked:
+			s.blockedFrameChan <- frame
+			err = s.sendFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
+			err = s.sess.sendFrame(NewBlockedFrame(dataOffset))
 			return nil
 		}
 	case *StreamBlockedFrame:

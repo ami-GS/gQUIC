@@ -17,12 +17,26 @@ type StreamFlowController struct {
 	connFC *ConnectionFlowController
 }
 
-func (s *StreamFlowController) SendableByOffset(offset uint64, fin bool) bool {
-	sendable := true
+type FlowControlFlag byte
+
+const (
+	Sendable          FlowControlFlag = 1
+	StreamBlocked     FlowControlFlag = 2
+	ConnectionBlocked FlowControlFlag = 3
+	// will be represent by StreamBlcked * ConnectionBlocked
+	BothBlocked FlowControlFlag = 6
+)
+
+func (s *StreamFlowController) SendableByOffset(offset uint64, fin bool) FlowControlFlag {
+	connSendable := Sendable
+	streamSendable := Sendable
 	if !s.IsStreamZero && fin {
-		sendable = s.connFC.SendableByOffset(offset)
+		connSendable = s.connFC.SendableByOffset(offset)
 	}
-	return sendable && offset <= s.MaxDataLimit
+	if offset <= s.MaxDataLimit {
+		streamSendable = Sendable
+	}
+	return connSendable * streamSendable
 }
 
 func (s *StreamFlowController) ReceivableByOffset(offset uint64, fin bool) error {
@@ -51,8 +65,11 @@ type ConnectionFlowController struct {
 	baseFlowController
 }
 
-func (c *ConnectionFlowController) SendableByOffset(largestOffset uint64) bool {
-	return c.bytesSent+largestOffset <= c.MaxDataLimit
+func (c *ConnectionFlowController) SendableByOffset(largestOffset uint64) FlowControlFlag {
+	if c.bytesSent+largestOffset <= c.MaxDataLimit {
+		return Sendable
+	}
+	return ConnectionBlocked
 }
 
 func (c *ConnectionFlowController) ReceivableByOffset(largestOffset uint64) error {
