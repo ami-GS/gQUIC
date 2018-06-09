@@ -2,6 +2,7 @@ package quiclatest
 
 import (
 	"net"
+	"sync"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
@@ -15,6 +16,26 @@ type Server struct {
 	NumHandshake      int
 }
 
+func ListenAddr(addr string) (*Server, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &Server{
+		conn:              conn,
+		sessions:          make(map[string]*Session),
+		addrSessions:      make(map[string]*Session),
+		SupportedVersions: qtype.SupportedVersions,
+	}
+	go s.Serve()
+	return s, nil
+}
+
 func (s *Server) Serve() error {
 	buffer := make([]byte, qtype.MTUIPv4)
 	for {
@@ -23,7 +44,6 @@ func (s *Server) Serve() error {
 			s.conn.Close()
 			return err
 		}
-
 		packet, _, err := ParsePacket(buffer[:length])
 		if err != nil {
 			s.conn.Close()
@@ -36,6 +56,20 @@ func (s *Server) Serve() error {
 			return err
 		}
 	}
+}
+
+func (s *Server) Close() error {
+	wg := &sync.WaitGroup{}
+	for _, session := range s.sessions {
+		wg.Add(1)
+		go func(sess *Session) {
+			sess.Close()
+			wg.Done()
+		}(session)
+	}
+	wg.Wait()
+	// close conn
+	return nil
 }
 
 func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {

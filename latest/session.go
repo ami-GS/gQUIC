@@ -33,6 +33,8 @@ type Session struct {
 	AssembleFrameChan chan struct{}
 	WaitFrameTimeout  *time.Ticker
 
+	closeChan chan struct{}
+
 	PingTicker   *time.Ticker
 	timePingSent time.Time
 
@@ -52,6 +54,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 		// channel size should be configured or detect filled
 		sendFrameChan:  make(chan Frame, 100),
 		sendPacketChan: make(chan Packet, 100),
+		closeChan:      make(chan struct{}),
 		flowContoller: &ConnectionFlowController{
 			baseFlowController: baseFlowController{
 				MaxDataLimit: 1024, //TODO: set appropriately
@@ -97,11 +100,11 @@ func (s *Session) Run() {
 
 	var err error
 	var wire []byte
+RunLOOP:
 	for {
 		select {
-		//case <- s.CloseChan:
-		// 1. closing process
-		// 2. close
+		case <-s.closeChan:
+			break RunLOOP
 		case <-s.WaitFrameTimeout.C:
 			s.AssembleFrameChan <- struct{}{}
 		case <-s.AssembleFrameChan:
@@ -121,6 +124,14 @@ func (s *Session) Run() {
 		}
 	}
 	s.WaitFrameTimeout.Stop()
+}
+
+func (s *Session) Close() error {
+	// TODO: close streams
+
+	// stops s.Run()
+	s.closeChan <- struct{}{}
+	return nil
 }
 
 func (s *Session) SendPacket(packet Packet) error {

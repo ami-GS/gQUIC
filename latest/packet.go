@@ -7,6 +7,7 @@ import (
 )
 
 type Packet interface {
+	// doesn't need genWire
 	GetWire() ([]byte, error)
 	GetHeader() PacketHeader
 	SetHeader(ph PacketHeader)
@@ -59,6 +60,7 @@ func (bp *BasePacket) GetFrames() []Frame {
 	return bp.Frames
 }
 
+//GetWire of BasePacket assembles all wires, from header wire to frame wires
 func (bp *BasePacket) GetWire() (wire []byte, err error) {
 	hWire := bp.Header.GetWire()
 	if err != nil {
