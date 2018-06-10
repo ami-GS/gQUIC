@@ -1,6 +1,7 @@
 package quiclatest
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
@@ -287,6 +288,7 @@ func NewProtectedPacket(version qtype.Version, key bool, destConnID, srcConnID q
 // Version negotiation doesn't use long header, but have similar form
 type VersionNegotiationPacket struct {
 	*BasePacketHeader
+	wire              []byte
 	Version           qtype.Version
 	DCIL              byte
 	SCIL              byte
@@ -303,7 +305,7 @@ func NewVersionNegotiationPacket(destConnID, srcConnID qtype.ConnectionID, suppo
 		scil = len(srcConnID) - 3
 	}
 
-	return &VersionNegotiationPacket{
+	p := &VersionNegotiationPacket{
 		BasePacketHeader: &BasePacketHeader{
 			DestConnID:   destConnID,
 			SrcConnID:    srcConnID,
@@ -314,6 +316,12 @@ func NewVersionNegotiationPacket(destConnID, srcConnID qtype.ConnectionID, suppo
 		SCIL:              byte(scil),
 		SupportedVersions: supportedVersions,
 	}
+	var err error
+	p.wire, err = p.genWire()
+	if err != nil {
+		return nil
+	}
+	return p
 }
 
 func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
@@ -334,12 +342,12 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 	idx++
 	if packet.DCIL != 0 {
 		dcil := int(packet.DCIL + 3)
-		qtype.ReadConnectionID(data[idx:], dcil)
+		packet.BasePacketHeader.DestConnID, _ = qtype.ReadConnectionID(data[idx:], dcil)
 		idx += dcil
 	}
 	if packet.SCIL != 0 {
 		scil := int(packet.SCIL + 3)
-		qtype.ReadConnectionID(data[idx:], scil)
+		packet.BasePacketHeader.SrcConnID, _ = qtype.ReadConnectionID(data[idx:], scil)
 		idx += scil
 	}
 	numVersions := (len(data) - idx) / 4
@@ -351,12 +359,23 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 	return packet, idx, nil
 }
 
-func (p VersionNegotiationPacket) GetWire() (wire []byte, err error) {
-	wire = make([]byte, int(6+p.DCIL+p.SCIL)+len(p.SupportedVersions)*4)
-	wire[0] = 0x80
+func (p VersionNegotiationPacket) genWire() (wire []byte, err error) {
+	wireLen := 6 + len(p.SupportedVersions)*4
+	if p.DCIL != 0 {
+		wireLen += int(p.DCIL + 3)
+	}
+	if p.SCIL != 0 {
+		wireLen += int(p.SCIL + 3)
+	}
+	//wireLen = qtype.MTUIPv4
+	wire = make([]byte, wireLen)
+	if _, err := rand.Read(wire[0:1]); err != nil {
+		return nil, err
+	}
+	wire[0] |= 0x80
 	binary.BigEndian.PutUint32(wire[1:], uint32(p.Version))
 	wire[5] = (p.DCIL << 4) | p.SCIL
-	idx := 5
+	idx := 6
 	if p.DCIL != 0 {
 		for i := 0; i < int(p.DCIL+3); i++ {
 			wire[idx+i] = p.DestConnID[i]
@@ -375,6 +394,10 @@ func (p VersionNegotiationPacket) GetWire() (wire []byte, err error) {
 	}
 	// TODO: VersionNegotiationPacket fills MTU
 	return
+}
+
+func (p VersionNegotiationPacket) GetWire() ([]byte, error) {
+	return p.wire, nil
 }
 
 func (p VersionNegotiationPacket) GetHeader() PacketHeader {
