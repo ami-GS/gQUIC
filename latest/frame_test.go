@@ -46,10 +46,13 @@ func TestFrameTypeString(t *testing.T) {
 func TestStreamFrame(t *testing.T) {
 	Convey("NewStreamFrame returns stream frame", t, func() {
 		sf1 := NewStreamFrame(0, 0, false, true, false, []byte{0x01})
-		sid, _ := qtype.NewQuicInt(0)
+		sidVal, _ := qtype.NewQuicInt(0)
 		lngt, _ := qtype.NewQuicInt(1)
 		sType := 0x12
-		sfexpect := StreamFrame{NewBaseFrame(FrameType(sType)), qtype.StreamID(sid), nil, &lngt, false, []byte{0x01}}
+		sfexpect := StreamFrame{
+			NewBaseFrame(FrameType(sType)),
+			&BaseStreamLevelFrame{qtype.StreamID(sidVal)},
+			nil, &lngt, false, []byte{0x01}}
 		sfexpect.wire = []byte{0x12, 0, 1, 1}
 		So(sf1, ShouldResemble, &sfexpect)
 	})

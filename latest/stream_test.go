@@ -54,36 +54,43 @@ func testnewRecvStream(t *testing.T) {
 	})
 }
 
-func TestGetOrNewRecvStream(t *testing.T) {
+func TestGetOrNewStream(t *testing.T) {
 	destID, _ := qtype.NewConnectionID(nil)
 	srcID, _ := qtype.NewConnectionID(nil)
-	sess := NewSession(nil, destID, srcID)
 	Convey("If no stream created, new stream will be taken", t, func() {
+		sess := NewSession(nil, destID, srcID)
 		maxIDUni, _ := qtype.NewStreamID(1000)
 		maxIDBidi, _ := qtype.NewStreamID(1001)
-		manager := NewStreamManager(nil)
+		manager := NewStreamManager(sess)
 		manager.maxStreamIDUni = maxIDUni
 		manager.maxStreamIDBidi = maxIDBidi
 		// 1010: client initiated
 		sid, _ := qtype.NewStreamID(10)
-		aStream, isNew, err := manager.GetOrNewRecvStream(&sid, sess)
+		aStream, isNew, err := manager.GetOrNewStream(&sid, false)
+		_, ok := aStream.(*RecvStream)
 		eStream := newRecvStream(&sid, sess)
+		So(ok, ShouldBeTrue)
 		So(isNew, ShouldBeTrue)
 		So(err, ShouldBeNil)
 		So(aStream, ShouldResemble, eStream)
 	})
 
 	Convey("If a stream created previously, it use the reference", t, func() {
+		sess := NewSession(nil, destID, srcID)
 		maxIDUni, _ := qtype.NewStreamID(1000)
 		maxIDBidi, _ := qtype.NewStreamID(1001)
-		manager := NewStreamManager(nil)
+		manager := NewStreamManager(sess)
 		manager.maxStreamIDUni = maxIDUni
 		manager.maxStreamIDBidi = maxIDBidi
 		sid, _ := qtype.NewStreamID(10)
-		eStream, isNewRcv, err := manager.GetOrNewRecvStream(&sid, sess)
+		eStream, isNewRcv, err := manager.GetOrNewStream(&sid, false)
+		_, ok := eStream.(*RecvStream)
+		So(ok, ShouldBeTrue)
 		So(isNewRcv, ShouldBeTrue)
 		So(err, ShouldBeNil)
-		aStream, isNewRcv, err := manager.GetOrNewRecvStream(&sid, sess)
+		aStream, isNewRcv, err := manager.GetOrNewStream(&sid, false)
+		_, ok = eStream.(*RecvStream)
+		So(ok, ShouldBeTrue)
 		So(isNewRcv, ShouldBeFalse)
 		So(err, ShouldBeNil)
 		So(aStream, ShouldResemble, eStream)
