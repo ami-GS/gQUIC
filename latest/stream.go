@@ -388,28 +388,52 @@ func (s *RecvStream) handleStreamBlockedFrame(f *StreamBlockedFrame) error {
 type SendRecvStream struct {
 	*BaseStream
 	*SendStream
+	*RecvStream
 }
 
 func newSendRecvStream(streamID *qtype.StreamID, sess *Session) *SendRecvStream {
-	sid := streamID.GetValue()
 	return &SendRecvStream{
 		BaseStream: &BaseStream{
 			ID:    *streamID,
 			State: qtype.StreamIdle,
 			sess:  sess,
-			// TODO: need to check default MAX_DATA
-			flowcontroller: &StreamFlowController{
-				IsStreamZero: sid == 0,
-				connFC:       sess.flowContoller,
-				baseFlowController: baseFlowController{
-					MaxDataLimit: 1024, // TODO: set appropriately
-				},
-			},
+			// flow controll should be done in each send and recv stream bellows?
+			flowcontroller: nil,
 		},
+		SendStream: newSendStream(streamID, sess),
+		RecvStream: newRecvStream(streamID, sess),
 	}
 }
 
 func (s *SendRecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
-	s.State = qtype.StreamClosed
-	return nil
+	return s.RecvStream.handleRstStreamFrame(f)
+}
+func (s *SendRecvStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
+	//TODO: not sure
+	return s.RecvStream.handleMaxStreamDataFrame(f)
+}
+func (s *SendRecvStream) handleStopSendingFrame(f *StopSendingFrame) error {
+	return s.SendStream.handleStopSendingFrame(f)
+}
+func (s *SendRecvStream) handleStreamBlockedFrame(f *StreamBlockedFrame) error {
+	return s.RecvStream.handleStreamBlockedFrame(f)
+}
+func (s *SendRecvStream) handleStreamFrame(f *StreamFrame) error {
+	return s.RecvStream.handleStreamFrame(f)
+}
+
+func (s *SendRecvStream) IsTerminated() bool {
+	// TODO: need to refere table in spec
+	return s.SendStream.IsTerminated() && s.RecvStream.IsTerminated()
+}
+
+func (s *SendRecvStream) QueueFrame(f StreamLevelFrame) error {
+	var err error
+	switch f.(type) {
+	case *StreamFrame, *StreamBlockedFrame, *RstStreamFrame:
+		err = s.SendStream.QueueFrame(f)
+	case *MaxStreamIDFrame, *StopSendingFrame:
+		err = s.RecvStream.QueueFrame(f)
+	}
+	return err
 }
