@@ -75,31 +75,32 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 }
 
 func (s *Session) Run() {
-	assemble := func() []byte {
-		out := make([]byte, qtype.MTUIPv4)
+	assemble := func() []Frame {
+		frames := make([]Frame, 0)
 		byteSize := 0
 		for {
 			select {
 			case frame := <-s.sendFrameChan:
+				//frames in sendFrameChan is already evaluated by sess.QueueFrame and stream.QueueFrame
 				size := frame.GetWireSize()
 				if byteSize+size > qtype.MTUIPv4 {
 					// TODO: this should be problem
 					// big frame would never be sent
 					s.sendFrameChan <- frame
-					return out[:byteSize]
+					return frames
 				}
-				copy(out[byteSize:], frame.GetWire())
 				// TODO: consider encrypted wire
+				frames = append(frames, frame)
 				byteSize += size
 			default:
 				// If sendFrameChan is empty
-				return out[:byteSize]
+				return frames
 			}
 		}
 	}
 
 	var err error
-	var wire []byte
+	var frames []Frame
 RunLOOP:
 	for {
 		select {
@@ -108,15 +109,17 @@ RunLOOP:
 		case <-s.WaitFrameTimeout.C:
 			s.AssembleFrameChan <- struct{}{}
 		case <-s.AssembleFrameChan:
-			wire = assemble()
-			// 1. make Packet wire
-			if len(wire) == 0 {
+			frames = assemble()
+			if len(frames) == 0 {
 				continue
 			}
+			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 1, frames))
 		case <-s.PingTicker.C:
 			// currently 1 packet per 1 ping
 			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 1, []Frame{NewPingFrame()}))
 		case p := <-s.sendPacketChan:
+			// TODO: evaluated frames can be sent
+			// currently assuming all frames in p is valid
 			err = s.SendPacket(p)
 		}
 		if err != nil {
