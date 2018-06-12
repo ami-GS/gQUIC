@@ -122,6 +122,8 @@ func (s *StreamManager) getOrNewSendRecvStream(streamID *qtype.StreamID, sess *S
 func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 	sid := f.GetStreamID()
 
+func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
+	sid := f.GetStreamID()
 	protocolViolationFunc := func() error {
 		// An endpoint that receives a MAX_STREAM_DATA frame for a send-only
 		// stream it has not opened MUST terminate the connection with error
@@ -143,11 +145,7 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 		if err != nil {
 			return err
 		}
-		stream.handleStreamFrame(frame)
-		if err != nil {
-			return err
-		}
-		stream.UpdateStreamOffsetReceived(frame.Offset.GetValue())
+		err = stream.handleStreamFrame(frame)
 	case *RstStreamFrame:
 		stream, _, err = s.GetOrNewStream(&sid, false)
 		if err != nil {
@@ -183,6 +181,11 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 		// error, but impossible to reach here
 		return nil
 	}
+
+	if err != nil {
+		return err
+	}
+
 	if stream.IsTerminated() {
 		stream.UpdateConnectionByteReceived()
 	}

@@ -216,9 +216,9 @@ func (s *Session) HandleFrames(fs []Frame) error {
 			err = s.handleAckFrame(f)
 		case *PathChallengeFrame:
 		case *PathResponseFrame:
-		case *MaxStreamIDFrame, *StreamIDBlockedFrame, *StreamFrame, *RstStreamFrame,
-			*MaxStreamDataFrame, *StreamBlockedFrame, *StopSendingFrame:
-			err = s.streamManager.handleFrame(f.(StreamLevelFrame))
+
+		case StreamLevelFrame:
+			err = s.streamManager.handleFrame(f)
 		default:
 			// error
 			return nil

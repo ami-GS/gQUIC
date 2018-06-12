@@ -359,6 +359,8 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 
 	// do something
 	s.State = qtype.StreamDataRecvd
+
+	s.UpdateStreamOffsetReceived(f.Offset.GetValue())
 	return nil
 }
 
