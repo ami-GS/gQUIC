@@ -11,13 +11,13 @@ type Stream interface {
 	GetState() qtype.StreamState
 	GetID() qtype.StreamID
 	IsTerminated() bool
+	QueueFrame(f StreamLevelFrame) error
 	UpdateConnectionByteSent()
 	UpdateConnectionByteReceived()
 	UpdateStreamOffsetSent(offset uint64)
 	UpdateStreamOffsetReceived(offset uint64)
 	handleMaxStreamDataFrame(f *MaxStreamDataFrame) error
 	handleStopSendingFrame(f *StopSendingFrame) error
-	//handleAckFrame(f *AckFrame) error
 	handleRstStreamFrame(f *RstStreamFrame) error
 	handleStreamFrame(f *StreamFrame) error
 	handleStreamBlockedFrame(f *StreamBlockedFrame) error
@@ -59,7 +59,7 @@ type SendStream struct {
 	*BaseStream
 	// application data can be buffered at "Ready" state
 	SendBuffer       []byte
-	blockedFrameChan chan Frame
+	blockedFrameChan chan *StreamFrame
 }
 
 func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
@@ -78,7 +78,7 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 				},
 			},
 		},
-		blockedFrameChan: make(chan Frame, 100),
+		blockedFrameChan: make(chan *StreamFrame, 100),
 		// TODO : need to be able to set initial windowsize
 		//FlowControllBlocked: false,
 	}
@@ -88,7 +88,8 @@ func (s SendStream) IsTerminated() bool {
 	return s.State == qtype.StreamDataRecvd || s.State == qtype.StreamResetRecvd
 }
 
-func (s *SendStream) sendFrame(f Frame) (err error) {
+// QueueFrame is used for validate the frame can be sent, and then queue the frame
+func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 	if s.IsTerminated() {
 		// MUST NOT send any frame in the states above
 		return nil
@@ -100,24 +101,22 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 			// MUST NOT send Stream frame in the states above
 			return nil
 		}
-		err = s.sendStreamFrame(frame)
 		dataOffset := frame.Offset.GetValue()
-		sendFlag := s.flowcontroller.SendableByOffset(dataOffset, frame.Finish)
-		switch sendFlag {
+		switch s.flowcontroller.SendableByOffset(dataOffset, frame.Finish) {
 		case Sendable:
-			//s.UpdateStreamOffsetSent(dataOffset)
+			s.sendStreamFrame(frame)
 		case StreamBlocked:
 			s.blockedFrameChan <- frame
-			err = s.sendFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
+			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
 			return nil
 		case ConnectionBlocked:
 			s.blockedFrameChan <- frame
-			err = s.sendFrame(NewBlockedFrame(dataOffset))
+			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
 			return nil
 		case BothBlocked:
 			s.blockedFrameChan <- frame
-			err = s.sendFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
-			err = s.sess.sendFrame(NewBlockedFrame(dataOffset))
+			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
+			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
 			return nil
 		}
 	case *StreamBlockedFrame:
@@ -125,7 +124,7 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 			// MUST NOT send StreamBlocked frame in the states above
 			return nil
 		}
-		err = s.sendStreamBlockedFrame(frame)
+		s.sendStreamBlockedFrame(frame)
 	case *RstStreamFrame:
 		err = s.sendRstStreamFrame(frame)
 	default:
@@ -133,23 +132,19 @@ func (s *SendStream) sendFrame(f Frame) (err error) {
 		return nil
 	}
 
-	if s.IsTerminated() {
-		s.UpdateConnectionByteSent()
-	}
-
-	s.sess.sendFrameChan <- f
+	s.sess.sendFrameChan <- f.(Frame)
 	return err
 }
 
 func (s *SendStream) resendBlockedFrames() error {
 	// TODO: be careful for multithread
-	var blockedFrames []Frame
+	var blockedFrames []*StreamFrame
 	for frame := range s.blockedFrameChan {
 		blockedFrames = append(blockedFrames, frame)
 	}
 
 	for _, frame := range blockedFrames {
-		err := s.sendFrame(frame)
+		err := s.QueueFrame(frame)
 		if err != nil {
 			return err
 		}
@@ -165,6 +160,7 @@ func (s *SendStream) sendStreamFrame(f *StreamFrame) error {
 	} else if s.State == qtype.StreamSend && f.Finish {
 		s.State = qtype.StreamDataSent
 	}
+	s.UpdateStreamOffsetSent(f.Offset.GetValue())
 	return nil
 }
 
@@ -200,7 +196,7 @@ func (s *SendStream) handleStopSendingFrame(f *StopSendingFrame) error {
 		return qtype.ProtocolViolation
 	}
 	// respond by RstStreamFrame with error code of STOPPING
-	return s.sendFrame(NewRstStreamFrame(f.StreamID.GetValue(), qtype.Stopping, 0))
+	return s.QueueFrame(NewRstStreamFrame(f.StreamID.GetValue(), qtype.Stopping, 0))
 }
 
 // AckFrame comes via connection level handling
@@ -284,12 +280,34 @@ func (s *RecvStream) ReadData() ([]byte, bool) {
 	return out, false
 }
 
+// QueueFrame is used for validate the frame can be sent, and then queue the frame
+func (s *RecvStream) QueueFrame(f StreamLevelFrame) (err error) {
+	if s.IsTerminated() {
+		// MUST NOT send any frame in the states above
+		return nil
+	}
+
+	switch frame := f.(type) {
+	case *MaxStreamDataFrame:
+		err = s.sendMaxStreamDataFrame(frame)
+	case *StopSendingFrame:
+		err = s.sendStopSendingFrame(frame)
+	default:
+		// TODO: error
+		return nil
+	}
+
+	s.sess.sendFrameChan <- f.(Frame)
+	return err
+}
+
 func (s *RecvStream) sendMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 	//The receiver only sends MAX_STREAM_DATA in the "Recv" state
 	if s.State != qtype.StreamRecv {
 		return nil
 	}
 
+	s.flowcontroller.MaxDataLimit = f.Data.GetValue()
 	return nil
 }
 
@@ -299,14 +317,9 @@ func (s *RecvStream) sendStopSendingFrame(f *StopSendingFrame) error {
 	if s.State == qtype.StreamResetRecvd || s.State == qtype.StreamResetRead {
 		return nil
 	}
-
 	return nil
 }
 
-/*
-// need to check implementation
-func (s *RecvStream) handleAckFrame(f *AckFrame) error                     { return nil }
-*/
 func (s *RecvStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 	return qtype.ProtocolViolation
 }

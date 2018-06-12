@@ -119,8 +119,41 @@ func (s *StreamManager) getOrNewSendRecvStream(streamID *qtype.StreamID, sess *S
 	return st, true, nil
 }
 
-func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
+// called from session.QueueFrame(f)
+func (s *StreamManager) QueueFrame(f StreamLevelFrame) error {
 	sid := f.GetStreamID()
+	var stream Stream
+	var err error
+	//var isNew bool
+	switch f.(type) {
+	case *StreamFrame, *RstStreamFrame, *StreamBlockedFrame:
+		stream, _, err = s.GetOrNewStream(&sid, true)
+	case *MaxStreamDataFrame, *StopSendingFrame:
+		stream, _, err = s.GetOrNewStream(&sid, false)
+	case *MaxStreamIDFrame:
+		// this is special, affect only stream_manager
+		//s.sess.sendFrameChan <- f
+		return nil
+	case *StreamIDBlockedFrame:
+		// ??
+		//s.sess.sendFrameChan <- f
+		return nil
+	default:
+		// error, but impossible to reach here
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	err = stream.QueueFrame(f)
+	if err != nil {
+		return err
+	}
+	if stream.IsTerminated() {
+		stream.UpdateConnectionByteSent()
+	}
+	return nil
+}
 
 func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 	sid := f.GetStreamID()

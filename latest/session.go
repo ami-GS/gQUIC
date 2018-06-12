@@ -240,6 +240,39 @@ func (s *Session) handleConnectionCloseFrame(frame *ConnectionCloseFrame) error 
 	return nil
 }
 
+func (s *Session) QueueFrame(frame Frame) error {
+	var err error
+	switch f := frame.(type) {
+	case *PaddingFrame:
+	case *ConnectionCloseFrame:
+		// send packet quicly after queueing this frame
+		defer func() {
+			s.AssembleFrameChan <- struct{}{}
+			// needs wait until packet is sent, sleep is not good way
+			time.Sleep(100 * time.Millisecond)
+			s.Close()
+		}()
+	case *ApplicationCloseFrame:
+	case *MaxDataFrame:
+		//s.flowContoller.MaxDataLimit = f.Data.GetValue()
+	case *PingFrame:
+	case *BlockedFrame:
+	case *NewConnectionIDFrame:
+	case *AckFrame:
+	case *PathChallengeFrame:
+	case *PathResponseFrame:
+	case StreamLevelFrame:
+		err = s.streamManager.QueueFrame(f)
+		return err
+	default:
+		// error
+		return nil
+	}
+
+	s.sendFrameChan <- frame
+	return err
+}
+
 func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 	s.flowContoller.MaxDataLimit = frame.Data.GetValue()
 
