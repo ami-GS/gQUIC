@@ -2,6 +2,7 @@ package quiclatest
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
@@ -16,6 +17,15 @@ const (
 	RetryPacketType
 	InitialPacketType
 )
+
+func (lht LongHeaderPacketType) String() string {
+	return map[LongHeaderPacketType]string{
+		ZeroRTTProtectedPacketType: "0 RTT Protected Packet",
+		HandshakePacketType:        "Handshake Packet",
+		RetryPacketType:            "Retry Packet",
+		InitialPacketType:          "Initial Pakcet",
+	}[lht]
+}
 
 type ShortHeaderFlagType byte
 
@@ -35,6 +45,16 @@ const (
 	KeyPhase ShortHeaderPacketType = 0x40
 )
 
+func (sht ShortHeaderPacketType) String() string {
+	keyPhase := sht&KeyPhase == KeyPhase
+	octet := map[ShortHeaderPacketType]byte{
+		OneOctetType:   1,
+		TwoOctetsType:  2,
+		FourOctetsType: 4,
+	}[sht&ShortHeaderPacketTypeMask]
+	return fmt.Sprintf("KeyPhrase:%v, Octet:%d", keyPhase, octet)
+}
+
 type PacketHeaderType byte
 
 const (
@@ -47,7 +67,7 @@ type PacketHeader interface {
 	GetWire() []byte
 	GetWireSize() int
 	genWire() ([]byte, error)
-
+	String() string
 	GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) // srcID, destID
 	GetPacketNumber() qtype.PacketNumber
 }
@@ -73,6 +93,10 @@ func (ph *BasePacketHeader) GetWire() []byte {
 
 func (ph *BasePacketHeader) GetWireSize() int {
 	return len(ph.wire)
+}
+
+func (ph *BasePacketHeader) String() string {
+	return fmt.Sprintf("DstConnID:%v\nSrcConnID:%v\nPacketNum:%d", ph.DestConnID.Bytes(), ph.SrcConnID.Bytes(), ph.PacketNumber)
 }
 
 // before passing data, need to check whether data[1:5] == 0x00 or not
@@ -183,6 +207,10 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	return lh, idx + 4, nil
 }
 
+func (lh LongHeader) String() string {
+	return fmt.Sprintf("LongHeader:%s\tVer:%d\nDCIL:%d,SCIL:%d\n%s\nPayloadLen:%d", lh.PacketType, lh.Version, lh.DCIL, lh.SCIL, lh.BasePacketHeader, lh.PayloadLen.GetValue())
+}
+
 func (lh LongHeader) genWire() (wire []byte, err error) {
 	wireLen := int(10 + lh.PayloadLen.ByteLen)
 
@@ -274,6 +302,10 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	idx += packetNumLen
 	sh.wire = data[:idx]
 	return sh, idx, nil
+}
+
+func (sh ShortHeader) String() string {
+	return fmt.Sprintf("ShortHeader:%s\n%s", sh.PacketType, sh.BasePacketHeader)
 }
 
 func (sh ShortHeader) genWire() (wire []byte, err error) {

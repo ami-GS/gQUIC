@@ -3,6 +3,7 @@ package quiclatest
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
@@ -11,6 +12,7 @@ type Packet interface {
 	// doesn't need genWire
 	GetWire() ([]byte, error)
 	GetHeader() PacketHeader
+	String() string
 	SetHeader(ph PacketHeader)
 	GetFrames() []Frame
 	SetFrames(fs []Frame)
@@ -59,6 +61,14 @@ func (bp *BasePacket) SetFrames(fs []Frame) {
 
 func (bp *BasePacket) GetFrames() []Frame {
 	return bp.Frames
+}
+
+func (bp *BasePacket) String() string {
+	frameStr := ""
+	for _, frame := range bp.Frames {
+		frameStr += fmt.Sprintf("\n\t%s", frame)
+	}
+	return fmt.Sprintf("%s\nPaddingLen:%d\n\t{%s\n\t}", bp.Header.String(), bp.PaddingNum, frameStr)
 }
 
 //GetWire of BasePacket assembles all wires, from header wire to frame wires
@@ -259,7 +269,10 @@ func NewProtectedPacket(version qtype.Version, key bool, destConnID, srcConnID q
 		},
 		RTT: rtt,
 	}
+}
 
+func (p ProtectedPacket) String() string {
+	return fmt.Sprintf("%s, RTT:%d", p.BasePacket, p.RTT)
 }
 
 /*
@@ -411,4 +424,7 @@ func (p VersionNegotiationPacket) SetFrames(fs []Frame) {
 }
 func (p VersionNegotiationPacket) GetFrames() []Frame {
 	return nil
+}
+func (p VersionNegotiationPacket) String() string {
+	return fmt.Sprintf("NoHeader:VersionNegotiationPacket\tVer:%d\nDCIL:%d,SCIL:%d\n%s\nSupported Versions:%v", p.Version, p.DCIL, p.SCIL, p.BasePacketHeader, p.SupportedVersions)
 }
