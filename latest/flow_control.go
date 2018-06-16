@@ -33,8 +33,9 @@ func (s *StreamFlowController) SendableByOffset(offset uint64, fin bool) FlowCon
 	if !s.IsStreamZero && fin {
 		connSendable = s.connFC.SendableByOffset(offset)
 	}
-	if offset <= s.MaxDataLimit {
-		streamSendable = Sendable
+	// TODO: stream 0 can exceed the limit until handshake is finished
+	if offset > s.MaxDataLimit {
+		streamSendable = StreamBlocked
 	}
 	return connSendable * streamSendable
 }
@@ -47,6 +48,7 @@ func (s *StreamFlowController) ReceivableByOffset(offset uint64, fin bool) error
 		}
 	}
 
+	// TODO: stream 0 can exceed the limit until handshake is finished
 	if offset > s.MaxDataLimit {
 		return qtype.FlowControlError
 	}
