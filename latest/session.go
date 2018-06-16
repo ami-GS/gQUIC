@@ -21,8 +21,10 @@ type Session struct {
 	// channel should have potential issue
 	// use priority queue with Frame which has priority?
 	// or prepare several channel for priority based channels ?
-	sendFrameChan  chan Frame
-	sendPacketChan chan Packet
+	sendFrameChan chan Frame
+	// high priority channel when wire has over 1000 (MTUIPv4*0.8)
+	sendFrameHPChan chan Frame
+	sendPacketChan  chan Packet
 
 	//blockedFrameChan chan Frame
 	blockedStreamIDbyConnection chan *qtype.StreamID
@@ -53,9 +55,10 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 		conn:           conn,
 		recvPacketChan: make(chan Packet),
 		// channel size should be configured or detect filled
-		sendFrameChan:  make(chan Frame, 100),
-		sendPacketChan: make(chan Packet, 100),
-		closeChan:      make(chan struct{}),
+		sendFrameChan:   make(chan Frame, 100),
+		sendFrameHPChan: make(chan Frame, 100),
+		sendPacketChan:  make(chan Packet, 100),
+		closeChan:       make(chan struct{}),
 		flowContoller: &ConnectionFlowController{
 			baseFlowController: baseFlowController{
 				MaxDataLimit: 1024, //TODO: set appropriately
@@ -114,12 +117,14 @@ RunLOOP:
 			if len(frames) == 0 {
 				continue
 			}
-			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 1, frames))
+			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 0, frames))
 		case <-s.PingTicker.C:
 			// currently 1 packet per 1 ping
-			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 1, []Frame{NewPingFrame()}))
+			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 0, []Frame{NewPingFrame()}))
+		case f := <-s.sendFrameHPChan:
+			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 0, []Frame{f}))
 		case p := <-s.sendPacketChan:
-			// TODO: evaluated frames can be sent
+			// TODO: frames must be evaluated to be sent
 			// currently assuming all frames in p is valid
 			err = s.SendPacket(p)
 		}

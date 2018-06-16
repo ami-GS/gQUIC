@@ -132,7 +132,12 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 		return nil
 	}
 
-	s.sess.sendFrameChan <- f.(Frame)
+	//qtype.MTUIPv4*0.8 is about 1000
+	if f.(Frame).GetWireSize() >= 1000 {
+		s.sess.sendFrameHPChan <- f.(Frame)
+	} else {
+		s.sess.sendFrameChan <- f.(Frame)
+	}
 	return err
 }
 
