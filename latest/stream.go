@@ -406,11 +406,23 @@ func newSendRecvStream(streamID *qtype.StreamID, sess *Session) *SendRecvStream 
 }
 
 func (s *SendRecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
-	return s.RecvStream.handleRstStreamFrame(f)
+	err := s.RecvStream.handleRstStreamFrame(f)
+	if err != nil {
+		return err
+	}
+	if s.RecvStream.State == qtype.StreamResetRecvd {
+		if s.SendStream.State == qtype.StreamReady || s.SendStream.State == qtype.StreamSend || s.SendStream.State == qtype.StreamDataSent {
+			s.State = qtype.StreamHalfClosed
+		} else {
+			s.State = qtype.StreamClosed
+		}
+	} else {
+		// would be impossible to reach here
+	}
+	return nil
 }
 func (s *SendRecvStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
-	//TODO: not sure
-	return s.RecvStream.handleMaxStreamDataFrame(f)
+	return s.SendStream.handleMaxStreamDataFrame(f)
 }
 func (s *SendRecvStream) handleStopSendingFrame(f *StopSendingFrame) error {
 	return s.SendStream.handleStopSendingFrame(f)
@@ -419,12 +431,30 @@ func (s *SendRecvStream) handleStreamBlockedFrame(f *StreamBlockedFrame) error {
 	return s.RecvStream.handleStreamBlockedFrame(f)
 }
 func (s *SendRecvStream) handleStreamFrame(f *StreamFrame) error {
-	return s.RecvStream.handleStreamFrame(f)
+	err := s.RecvStream.handleStreamFrame(f)
+	if err != nil {
+		return err
+	}
+
+	if s.RecvStream.State == qtype.StreamSizeKnown {
+		if s.SendStream.State == qtype.StreamReady || s.SendStream.State == qtype.StreamSend || s.SendStream.State == qtype.StreamDataSent {
+			s.State = qtype.StreamOpen
+		} else if s.SendStream.State == qtype.StreamDataRecvd || s.SendStream.State == qtype.StreamResetSent || s.SendStream.State == qtype.StreamResetRecvd {
+			s.State = qtype.StreamHalfClosed
+		}
+	} else if s.RecvStream.State == qtype.StreamDataRecvd {
+		if s.SendStream.State == qtype.StreamDataRecvd || s.SendStream.State == qtype.StreamResetSent || s.SendStream.State == qtype.StreamResetRecvd {
+			s.State = qtype.StreamClosed
+		} else if s.SendStream.State == qtype.StreamReady || s.SendStream.State == qtype.StreamSend || s.SendStream.State == qtype.StreamDataSent {
+			s.State = qtype.StreamHalfClosed
+		}
+	}
+	return nil
 }
 
 func (s *SendRecvStream) IsTerminated() bool {
-	// TODO: need to refere table in spec
-	return s.SendStream.IsTerminated() && s.RecvStream.IsTerminated()
+	// TODO: currently s.State doesn't care after sending frame
+	return s.State == qtype.StreamClosed
 }
 
 func (s *SendRecvStream) QueueFrame(f StreamLevelFrame) error {
@@ -435,5 +465,6 @@ func (s *SendRecvStream) QueueFrame(f StreamLevelFrame) error {
 	case *MaxStreamIDFrame, *StopSendingFrame:
 		err = s.RecvStream.QueueFrame(f)
 	}
+	// TODO: change s.State
 	return err
 }
