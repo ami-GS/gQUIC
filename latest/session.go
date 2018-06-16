@@ -15,6 +15,7 @@ type Session struct {
 	SrcConnID     qtype.ConnectionID
 	DoneHandShake bool
 	conn          *Connection
+	isClient      bool
 	// from server/client to here
 	recvPacketChan chan Packet
 	// channel should have potential issue

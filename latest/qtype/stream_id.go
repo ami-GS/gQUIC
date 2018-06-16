@@ -30,6 +30,13 @@ func NewStreamID(id uint64) (StreamID, error) {
 	return sss, err
 }
 
+func (s *StreamID) Increment() error {
+	// add 0b100
+	st, err := NewStreamID(s.GetValue() + 4)
+	s = &st
+	return err
+}
+
 func (s StreamID) GetValue() uint64 {
 	qint := QuicInt(s)
 	return qint.GetValue()

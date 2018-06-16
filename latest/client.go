@@ -36,6 +36,7 @@ func DialAddr(addr string) (*Client, error) {
 		versionOffer:      qtype.VersionQuicTLS,
 		versionNegotiated: false,
 	}
+	cli.session.isClient = true
 	cli.session.packetHandler = cli
 	go cli.run()
 	return cli, nil

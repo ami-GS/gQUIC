@@ -5,12 +5,23 @@ import "github.com/ami-GS/gQUIC/latest/qtype"
 type StreamManager struct {
 	streamMap       map[uint64]Stream
 	maxStreamIDUni  qtype.StreamID
+	nxtStreamIDUni  qtype.StreamID
 	maxStreamIDBidi qtype.StreamID
+	nxtStreamIDBidi qtype.StreamID
 	sess            *Session
 }
 
 func NewStreamManager(sess *Session) *StreamManager {
 	uniID, _ := qtype.NewStreamID(8)
+	var nxtUniID, nxtBidiID qtype.StreamID
+	if sess.isClient {
+		nxtUniID, _ = qtype.NewStreamID(2)
+		nxtBidiID, _ = qtype.NewStreamID(0)
+	} else {
+		nxtUniID, _ = qtype.NewStreamID(3)
+		nxtBidiID, _ = qtype.NewStreamID(1)
+	}
+
 	bidiID, _ := qtype.NewStreamID(2)
 	return &StreamManager{
 		streamMap: make(map[uint64]Stream),
@@ -18,7 +29,9 @@ func NewStreamManager(sess *Session) *StreamManager {
 
 		// may be set after handshake, or MAX_STREAM_ID frame
 		maxStreamIDUni:  uniID,
+		nxtStreamIDUni:  nxtUniID,
 		maxStreamIDBidi: bidiID,
+		nxtStreamIDBidi: nxtBidiID,
 	}
 }
 
@@ -36,6 +49,24 @@ func (s *StreamManager) IsValidID(streamID *qtype.StreamID) error {
 		}
 	}
 	return nil
+}
+
+func (s *StreamManager) StartNewSendStream() (*qtype.StreamID, error) {
+	isNew := false
+	var err error
+	var stream Stream
+	for !isNew {
+		stream, isNew, err = s.GetOrNewStream(&s.nxtStreamIDUni, true)
+		if err != nil {
+			return nil, err
+		}
+		err = s.nxtStreamIDUni.Increment()
+		if err != nil {
+			return nil, err
+		}
+	}
+	sID := stream.GetID()
+	return &sID, nil
 }
 
 func (s *StreamManager) GetOrNewStream(streamID *qtype.StreamID, send bool) (st Stream, isNew bool, err error) {
