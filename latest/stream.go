@@ -96,9 +96,8 @@ func (bf *blockedStreamFrames) Size() int {
 type SendStream struct {
 	*BaseStream
 	// application data can be buffered at "Ready" state
-	SendBuffer                []byte
-	blockedFramesOnStream     blockedStreamFrames
-	blockedFramesOnConnection blockedStreamFrames
+	SendBuffer            []byte
+	blockedFramesOnStream blockedStreamFrames
 }
 
 func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
@@ -118,9 +117,6 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 			},
 		},
 		blockedFramesOnStream: blockedStreamFrames{
-			frames: make([]*StreamFrame, 20),
-		},
-		blockedFramesOnConnection: blockedStreamFrames{
 			frames: make([]*StreamFrame, 20),
 		},
 		// TODO : need to be able to set initial windowsize
@@ -154,11 +150,11 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
 			return nil
 		case ConnectionBlocked:
-			s.blockedFramesOnConnection.Enqueue(frame)
+			s.sess.blockedFramesOnConnection.Enqueue(frame)
 			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
 			return nil
 		case BothBlocked:
-			s.blockedFramesOnConnection.Enqueue(frame) // avoid duplicate
+			s.sess.blockedFramesOnConnection.Enqueue(frame) // avoid duplicate
 			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
 			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
 			return nil
@@ -185,17 +181,11 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 	return err
 }
 
-func (s *SendStream) resendBlockedFrames(onStream bool) error {
+func (s *SendStream) resendBlockedFrames() error {
 	// TODO: be careful for multithread
-	var blockedFrames *blockedStreamFrames
-	if onStream {
-		blockedFrames = &s.blockedFramesOnStream
-	} else {
-		blockedFrames = &s.blockedFramesOnConnection
-	}
-	size := blockedFrames.Size()
+	size := s.blockedFramesOnStream.Size()
 	for i := 0; i < size; i++ {
-		f := blockedFrames.Dequeue()
+		f := s.blockedFramesOnStream.Dequeue()
 		err := s.QueueFrame(f)
 		if err != nil {
 			return err
@@ -240,7 +230,7 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 		s.flowcontroller.MaxDataLimit = f.Data.GetValue()
 
 		// this doesn't send anything for the first MAX_STREAM_DATA frame for first setting
-		err = s.resendBlockedFrames(true)
+		err = s.resendBlockedFrames()
 	}
 	return err
 }

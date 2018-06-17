@@ -282,14 +282,32 @@ func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
 	return nil
 }
 
-func (s *StreamManager) resendBlockedFrames(sID *qtype.StreamID) error {
-	stream, isNew, err := s.GetOrNewStream(sID, true)
-	if err != nil {
-		return nil
+func (s *StreamManager) resendBlockedFrames(frames *blockedStreamFrames) error {
+
+	var stream Stream
+	var isNew bool
+	var err error
+	sID := (*qtype.StreamID)(nil)
+	size := frames.Size()
+	for i := 0; i < size; i++ {
+		frame := frames.Dequeue()
+		sIDtmp := frame.GetStreamID()
+		if sID != &sIDtmp {
+			sID = &sIDtmp
+			stream, isNew, err = s.GetOrNewStream(sID, true)
+			if err != nil {
+				return err
+			}
+			if isNew {
+				delete(s.streamMap, sID.GetValue())
+				return nil
+			}
+		}
+		// TODO: stream might be nil
+		err := stream.(*SendStream).QueueFrame(frame)
+		if err != nil {
+			return err
+		}
 	}
-	if isNew {
-		delete(s.streamMap, sID.GetValue())
-		return nil
-	}
-	return stream.(*SendStream).resendBlockedFrames(false)
+	return nil
 }

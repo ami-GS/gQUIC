@@ -26,8 +26,7 @@ type Session struct {
 	sendFrameHPChan chan Frame
 	sendPacketChan  chan Packet
 
-	//blockedFrameChan chan Frame
-	blockedStreamIDbyConnection chan *qtype.StreamID
+	blockedFramesOnConnection blockedStreamFrames
 
 	streamManager *StreamManager
 
@@ -63,6 +62,9 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 			baseFlowController: baseFlowController{
 				MaxDataLimit: 1024, //TODO: set appropriately
 			},
+		},
+		blockedFramesOnConnection: blockedStreamFrames{
+			frames: make([]*StreamFrame, 20),
 		},
 		// used for send frame ASAP after generate frame
 		AssembleFrameChan: make(chan struct{}),
@@ -220,6 +222,7 @@ func (s *Session) HandleFrames(fs []Frame) error {
 			err = s.handleMaxDataFrame(f)
 		case *PingFrame:
 		case *BlockedFrame:
+			err = s.handleBlockedFrame(f)
 		case *NewConnectionIDFrame:
 		case *AckFrame:
 			err = s.handleAckFrame(f)
@@ -260,6 +263,7 @@ func (s *Session) QueueFrame(frame Frame) error {
 		}()
 	case *ApplicationCloseFrame:
 	case *MaxDataFrame:
+		// controller should be prepared for both direction on Connection?
 		//s.flowContoller.MaxDataLimit = f.Data.GetValue()
 	case *PingFrame:
 	case *BlockedFrame:
@@ -279,15 +283,16 @@ func (s *Session) QueueFrame(frame Frame) error {
 	return err
 }
 
+func (s *Session) handleBlockedFrame(frame *BlockedFrame) error {
+	return s.QueueFrame(NewMaxDataFrame(frame.Offset.GetValue()))
+}
+
 func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 	if s.flowContoller.MaxDataLimit < frame.Data.GetValue() {
 		s.flowContoller.MaxDataLimit = frame.Data.GetValue()
-
-		for sid := range s.blockedStreamIDbyConnection {
-			err := s.streamManager.resendBlockedFrames(sid)
-			if err != nil {
-				return err
-			}
+		err := s.streamManager.resendBlockedFrames(&s.blockedFramesOnConnection)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
