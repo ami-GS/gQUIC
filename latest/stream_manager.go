@@ -291,5 +291,5 @@ func (s *StreamManager) resendBlockedFrames(sID *qtype.StreamID) error {
 		delete(s.streamMap, sID.GetValue())
 		return nil
 	}
-	return stream.(*SendStream).resendBlockedFrames()
+	return stream.(*SendStream).resendBlockedFrames(false)
 }

@@ -280,12 +280,14 @@ func (s *Session) QueueFrame(frame Frame) error {
 }
 
 func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
-	s.flowContoller.MaxDataLimit = frame.Data.GetValue()
+	if s.flowContoller.MaxDataLimit < frame.Data.GetValue() {
+		s.flowContoller.MaxDataLimit = frame.Data.GetValue()
 
-	for sid := range s.blockedStreamIDbyConnection {
-		err := s.streamManager.resendBlockedFrames(sid)
-		if err != nil {
-			return err
+		for sid := range s.blockedStreamIDbyConnection {
+			err := s.streamManager.resendBlockedFrames(sid)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

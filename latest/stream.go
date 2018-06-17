@@ -55,11 +55,50 @@ func (s BaseStream) UpdateStreamOffsetReceived(offset uint64) {
 	s.flowcontroller.updateLargestReceived(offset)
 }
 
+// blockedStreamFrames is just a ring buffer
+type blockedStreamFrames struct {
+	frames []*StreamFrame
+	head   int
+	tail   int
+	size   int
+}
+
+func (bf *blockedStreamFrames) Empty() bool {
+	return bf.head == bf.tail
+}
+func (bf *blockedStreamFrames) Full() bool {
+	return bf.head == (bf.tail+1)%len(bf.frames)
+}
+
+func (bf *blockedStreamFrames) Enqueue(f *StreamFrame) {
+	if bf.Full() {
+		// TODO: error
+	}
+	bf.frames[bf.tail] = f
+	bf.tail = (bf.tail + 1) % len(bf.frames)
+	bf.size++
+}
+
+func (bf *blockedStreamFrames) Dequeue() *StreamFrame {
+	if bf.Empty() {
+		return nil
+	}
+
+	f := bf.frames[bf.head]
+	bf.head = (bf.head + 1) % len(bf.frames)
+	bf.size--
+	return f
+}
+func (bf *blockedStreamFrames) Size() int {
+	return bf.size
+}
+
 type SendStream struct {
 	*BaseStream
 	// application data can be buffered at "Ready" state
-	SendBuffer       []byte
-	blockedFrameChan chan *StreamFrame
+	SendBuffer                []byte
+	blockedFramesOnStream     blockedStreamFrames
+	blockedFramesOnConnection blockedStreamFrames
 }
 
 func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
@@ -78,7 +117,12 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 				},
 			},
 		},
-		blockedFrameChan: make(chan *StreamFrame, 100),
+		blockedFramesOnStream: blockedStreamFrames{
+			frames: make([]*StreamFrame, 20),
+		},
+		blockedFramesOnConnection: blockedStreamFrames{
+			frames: make([]*StreamFrame, 20),
+		},
 		// TODO : need to be able to set initial windowsize
 		//FlowControllBlocked: false,
 	}
@@ -104,17 +148,17 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 		dataOffset := frame.Offset.GetValue()
 		switch s.flowcontroller.SendableByOffset(dataOffset, frame.Finish) {
 		case Sendable:
-			s.sendStreamFrame(frame)
+			err = s.sendStreamFrame(frame)
 		case StreamBlocked:
-			s.blockedFrameChan <- frame
+			s.blockedFramesOnStream.Enqueue(frame)
 			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
 			return nil
 		case ConnectionBlocked:
-			s.blockedFrameChan <- frame
+			s.blockedFramesOnConnection.Enqueue(frame)
 			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
 			return nil
 		case BothBlocked:
-			s.blockedFrameChan <- frame
+			s.blockedFramesOnConnection.Enqueue(frame) // avoid duplicate
 			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID().GetValue(), dataOffset))
 			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
 			return nil
@@ -124,7 +168,7 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 			// MUST NOT send StreamBlocked frame in the states above
 			return nil
 		}
-		s.sendStreamBlockedFrame(frame)
+		err = s.sendStreamBlockedFrame(frame)
 	case *RstStreamFrame:
 		err = s.sendRstStreamFrame(frame)
 	default:
@@ -141,15 +185,18 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 	return err
 }
 
-func (s *SendStream) resendBlockedFrames() error {
+func (s *SendStream) resendBlockedFrames(onStream bool) error {
 	// TODO: be careful for multithread
-	var blockedFrames []*StreamFrame
-	for frame := range s.blockedFrameChan {
-		blockedFrames = append(blockedFrames, frame)
+	var blockedFrames *blockedStreamFrames
+	if onStream {
+		blockedFrames = &s.blockedFramesOnStream
+	} else {
+		blockedFrames = &s.blockedFramesOnConnection
 	}
-
-	for _, frame := range blockedFrames {
-		err := s.QueueFrame(frame)
+	size := blockedFrames.Size()
+	for i := 0; i < size; i++ {
+		f := blockedFrames.Dequeue()
+		err := s.QueueFrame(f)
 		if err != nil {
 			return err
 		}
@@ -188,10 +235,13 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 		// ignore after being "Sent" state
 		return nil
 	}
-	s.flowcontroller.MaxDataLimit = f.Data.GetValue()
+	var err error
+	if s.flowcontroller.MaxDataLimit < f.Data.GetValue() {
+		s.flowcontroller.MaxDataLimit = f.Data.GetValue()
 
-	// this doesn't send anything for the first MAX_STREAM_DATA frame for first setting
-	err := s.resendBlockedFrames()
+		// this doesn't send anything for the first MAX_STREAM_DATA frame for first setting
+		err = s.resendBlockedFrames(true)
+	}
 	return err
 }
 
