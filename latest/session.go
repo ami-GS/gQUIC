@@ -67,7 +67,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Sess
 			frames: make([]*StreamFrame, 20),
 		},
 		// used for send frame ASAP after generate frame
-		AssembleFrameChan: make(chan struct{}),
+		AssembleFrameChan: make(chan struct{}, 1),
 		// TODO: this would be configurable
 		WaitFrameTimeout: time.NewTicker(10 * time.Millisecond),
 		// TODO: this should be configured by transport parameter
