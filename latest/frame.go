@@ -484,7 +484,7 @@ func ParseMaxDataFrame(data []byte) (Frame, int, error) {
 	f := &MaxDataFrame{
 		BaseFrame: NewBaseFrame(MaxDataFrameType),
 	}
-	f.Data, err = qtype.ParseQuicInt(data)
+	f.Data, err = qtype.ParseQuicInt(data[1:])
 	if err != nil {
 		return nil, 0, err
 	}
