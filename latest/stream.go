@@ -427,7 +427,7 @@ func (s *RecvStream) handleStreamBlockedFrame(f *StreamBlockedFrame) error {
 		// ignore after receiving all data
 		return nil
 	}
-	return nil
+	return s.QueueFrame(NewMaxStreamDataFrame(f.GetStreamID().GetValue(), f.Offset.GetValue()))
 }
 
 type SendRecvStream struct {
