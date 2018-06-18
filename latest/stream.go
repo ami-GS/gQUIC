@@ -351,8 +351,9 @@ func (s *RecvStream) sendMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 	if s.State != qtype.StreamRecv {
 		return nil
 	}
-
-	s.flowcontroller.MaxDataLimit = f.Data.GetValue()
+	if s.flowcontroller.MaxDataLimit < f.Data.GetValue() {
+		s.flowcontroller.MaxDataLimit = f.Data.GetValue()
+	}
 	return nil
 }
 

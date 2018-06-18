@@ -260,12 +260,11 @@ func (s *Session) QueueFrame(frame Frame) error {
 			s.AssembleFrameChan <- struct{}{}
 			// needs wait until packet is sent, sleep is not good way
 			time.Sleep(100 * time.Millisecond)
-			s.Close()
 		}()
 	case *ApplicationCloseFrame:
 	case *MaxDataFrame:
-		// controller should be prepared for both direction on Connection?
-		//s.flowContoller.MaxDataLimit = f.Data.GetValue()
+		//TODO: controller should be prepared for both direction on Connection?
+		s.flowContoller.MaxDataLimit = f.Data.GetValue()
 	case *PingFrame:
 	case *BlockedFrame:
 	case *NewConnectionIDFrame:
