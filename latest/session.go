@@ -47,11 +47,12 @@ type Session struct {
 	packetHandler PacketHandler
 }
 
-func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID) *Session {
+func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
 	sess := &Session{
 		DestConnID:     dstConnID,
 		SrcConnID:      srcConnID,
 		conn:           conn,
+		isClient:       isClient,
 		recvPacketChan: make(chan Packet),
 		// channel size should be configured or detect filled
 		sendFrameChan:   make(chan Frame, 100),

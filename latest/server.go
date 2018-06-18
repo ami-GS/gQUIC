@@ -88,8 +88,8 @@ func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 	if len(destID) != 0 {
 		sess, ok = s.sessions[destID.String()]
 		if !ok {
-			sess = NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID)
-			sess.isClient = false
+			// TODO: have to reset Session when Retry Packet sent to client. then thsi can use DestID for packet maching
+			sess = NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID, false)
 			// packet handler for each session on server is now defined in session.go
 			sess.packetHandler = sess
 			// TODO: be careful to use lh

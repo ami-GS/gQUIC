@@ -32,11 +32,10 @@ func DialAddr(addr string) (*Client, error) {
 
 	cli := &Client{
 		remoteAddr:        remoteAddr,
-		session:           NewSession(&Connection{conn: udpConn, remoteAddr: remoteAddr}, srcConnID, destConnID),
+		session:           NewSession(&Connection{conn: udpConn, remoteAddr: remoteAddr}, srcConnID, destConnID, true),
 		versionOffer:      qtype.VersionQuicTLS,
 		versionNegotiated: false,
 	}
-	cli.session.isClient = true
 	cli.session.packetHandler = cli
 	go cli.run()
 	return cli, nil
