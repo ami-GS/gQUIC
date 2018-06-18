@@ -33,8 +33,7 @@ func ParsePacket(data []byte) (packet Packet, idx int, err error) {
 	if err != nil {
 		return nil, 0, err
 	}
-
-	packet, err = newPacket(data[0], header, fs)
+	packet, err = newPacket(header, fs)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -88,15 +87,15 @@ func (bp *BasePacket) GetWire() (wire []byte, err error) {
 	return append(hWire, fsWire...), nil
 }
 
-func newPacket(firstByte byte, ph PacketHeader, fs []Frame) (Packet, error) {
+func newPacket(ph PacketHeader, fs []Frame) (Packet, error) {
 	// TODO: needs frame type validation for each packet type
-	if firstByte&byte(LongHeaderType) == byte(LongHeaderType) {
+	if lh, ok := ph.(*LongHeader); ok {
 		payloadLen := 0
 		for _, frame := range fs {
 			payloadLen += frame.GetWireSize()
 		}
 
-		switch LongHeaderPacketType(firstByte & 0x7f) {
+		switch lh.PacketType {
 		case InitialPacketType:
 			// TODO: check whether it is stream frame or not
 			return &InitialPacket{
@@ -129,10 +128,10 @@ func newPacket(firstByte byte, ph PacketHeader, fs []Frame) (Packet, error) {
 				RTT: 0,
 			}, nil
 		default:
-			// error
-			return nil, nil
+			// error type is not defined
+			return nil, qtype.ProtocolViolation
 		}
-	} else if firstByte&byte(ShortHeaderType) == byte(ShortHeaderType) {
+	} else if _, ok := ph.(*ShortHeader); ok {
 		return &ProtectedPacket{
 			BasePacket: &BasePacket{
 				Header: ph,
@@ -141,8 +140,8 @@ func newPacket(firstByte byte, ph PacketHeader, fs []Frame) (Packet, error) {
 			RTT: 1,
 		}, nil
 	}
-	// error
-	return nil, nil
+	// error type is not defined
+	return nil, qtype.ProtocolViolation
 }
 
 // long header with type of 0x7F
