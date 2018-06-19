@@ -35,7 +35,9 @@ func NewStreamID(id uint64) (StreamID, error) {
 func (s *StreamID) Increment() error {
 	// add 0b100
 	st, err := NewStreamID(s.GetValue() + 4)
-	s = &st
+	s.Value = st.Value
+	s.ByteLen = st.ByteLen
+	s.Flag = st.Flag
 	return err
 }
 
