@@ -1,5 +1,7 @@
 package qtype
 
+import "fmt"
+
 /*
    +----------+----------------------------------+
    | Low Bits | Stream Type                      |
@@ -47,10 +49,10 @@ func (s StreamID) PutWire(wire []byte) int {
 }
 
 func (s StreamID) String() string {
-	return []string{
+	return fmt.Sprintf("%s ID:%d", []string{
 		"Client-Initiated, Bidirectional",
 		"Server-Initiated, Bidirectional",
 		"Client-Initiated, Unidirectional",
 		"Server-Initiated, Unidirectional",
-	}[QuicInt(s).Value&0x03]
+	}[QuicInt(s).Value&0x03], s.GetValue())
 }

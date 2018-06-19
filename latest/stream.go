@@ -55,6 +55,10 @@ func (s BaseStream) UpdateStreamOffsetReceived(offset uint64) {
 	s.flowcontroller.updateLargestReceived(offset)
 }
 
+func (s BaseStream) String() string {
+	return fmt.Sprintf("%s, State:%s\n%s", s.ID, s.State, s.flowcontroller)
+}
+
 // blockedStreamFrames is just a ring buffer
 type blockedStreamFrames struct {
 	frames []*StreamFrame

@@ -24,7 +24,7 @@ type BaseStreamLevelFrame struct {
 }
 
 func (s *BaseStreamLevelFrame) String() string {
-	return fmt.Sprintf("%s ID:%d", s.StreamID, s.StreamID.GetValue())
+	return fmt.Sprintf("%s", s.StreamID)
 }
 
 func (s *BaseStreamLevelFrame) GetStreamID() qtype.StreamID {

@@ -1,6 +1,10 @@
 package quiclatest
 
-import "github.com/ami-GS/gQUIC/latest/qtype"
+import (
+	"fmt"
+
+	"github.com/ami-GS/gQUIC/latest/qtype"
+)
 
 type baseFlowController struct {
 	bytesSent       uint64
@@ -9,6 +13,10 @@ type baseFlowController struct {
 	largestReceived uint64
 
 	MaxDataLimit uint64
+}
+
+func (f *baseFlowController) String() string {
+	return fmt.Sprintf("sent:%d, recvd:%d, largestSent:%d, largestRcvd:%d\nMaxDataLimit:%d", f.bytesSent, f.bytesReceived, f.largestSent, f.largestReceived, f.MaxDataLimit)
 }
 
 type StreamFlowController struct {
