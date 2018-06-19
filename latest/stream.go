@@ -276,7 +276,8 @@ type RecvStream struct {
 	ReorderBuffer *utils.Heap
 	DataSize      uint64 // will be known after receiving all data
 
-	LargestOffset qtype.QuicInt
+	ReceiveAllDetector uint64
+	LargestOffset      qtype.QuicInt
 }
 
 func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
@@ -318,7 +319,7 @@ func (s *RecvStream) ReadData() ([]byte, bool) {
 	out := make([]byte, s.DataSize)
 	for s.ReorderBuffer.Len() > 0 {
 		item := heap.Pop(s.ReorderBuffer).(*utils.Item)
-		copy(out[item.Offset:], item.Data)
+		copy(out[item.Offset-uint64(len(item.Data)):], item.Data)
 	}
 
 	s.State = qtype.StreamDataRead
@@ -396,7 +397,9 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 		// ignore after receiving all data
 		return nil
 	}
-	err := s.flowcontroller.ReceivableByOffset(f.Offset.GetValue(), f.Finish)
+
+	offsetValue := f.Offset.GetValue()
+	err := s.flowcontroller.ReceivableByOffset(offsetValue, f.Finish)
 	if err != nil {
 		return err
 	}
@@ -409,15 +412,23 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 
 	if f.Finish {
 		s.State = qtype.StreamSizeKnown
+		s.DataSize = offsetValue
 	}
 	if s.LargestOffset.Less(f.Offset) {
 		s.LargestOffset = *f.Offset
 	}
 
-	heap.Push(s.ReorderBuffer, &utils.Item{f.Offset.GetValue(), f.Data})
+	// TODO: copy workaround of data corrupting issue
+	data := make([]byte, len(f.Data))
+	copy(data, f.Data)
+	heap.Push(s.ReorderBuffer, &utils.Item{offsetValue, data})
 
-	// do something
-	s.State = qtype.StreamDataRecvd
+	s.ReceiveAllDetector = s.ReceiveAllDetector ^ offsetValue ^ (offsetValue - f.Length.GetValue())
+	if s.State == qtype.StreamSizeKnown && s.ReceiveAllDetector != 0 && s.ReceiveAllDetector == s.DataSize {
+		s.State = qtype.StreamDataRecvd
+		// bellow is ugly
+		s.sess.streamManager.finishedStreams.Enqueue(s)
+	}
 
 	s.UpdateStreamOffsetReceived(f.Offset.GetValue())
 	return nil

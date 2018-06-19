@@ -1,9 +1,15 @@
 package quiclatest
 
-import "github.com/ami-GS/gQUIC/latest/qtype"
+import (
+	"sync"
+
+	"github.com/ami-GS/gQUIC/latest/qtype"
+)
 
 type StreamManager struct {
-	streamMap       map[uint64]Stream
+	streamMap map[uint64]Stream
+	// would be RcvStream or SendRcvStream
+	finishedStreams finishedRecvStreams
 	maxStreamIDUni  qtype.StreamID
 	nxtStreamIDUni  qtype.StreamID
 	maxStreamIDBidi qtype.StreamID
@@ -26,7 +32,9 @@ func NewStreamManager(sess *Session) *StreamManager {
 	return &StreamManager{
 		streamMap: make(map[uint64]Stream),
 		sess:      sess,
-
+		finishedStreams: finishedRecvStreams{
+			streams: make([]Stream, 20),
+		},
 		// may be set after handshake, or MAX_STREAM_ID frame
 		maxStreamIDUni:  uniID,
 		nxtStreamIDUni:  nxtUniID,
@@ -37,9 +45,10 @@ func NewStreamManager(sess *Session) *StreamManager {
 
 func (s *StreamManager) IsValidID(streamID *qtype.StreamID) error {
 	sid := streamID.GetValue()
+
 	if sid&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
-		if streamID.GetValue() > s.maxStreamIDUni.GetValue() {
+		if sid > s.maxStreamIDUni.GetValue() {
 			return qtype.StreamIDError
 		}
 	} else {
@@ -309,5 +318,69 @@ func (s *StreamManager) resendBlockedFrames(frames *blockedStreamFrames) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// finishedStreams is just a ring buffer
+type finishedRecvStreams struct {
+	streams []Stream
+	head    int
+	tail    int
+	size    int
+}
+
+func (fs *finishedRecvStreams) Empty() bool {
+	return fs.head == fs.tail
+}
+func (fs *finishedRecvStreams) Full() bool {
+	return fs.head == (fs.tail+1)%len(fs.streams)
+}
+
+func (fs *finishedRecvStreams) Enqueue(s Stream) {
+	if fs.Full() {
+		// TODO: error
+	}
+	fs.streams[fs.tail] = s
+	fs.tail = (fs.tail + 1) % len(fs.streams)
+	fs.size++
+}
+
+func (fs *finishedRecvStreams) Dequeue() Stream {
+	if fs.Empty() {
+		return nil
+	}
+
+	s := fs.streams[fs.head]
+	fs.head = (fs.head + 1) % len(fs.streams)
+	fs.size--
+	return s
+}
+func (fs *finishedRecvStreams) Size() int {
+	return fs.size
+}
+
+func (s *StreamManager) Read() ([]byte, error) {
+	stream := s.finishedStreams.Dequeue()
+	if stream == nil {
+		return nil, nil
+	}
+	data, isReset := stream.(*RecvStream).ReadData()
+	// TODO: use isReset to notify the stream was reset
+	if isReset {
+	}
+	return data, nil
+}
+
+func (s *StreamManager) CloseAllStream() error {
+	// implicitly close all stream
+	wg := &sync.WaitGroup{}
+	for _, stream := range s.streamMap {
+		wg.Add(1)
+		go func(st Stream) {
+			st.Close()
+			wg.Done()
+		}(stream)
+	}
+	wg.Wait()
 	return nil
 }
