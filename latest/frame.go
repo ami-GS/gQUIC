@@ -135,11 +135,8 @@ func (f *BaseFrame) String() string {
 
 func ParseFrame(data []byte) (f Frame, idx int, err error) {
 	if data[0] > 0x17 {
-		// TODO: error needed
-		return nil, 0, err
-	}
-	if data[0] == 0x00 {
-		return &PaddingFrame{}, 1, nil
+		// TODO: error needed, but not decided
+		return nil, 0, qtype.ProtocolViolation
 	}
 	if data[0]&StreamFrameTypeCommon == StreamFrameTypeCommon {
 		return FrameParserMap[StreamFrameTypeCommon](data)
@@ -150,14 +147,17 @@ func ParseFrame(data []byte) (f Frame, idx int, err error) {
 func ParseFrames(data []byte) (fs []Frame, idx int, err error) {
 	// TODO: or call parallel?
 	for idx < len(data) {
+		// Ping as well?
+		if FrameType(data[idx]) == PaddingFrameType {
+			// skip when padding frame to reduce cost
+			// is return better?
+			idx++
+			continue
+		}
+
 		f, oneLen, err := ParseFrame(data[idx:])
 		if err != nil {
 			return nil, idx + oneLen, err
-		}
-		if _, ok := f.(*PaddingFrame); ok {
-			// skip when padding frame to reduce cost
-			idx++
-			continue
 		}
 
 		fs = append(fs, f)
@@ -854,8 +854,7 @@ func ParseNewConnectionIDFrame(data []byte) (Frame, int, error) {
 	}
 	f.Length = data[idx+f.Sequence.ByteLen]
 	if f.Length < 4 || 18 < f.Length {
-		// TODO: PROTOCOL_VIOLATION
-		return nil, 0, nil
+		return nil, 0, qtype.ProtocolViolation
 	}
 	idx += f.Sequence.ByteLen + 1
 	f.ConnID, err = qtype.ReadConnectionID(data[idx:], int(f.Length))
