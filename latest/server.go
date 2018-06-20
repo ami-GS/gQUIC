@@ -13,7 +13,9 @@ type Server struct {
 	sessions          map[string]*Session //ConnectionID.String():Session
 	addrSessions      map[string]*Session //remoteAddr.String():Session, for identifing single connection if zero-len dest ID
 	SupportedVersions []qtype.Version
-	NumHandshake      int
+	// TODO: consider here? or in utility? or decide dynamically?
+	SessionLimitNum int
+	NumHandshake    int
 }
 
 func ListenAddr(addr string) (*Server, error) {
@@ -31,6 +33,8 @@ func ListenAddr(addr string) (*Server, error) {
 		sessions:          make(map[string]*Session),
 		addrSessions:      make(map[string]*Session),
 		SupportedVersions: qtype.SupportedVersions,
+		// TODO: experimental
+		SessionLimitNum: 1000,
 	}
 	go s.Serve()
 	return s, nil
@@ -92,6 +96,10 @@ func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 	if len(destID) != 0 {
 		sess, ok = s.sessions[destID.String()]
 		if !ok {
+			if !s.IsAcceptableSession(lh.Version, srcID, destID, remoteAddr) {
+				return nil
+			}
+
 			// TODO: have to reset Session when Retry Packet sent to client. then thsi can use DestID for packet maching
 			sess = NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID, false)
 			// packet handler for each session on server is now defined in session.go
@@ -122,6 +130,20 @@ func (s *Server) IsVersionSupported(version qtype.Version) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) IsAcceptableSession(version qtype.Version, srcID, destID qtype.ConnectionID, remoteAddr net.Addr) bool {
+	if len(s.sessions) >= s.SessionLimitNum {
+		p := NewHandshakePacket(version, srcID, destID, qtype.InitialPacketNumber(),
+			[]Frame{NewConnectionCloseFrame(qtype.ServerBusy, "The number of session reached server limit")})
+		wire, err := p.GetWire()
+		if err != nil {
+			//
+		}
+		_, err = s.conn.WriteTo(wire, remoteAddr)
+		return false
+	}
+	return true
 }
 
 func (s *Server) SendVersionNegotiationPacket(srcID, destID qtype.ConnectionID, remoteAddr net.Addr) error {
