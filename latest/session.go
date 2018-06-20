@@ -138,10 +138,9 @@ RunLOOP:
 	s.WaitFrameTimeout.Stop()
 }
 
-func (s *Session) Close() error {
-	// TODO: close streams
-
-	// stops s.Run()
+func (s *Session) Close(f *ConnectionCloseFrame) error {
+	s.QueueFrame(f)
+	_ = s.streamManager.CloseAllStream()
 	s.closeChan <- struct{}{}
 	return nil
 }

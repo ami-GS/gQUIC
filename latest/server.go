@@ -46,7 +46,8 @@ func (s *Server) Serve() error {
 		}
 		packet, _, err := ParsePacket(buffer[:length])
 		if err != nil {
-			s.conn.Close()
+			// TODO: this type assertion is dangerous
+			_ = s.Close(err.(qtype.TransportError))
 			return err
 		}
 
@@ -58,16 +59,19 @@ func (s *Server) Serve() error {
 	}
 }
 
-func (s *Server) Close() error {
+func (s *Server) Close(err qtype.TransportError) error {
 	wg := &sync.WaitGroup{}
+	frame := NewConnectionCloseFrame(err, "error: experimental")
 	for _, session := range s.sessions {
 		wg.Add(1)
 		go func(sess *Session) {
-			sess.Close()
+			// this sends connection close frame to peer
+			sess.Close(frame)
 			wg.Done()
 		}(session)
 	}
 	wg.Wait()
+	s.conn.Close()
 	// close conn
 	return nil
 }

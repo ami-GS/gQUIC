@@ -10,6 +10,7 @@ import (
 type Stream interface {
 	GetState() qtype.StreamState
 	GetID() qtype.StreamID
+	Close()
 	IsTerminated() bool
 	QueueFrame(f StreamLevelFrame) error
 	UpdateConnectionByteSent()
@@ -126,6 +127,11 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 		// TODO : need to be able to set initial windowsize
 		//FlowControllBlocked: false,
 	}
+}
+
+func (s *SendStream) Close() {
+	// implicitely close
+	s.State = qtype.StreamDataRecvd
 }
 
 func (s SendStream) IsTerminated() bool {
@@ -305,6 +311,11 @@ func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
 		LargestOffset: qtype.QuicInt{0, 0, 1},
 		ReorderBuffer: h,
 	}
+}
+
+func (s *RecvStream) Close() {
+	// implicitely close
+	s.State = qtype.StreamDataRead
 }
 
 func (s RecvStream) IsTerminated() bool {
@@ -511,6 +522,13 @@ func (s *SendRecvStream) handleStreamFrame(f *StreamFrame) error {
 		}
 	}
 	return nil
+}
+
+func (s *SendRecvStream) Close() {
+	// implicitely close
+	s.SendStream.Close()
+	s.RecvStream.Close()
+	s.State = qtype.StreamClosed
 }
 
 func (s *SendRecvStream) IsTerminated() bool {
