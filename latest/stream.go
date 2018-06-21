@@ -79,7 +79,7 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 				IsStreamZero: sid == 0,
 				connFC:       sess.flowContoller,
 				baseFlowController: baseFlowController{
-					MaxDataLimit: 1024, // TODO: set appropriately
+					MaxDataLimit: qtype.MaxPayloadSizeIPv4, // TODO: set appropriately
 				},
 			},
 		},
@@ -142,8 +142,8 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 		return nil
 	}
 
-	//qtype.MTUIPv4*0.8 is about 1000
-	if f.(Frame).GetWireSize() >= 1000 {
+	//qtype.MaxPayloadSizeIPv4*0.8 = 958.4 -> 960
+	if f.(Frame).GetWireSize() >= 960 {
 		s.sess.sendFrameHPChan <- f.(Frame)
 	} else {
 		s.sess.sendFrameChan <- f.(Frame)
@@ -264,7 +264,7 @@ func newRecvStream(streamID *qtype.StreamID, sess *Session) *RecvStream {
 				IsStreamZero: sid == 0,
 				connFC:       sess.flowContoller,
 				baseFlowController: baseFlowController{
-					MaxDataLimit: 1024, // TODO: set appropriately
+					MaxDataLimit: qtype.MaxPayloadSizeIPv4, // TODO: set appropriately
 				},
 			},
 		},

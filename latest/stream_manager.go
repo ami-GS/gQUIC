@@ -59,7 +59,7 @@ func (s *StreamManager) IsValidID(streamID *qtype.StreamID) error {
 	return nil
 }
 
-func (s *StreamManager) StartNewSendStream() (*qtype.StreamID, error) {
+func (s *StreamManager) StartNewSendStream() (Stream, error) {
 	isNew := false
 	var err error
 	var stream Stream
@@ -73,8 +73,7 @@ func (s *StreamManager) StartNewSendStream() (*qtype.StreamID, error) {
 			return nil, err
 		}
 	}
-	sID := stream.GetID()
-	return &sID, nil
+	return stream, nil
 }
 
 func (s *StreamManager) GetOrNewStream(streamID *qtype.StreamID, send bool) (st Stream, isNew bool, err error) {

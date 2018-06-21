@@ -62,7 +62,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		closeChan:       make(chan struct{}),
 		flowContoller: &ConnectionFlowController{
 			baseFlowController: baseFlowController{
-				MaxDataLimit: 1024, //TODO: set appropriately
+				MaxDataLimit: qtype.MaxPayloadSizeIPv4, //TODO: set appropriate
 			},
 		},
 		blockedFramesOnConnection: utils.NewRingBuffer(20),
@@ -142,6 +142,40 @@ func (s *Session) Close(f *ConnectionCloseFrame) error {
 	_ = s.streamManager.CloseAllStream()
 	s.closeChan <- struct{}{}
 	return nil
+}
+
+// TODO: want to implement Read(data []byte) (n int, err error)
+func (s *Session) Read() (data []byte, err error) {
+	data, err = s.streamManager.Read()
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// Write() starts new Stream to send data
+func (s *Session) Write(data []byte) (n int, err error) {
+	// TODO: encrypt data
+	stream, err := s.streamManager.StartNewSendStream()
+	if err != nil {
+		return 0, err
+	}
+
+	offset := uint64(0)
+	// 2. loop to make packet which should have bellow or equal to MTUIPv4
+	for {
+		if len(data[offset:]) > qtype.MaxPayloadSizeIPv4 {
+			err = stream.QueueFrame(NewStreamFrame(stream.GetID().GetValue(), offset+qtype.MaxPayloadSizeIPv4, true, true, false, data[offset:offset+qtype.MaxPayloadSizeIPv4]))
+			offset += qtype.MaxPayloadSizeIPv4
+		} else {
+			err = stream.QueueFrame(NewStreamFrame(stream.GetID().GetValue(), offset+uint64(len(data[offset:])), true, true, true, data[offset:]))
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
+	return len(data), err
 }
 
 func (s *Session) SendPacket(packet Packet) error {

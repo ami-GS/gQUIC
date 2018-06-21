@@ -15,6 +15,10 @@ type Client struct {
 	versionNegotiated bool
 }
 
+func (s *Client) Send(data []byte) (int, error) {
+	return s.session.Write(data)
+}
+
 func DialAddr(addr string) (*Client, error) {
 	remoteAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
