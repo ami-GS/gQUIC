@@ -60,49 +60,11 @@ func (s BaseStream) String() string {
 	return fmt.Sprintf("%s, State:%s\n%s", s.ID, s.State, s.flowcontroller)
 }
 
-// blockedStreamFrames is just a ring buffer
-type blockedStreamFrames struct {
-	frames []*StreamFrame
-	head   int
-	tail   int
-	size   int
-}
-
-func (bf *blockedStreamFrames) Empty() bool {
-	return bf.head == bf.tail
-}
-func (bf *blockedStreamFrames) Full() bool {
-	return bf.head == (bf.tail+1)%len(bf.frames)
-}
-
-func (bf *blockedStreamFrames) Enqueue(f *StreamFrame) {
-	if bf.Full() {
-		// TODO: error
-	}
-	bf.frames[bf.tail] = f
-	bf.tail = (bf.tail + 1) % len(bf.frames)
-	bf.size++
-}
-
-func (bf *blockedStreamFrames) Dequeue() *StreamFrame {
-	if bf.Empty() {
-		return nil
-	}
-
-	f := bf.frames[bf.head]
-	bf.head = (bf.head + 1) % len(bf.frames)
-	bf.size--
-	return f
-}
-func (bf *blockedStreamFrames) Size() int {
-	return bf.size
-}
-
 type SendStream struct {
 	*BaseStream
 	// application data can be buffered at "Ready" state
 	SendBuffer            []byte
-	blockedFramesOnStream blockedStreamFrames
+	blockedFramesOnStream *utils.RingBuffer
 }
 
 func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
@@ -121,9 +83,7 @@ func newSendStream(streamID *qtype.StreamID, sess *Session) *SendStream {
 				},
 			},
 		},
-		blockedFramesOnStream: blockedStreamFrames{
-			frames: make([]*StreamFrame, 20),
-		},
+		blockedFramesOnStream: utils.NewRingBuffer(20),
 		// TODO : need to be able to set initial windowsize
 		//FlowControllBlocked: false,
 	}
@@ -195,7 +155,7 @@ func (s *SendStream) resendBlockedFrames() error {
 	// TODO: be careful for multithread
 	size := s.blockedFramesOnStream.Size()
 	for i := 0; i < size; i++ {
-		f := s.blockedFramesOnStream.Dequeue()
+		f := s.blockedFramesOnStream.Dequeue().(*StreamFrame)
 		err := s.QueueFrame(f)
 		if err != nil {
 			return err

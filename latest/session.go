@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
+	"github.com/ami-GS/gQUIC/latest/utils"
 )
 
 type Session struct {
@@ -26,7 +27,7 @@ type Session struct {
 	sendFrameHPChan chan Frame
 	sendPacketChan  chan Packet
 
-	blockedFramesOnConnection blockedStreamFrames
+	blockedFramesOnConnection *utils.RingBuffer
 
 	streamManager *StreamManager
 
@@ -64,9 +65,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 				MaxDataLimit: 1024, //TODO: set appropriately
 			},
 		},
-		blockedFramesOnConnection: blockedStreamFrames{
-			frames: make([]*StreamFrame, 20),
-		},
+		blockedFramesOnConnection: utils.NewRingBuffer(20),
 		// used for send frame ASAP after generate frame
 		AssembleFrameChan: make(chan struct{}, 1),
 		// TODO: this would be configurable
@@ -289,7 +288,7 @@ func (s *Session) handleBlockedFrame(frame *BlockedFrame) error {
 func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 	if s.flowContoller.MaxDataLimit < frame.Data.GetValue() {
 		s.flowContoller.MaxDataLimit = frame.Data.GetValue()
-		err := s.streamManager.resendBlockedFrames(&s.blockedFramesOnConnection)
+		err := s.streamManager.resendBlockedFrames(s.blockedFramesOnConnection)
 		if err != nil {
 			return err
 		}
