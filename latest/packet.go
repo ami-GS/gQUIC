@@ -11,6 +11,7 @@ import (
 type Packet interface {
 	// doesn't need genWire
 	GetWire() ([]byte, error)
+	SetWire(wire []byte)
 	GetHeader() PacketHeader
 	String() string
 	SetHeader(ph PacketHeader)
@@ -28,16 +29,16 @@ func ParsePacket(data []byte) (packet Packet, idx int, err error) {
 	if err != nil {
 		return nil, 0, err
 	}
-
+	//TODO: want to know the number of padding
 	fs, idxTmp, err := ParseFrames(data[idx:])
 	if err != nil {
 		return nil, 0, err
 	}
 	packet, err = newPacket(header, fs)
+	packet.SetWire(data[idx:])
 	if err != nil {
 		return nil, 0, err
 	}
-
 	return packet, idx + idxTmp, err
 }
 
@@ -45,6 +46,7 @@ type BasePacket struct {
 	Header     PacketHeader
 	Frames     []Frame
 	PaddingNum int
+	payload    []byte
 }
 
 func (bp *BasePacket) GetHeader() PacketHeader {
@@ -70,8 +72,28 @@ func (bp *BasePacket) String() string {
 	return fmt.Sprintf("%s\nPaddingLen:%d\n\t{%s\n\t}", bp.Header.String(), bp.PaddingNum, frameStr)
 }
 
+func (bp *BasePacket) SetWire(wire []byte) {
+	bp.payload = wire
+}
+
+func (bp *BasePacket) GetPayloadLen() int {
+	if bp.payload != nil {
+		return len(bp.payload)
+	}
+
+	length := 0
+	for _, frame := range bp.Frames {
+		length += frame.GetWireSize()
+	}
+	return length
+}
+
 //GetWire of BasePacket assembles all wires, from header wire to frame wires
 func (bp *BasePacket) GetWire() (wire []byte, err error) {
+	if bp.payload != nil {
+		// bp.wire is filled after parsing
+		return append(bp.Header.GetWire(), bp.payload...), nil
+	}
 	hWire := bp.Header.GetWire()
 	if err != nil {
 		return nil, err
@@ -368,6 +390,7 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 		packet.SupportedVersions[i] = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
 		idx += 4
 	}
+	packet.wire = data
 	return packet, idx, nil
 }
 
@@ -406,6 +429,10 @@ func (p VersionNegotiationPacket) genWire() (wire []byte, err error) {
 	}
 	// TODO: VersionNegotiationPacket fills MTU
 	return
+}
+
+func (p VersionNegotiationPacket) SetWire(wire []byte) {
+	// actual set is done in ParseVersionNegotiationPacket()
 }
 
 func (p VersionNegotiationPacket) GetWire() ([]byte, error) {
