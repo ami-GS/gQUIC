@@ -138,9 +138,13 @@ RunLOOP:
 }
 
 func (s *Session) Close(f *ConnectionCloseFrame) error {
-	s.QueueFrame(f)
+	if f != nil {
+		// f == nil when called by handleConnectinCloseFrame()
+		s.QueueFrame(f)
+	}
 	_ = s.streamManager.CloseAllStream()
 	s.closeChan <- struct{}{}
+	close(s.closeChan)
 	return nil
 }
 
@@ -266,19 +270,22 @@ func (s *Session) HandleFrames(fs []Frame) error {
 			err = s.streamManager.handleFrame(f)
 		default:
 			// error
-			return nil
+			//return nil
 		}
 		if err != nil {
-			return err
+			//return err
 		}
 	}
 	return nil
 }
 
 func (s *Session) handleConnectionCloseFrame(frame *ConnectionCloseFrame) error {
-	// implicitely close streams
-	// close connection(session)
-	//return frame.ErrorCode
+	// would be closed from sender side, but for safety
+	s.Close(nil)
+	if s.isClient {
+		// server shares the conn
+		s.conn.Close()
+	}
 	return nil
 }
 

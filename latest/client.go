@@ -19,6 +19,17 @@ func (s *Client) Send(data []byte) (int, error) {
 	return s.session.Write(data)
 }
 
+func (s *Client) Close() {
+	s.close(nil)
+}
+
+func (s *Client) close(f *ConnectionCloseFrame) {
+	if f == nil {
+		f = NewConnectionCloseFrame(qtype.NoError, "Close request from client")
+	}
+	s.session.Close(f)
+}
+
 func DialAddr(addr string) (*Client, error) {
 	remoteAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
