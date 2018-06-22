@@ -42,7 +42,8 @@ const (
 	TwoOctetsType
 	FourOctetsType
 	ShortHeaderPacketTypeMask
-	KeyPhase ShortHeaderPacketType = 0x40
+	ShortHeaderReservedBits ShortHeaderPacketType = 0x30
+	KeyPhase                ShortHeaderPacketType = 0x40
 )
 
 func (sht ShortHeaderPacketType) String() string {
@@ -59,7 +60,7 @@ type PacketHeaderType byte
 
 const (
 	LongHeaderType  PacketHeaderType = 0x80
-	ShortHeaderType PacketHeaderType = 0x30
+	ShortHeaderType PacketHeaderType = 0x00
 )
 
 type PacketHeader interface {
@@ -283,6 +284,10 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	idx := 0
 	sh := NewShortHeader(false, nil, 0)
 	sh.PacketType = ShortHeaderPacketType(data[idx])
+	if sh.PacketType&ShortHeaderPacketTypeMask == ShortHeaderPacketTypeMask {
+		// TODO: must be 0,1,2, but the error is not defined
+		return nil, 0, qtype.ProtocolViolation
+	}
 	idx++
 	sh.DestConnID, err = qtype.ReadConnectionID(data[idx:], qtype.ConnectionIDLen)
 	if err != nil {
@@ -291,10 +296,6 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	idx += qtype.ConnectionIDLen
 
 	packetNumLen := int(math.Pow(2, float64(sh.PacketType&ShortHeaderPacketTypeMask)))
-	if packetNumLen == 8 {
-		// TODO: error
-		return nil, 0, nil
-	}
 	sh.PacketNumber = qtype.PacketNumber(utils.MyUint64(data[idx:], packetNumLen))
 	idx += packetNumLen
 	sh.wire = data[:idx]
