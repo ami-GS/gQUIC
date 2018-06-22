@@ -23,27 +23,9 @@ const (
 	UnidirectionalStream = 0x2
 )
 
-func NewStreamID(id uint64) (StreamID, error) {
-	sid, err := NewQuicInt(id)
-	if err != nil {
-		return StreamID(QuicInt{0, 0, 0}), err
-	}
-	sss := StreamID(sid)
-	return sss, err
-}
-
-func (s *StreamID) Increment() error {
+func (s *StreamID) Increment() {
 	// add 0b100
-	st, err := NewStreamID(s.GetValue() + 4)
-	s.Value = st.Value
-	s.ByteLen = st.ByteLen
-	s.Flag = st.Flag
-	return err
-}
-
-func (s StreamID) GetValue() uint64 {
-	qint := QuicInt(s)
-	return qint.GetValue()
+	*s = *s + 4
 }
 
 func (s StreamID) PutWire(wire []byte) int {
@@ -56,5 +38,5 @@ func (s StreamID) String() string {
 		"Server-Initiated, Bidirectional",
 		"Client-Initiated, Unidirectional",
 		"Server-Initiated, Unidirectional",
-	}[QuicInt(s).Value&0x03], s.GetValue())
+	}[s&0x03], s)
 }

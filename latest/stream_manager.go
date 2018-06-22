@@ -8,7 +8,7 @@ import (
 )
 
 type StreamManager struct {
-	streamMap map[uint64]Stream
+	streamMap map[qtype.StreamID]Stream
 	// would be RcvStream or SendRcvStream
 	finishedStreams *utils.RingBuffer
 	maxStreamIDUni  qtype.StreamID
@@ -19,40 +19,36 @@ type StreamManager struct {
 }
 
 func NewStreamManager(sess *Session) *StreamManager {
-	uniID, _ := qtype.NewStreamID(8)
 	var nxtUniID, nxtBidiID qtype.StreamID
 	if sess.isClient {
-		nxtUniID, _ = qtype.NewStreamID(2)
-		nxtBidiID, _ = qtype.NewStreamID(0)
+		nxtUniID = 2
+		nxtBidiID = 0
 	} else {
-		nxtUniID, _ = qtype.NewStreamID(3)
-		nxtBidiID, _ = qtype.NewStreamID(1)
+		nxtUniID = 3
+		nxtBidiID = 1
 	}
 
-	bidiID, _ := qtype.NewStreamID(2)
 	return &StreamManager{
-		streamMap:       make(map[uint64]Stream),
+		streamMap:       make(map[qtype.StreamID]Stream),
 		sess:            sess,
 		finishedStreams: utils.NewRingBuffer(20),
 		// may be set after handshake, or MAX_STREAM_ID frame
-		maxStreamIDUni:  uniID,
+		maxStreamIDUni:  100,
 		nxtStreamIDUni:  nxtUniID,
-		maxStreamIDBidi: bidiID,
+		maxStreamIDBidi: 100,
 		nxtStreamIDBidi: nxtBidiID,
 	}
 }
 
-func (s *StreamManager) IsValidID(streamID *qtype.StreamID) error {
-	sid := streamID.GetValue()
-
-	if sid&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
+func (s *StreamManager) IsValidID(streamID qtype.StreamID) error {
+	if streamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
-		if sid > s.maxStreamIDUni.GetValue() {
+		if streamID > s.maxStreamIDUni {
 			return qtype.StreamIDError
 		}
 	} else {
 		// bidirectional
-		if sid > s.maxStreamIDBidi.GetValue() {
+		if streamID > s.maxStreamIDBidi {
 			return qtype.StreamIDError
 		}
 	}
@@ -64,26 +60,21 @@ func (s *StreamManager) StartNewSendStream() (Stream, error) {
 	var err error
 	var stream Stream
 	for !isNew {
-		stream, isNew, err = s.GetOrNewStream(&s.nxtStreamIDUni, true)
+		stream, isNew, err = s.GetOrNewStream(s.nxtStreamIDUni, true)
 		if err != nil {
 			return nil, err
 		}
-		err = s.nxtStreamIDUni.Increment()
-		if err != nil {
-			return nil, err
-		}
+		s.nxtStreamIDUni.Increment()
 	}
 	return stream, nil
 }
 
-func (s *StreamManager) GetOrNewStream(streamID *qtype.StreamID, send bool) (st Stream, isNew bool, err error) {
-	sidVal := streamID.GetValue()
-
-	if sidVal == 0 {
+func (s *StreamManager) GetOrNewStream(streamID qtype.StreamID, send bool) (st Stream, isNew bool, err error) {
+	if streamID == 0 {
 		return s.getOrNewSendRecvStream(streamID, s.sess)
 	}
 
-	if sidVal&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
+	if streamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		if send {
 			st, isNew, err = s.getOrNewSendStream(streamID, s.sess)
 		} else {
@@ -94,7 +85,7 @@ func (s *StreamManager) GetOrNewStream(streamID *qtype.StreamID, send bool) (st 
 	}
 
 	if err != nil {
-		delete(s.streamMap, sidVal)
+		delete(s.streamMap, streamID)
 		return nil, false, err
 	}
 
@@ -102,16 +93,15 @@ func (s *StreamManager) GetOrNewStream(streamID *qtype.StreamID, send bool) (st 
 		// check whether ID is larger than MAX_STREAM_ID
 		err = s.IsValidID(streamID)
 		if err != nil {
-			delete(s.streamMap, sidVal)
+			delete(s.streamMap, streamID)
 			return nil, false, err
 		}
 	}
 	return st, isNew, err
 }
 
-func (s *StreamManager) getOrNewRecvStream(streamID *qtype.StreamID, sess *Session) (*RecvStream, bool, error) {
-	sidVal := streamID.GetValue()
-	stream, ok := s.streamMap[sidVal]
+func (s *StreamManager) getOrNewRecvStream(streamID qtype.StreamID, sess *Session) (*RecvStream, bool, error) {
+	stream, ok := s.streamMap[streamID]
 	if ok {
 		st, ok := stream.(*RecvStream)
 		if !ok {
@@ -121,13 +111,13 @@ func (s *StreamManager) getOrNewRecvStream(streamID *qtype.StreamID, sess *Sessi
 		return st, false, nil
 	}
 	st := newRecvStream(streamID, sess)
-	s.streamMap[sidVal] = st
+	s.streamMap[streamID] = st
 	return st, true, nil
 }
 
-func (s *StreamManager) getOrNewSendStream(streamID *qtype.StreamID, sess *Session) (*SendStream, bool, error) {
-	sidVal := streamID.GetValue()
-	stream, ok := s.streamMap[sidVal]
+func (s *StreamManager) getOrNewSendStream(streamID qtype.StreamID, sess *Session) (*SendStream, bool, error) {
+	sidVal := streamID
+	stream, ok := s.streamMap[streamID]
 	if ok {
 		st, ok := stream.(*SendStream)
 		if !ok {
@@ -141,9 +131,9 @@ func (s *StreamManager) getOrNewSendStream(streamID *qtype.StreamID, sess *Sessi
 	return st, true, nil
 }
 
-func (s *StreamManager) getOrNewSendRecvStream(streamID *qtype.StreamID, sess *Session) (*SendRecvStream, bool, error) {
-	sidVal := streamID.GetValue()
-	stream, ok := s.streamMap[sidVal]
+func (s *StreamManager) getOrNewSendRecvStream(streamID qtype.StreamID, sess *Session) (*SendRecvStream, bool, error) {
+	sidVal := streamID
+	stream, ok := s.streamMap[streamID]
 	if ok {
 		st, ok := stream.(*SendRecvStream)
 		if !ok {
@@ -165,9 +155,9 @@ func (s *StreamManager) QueueFrame(f StreamLevelFrame) error {
 	//var isNew bool
 	switch f.(type) {
 	case *StreamFrame, *RstStreamFrame, *StreamBlockedFrame:
-		stream, _, err = s.GetOrNewStream(&sid, true)
+		stream, _, err = s.GetOrNewStream(sid, true)
 	case *MaxStreamDataFrame, *StopSendingFrame:
-		stream, _, err = s.GetOrNewStream(&sid, false)
+		stream, _, err = s.GetOrNewStream(sid, false)
 	case *MaxStreamIDFrame:
 		// this is special, affect only stream_manager
 		//s.sess.sendFrameChan <- f
@@ -199,7 +189,7 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 		// An endpoint that receives a MAX_STREAM_DATA frame for a send-only
 		// stream it has not opened MUST terminate the connection with error
 		// PROTOCOL_VIOLATION.
-		delete(s.streamMap, sid.GetValue())
+		delete(s.streamMap, sid)
 		return qtype.ProtocolViolation
 	}
 
@@ -212,25 +202,25 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 	case *StreamIDBlockedFrame:
 		return s.handleStreamIDBlockedFrame(frame)
 	case *StreamFrame:
-		stream, _, err = s.GetOrNewStream(&sid, false)
+		stream, isNew, err = s.GetOrNewStream(sid, false)
 		if err != nil {
 			return err
 		}
 		err = stream.handleStreamFrame(frame)
 	case *RstStreamFrame:
-		stream, _, err = s.GetOrNewStream(&sid, false)
+		stream, _, err = s.GetOrNewStream(sid, false)
 		if err != nil {
 			return err
 		}
 		err = stream.handleRstStreamFrame(frame)
 	case *StreamBlockedFrame:
-		stream, _, err = s.GetOrNewStream(&sid, false)
+		stream, isNew, err = s.GetOrNewStream(sid, false)
 		if err != nil {
 			return err
 		}
 		err = stream.handleStreamBlockedFrame(frame)
 	case *MaxStreamDataFrame:
-		stream, isNew, err = s.GetOrNewStream(&sid, true)
+		stream, isNew, err = s.GetOrNewStream(sid, true)
 		if err != nil {
 			return err
 		}
@@ -240,7 +230,7 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 		err = stream.handleMaxStreamDataFrame(frame)
 		return err
 	case *StopSendingFrame:
-		stream, isNew, err = s.GetOrNewStream(&sid, true)
+		stream, isNew, err = s.GetOrNewStream(sid, true)
 		if err != nil {
 			return err
 		}
@@ -265,22 +255,22 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 
 func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) error {
 	// should be from sender stream which needs new ID, but could not open due to limit
-	s.sess.sendFrameChan <- NewMaxStreamIDFrame(frame.StreamID.GetValue() + 1)
+	s.sess.sendFrameChan <- NewMaxStreamIDFrame(frame.StreamID + 1)
 	return nil
 }
 func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
-	sid := frame.StreamID.GetValue()
+	sid := frame.StreamID
 
 	if sid&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
-		if sid < s.maxStreamIDUni.GetValue() {
+		if sid < s.maxStreamIDUni {
 			// ignored
 			return nil
 		}
 		s.maxStreamIDUni = frame.StreamID
 	} else {
 		//bidirectional
-		if sid < s.maxStreamIDBidi.GetValue() {
+		if sid < s.maxStreamIDBidi {
 			// ignored
 			return nil
 		}
@@ -294,19 +284,18 @@ func (s *StreamManager) resendBlockedFrames(blockedFrames *utils.RingBuffer) err
 	var stream Stream
 	var isNew bool
 	var err error
-	sID := (*qtype.StreamID)(nil)
+	sID := qtype.StreamID(0)
 	size := blockedFrames.Size()
 	for i := 0; i < size; i++ {
 		frame := blockedFrames.Dequeue().(*StreamFrame)
-		sIDtmp := frame.GetStreamID()
-		if sID != &sIDtmp {
-			sID = &sIDtmp
+		if sID != frame.GetStreamID() {
+			sID = frame.GetStreamID()
 			stream, isNew, err = s.GetOrNewStream(sID, true)
 			if err != nil {
 				return err
 			}
 			if isNew {
-				delete(s.streamMap, sID.GetValue())
+				delete(s.streamMap, sID)
 				return nil
 			}
 		}

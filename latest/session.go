@@ -169,10 +169,10 @@ func (s *Session) Write(data []byte) (n int, err error) {
 	// 2. loop to make packet which should have bellow or equal to MTUIPv4
 	for {
 		if len(data[offset:]) > qtype.MaxPayloadSizeIPv4 {
-			err = stream.QueueFrame(NewStreamFrame(stream.GetID().GetValue(), offset+qtype.MaxPayloadSizeIPv4, true, true, false, data[offset:offset+qtype.MaxPayloadSizeIPv4]))
+			err = stream.QueueFrame(NewStreamFrame(stream.GetID(), qtype.QuicInt(offset)+qtype.MaxPayloadSizeIPv4, true, true, false, data[offset:offset+qtype.MaxPayloadSizeIPv4]))
 			offset += qtype.MaxPayloadSizeIPv4
 		} else {
-			err = stream.QueueFrame(NewStreamFrame(stream.GetID().GetValue(), offset+uint64(len(data[offset:])), true, true, true, data[offset:]))
+			err = stream.QueueFrame(NewStreamFrame(stream.GetID(), qtype.QuicInt(offset+uint64(len(data[offset:]))), true, true, true, data[offset:]))
 			break
 		}
 		if err != nil {
@@ -303,7 +303,7 @@ func (s *Session) QueueFrame(frame Frame) error {
 	case *ApplicationCloseFrame:
 	case *MaxDataFrame:
 		//TODO: controller should be prepared for both direction on Connection?
-		s.flowContoller.MaxDataLimit = f.Data.GetValue()
+		s.flowContoller.MaxDataLimit = f.Data
 	case *PingFrame:
 	case *BlockedFrame:
 	case *NewConnectionIDFrame:
@@ -323,12 +323,12 @@ func (s *Session) QueueFrame(frame Frame) error {
 }
 
 func (s *Session) handleBlockedFrame(frame *BlockedFrame) error {
-	return s.QueueFrame(NewMaxDataFrame(frame.Offset.GetValue()))
+	return s.QueueFrame(NewMaxDataFrame(frame.Offset))
 }
 
 func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
-	if s.flowContoller.MaxDataLimit < frame.Data.GetValue() {
-		s.flowContoller.MaxDataLimit = frame.Data.GetValue()
+	if s.flowContoller.MaxDataLimit < frame.Data {
+		s.flowContoller.MaxDataLimit = frame.Data
 		err := s.streamManager.resendBlockedFrames(s.blockedFramesOnConnection)
 		if err != nil {
 			return err

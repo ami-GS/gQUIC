@@ -98,15 +98,15 @@ func (bp *BasePacket) GetWire() (wire []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	fsWire, err := GetFrameWires(bp.Frames)
+	bp.payload, err = GetFrameWires(bp.Frames)
 	if err != nil {
 		return nil, err
 	}
 	if bp.PaddingNum != 0 {
-		fsWire = append(fsWire, make([]byte, bp.PaddingNum)...)
+		bp.payload = append(bp.payload, make([]byte, bp.PaddingNum)...)
 	}
 	// TODO: protect for short header?
-	return append(hWire, fsWire...), nil
+	return append(hWire, bp.payload...), nil
 }
 
 func newPacket(ph PacketHeader, fs []Frame) (Packet, error) {
@@ -180,7 +180,7 @@ func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.Connect
 	paddingNum := 0
 	if InitialPacketMinimumPayloadSize <= sFrameLen {
 		// TODO: need to check when sFrameLen is over MTUIPv4
-		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, uint64(sFrameLen))
+		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(sFrameLen))
 		frames = []Frame{sFrame}
 	} else {
 		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, InitialPacketMinimumPayloadSize)
@@ -225,7 +225,7 @@ func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.Connectio
 
 	return &RetryPacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, uint64(payloadLen)),
+			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(payloadLen)),
 			Frames: frames,
 		},
 	}
@@ -256,7 +256,7 @@ func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.Conne
 
 	return &HandshakePacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, uint64(payloadLen)),
+			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(payloadLen)),
 			Frames: frames,
 		},
 	}
@@ -276,7 +276,7 @@ func NewProtectedPacket(version qtype.Version, key bool, destConnID, srcConnID q
 		for _, frame := range frames {
 			payloadLen += frame.GetWireSize()
 		}
-		header = NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, uint64(payloadLen))
+		header = NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(payloadLen))
 	} else if rtt == 1 {
 		header = NewShortHeader(key, destConnID, packetNumber)
 	} else {

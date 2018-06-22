@@ -139,11 +139,7 @@ type LongHeader struct {
 	PayloadLen qtype.QuicInt
 }
 
-func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadlen uint64) *LongHeader {
-	paylen, err := qtype.NewQuicInt(payloadlen)
-	if err != nil {
-		//error
-	}
+func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadlen qtype.QuicInt) *LongHeader {
 	dcil := 0
 	if destConnID != nil {
 		dcil = len(destConnID) - 3
@@ -163,8 +159,9 @@ func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destC
 		Version:    version,
 		DCIL:       byte(dcil),
 		SCIL:       byte(scil),
-		PayloadLen: paylen,
+		PayloadLen: payloadlen,
 	}
+	var err error
 	lh.wire, err = lh.genWire()
 	if err != nil {
 		// error
@@ -200,19 +197,19 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 		}
 		idx += scil
 	}
-	lh.PayloadLen, _ = qtype.ParseQuicInt(data[idx:])
-	idx += lh.PayloadLen.ByteLen
+	lh.PayloadLen = qtype.DecodeQuicInt(data[idx:])
+	idx += lh.PayloadLen.GetByteLen()
 	lh.PacketNumber = qtype.PacketNumber(binary.BigEndian.Uint32(data[idx:]))
 	lh.wire = data[:idx+4]
 	return lh, idx + 4, nil
 }
 
 func (lh LongHeader) String() string {
-	return fmt.Sprintf("LongHeader:%s\tVer:%d\nDCIL:%d,SCIL:%d\n%s\nPayloadLen:%d", lh.PacketType, lh.Version, lh.DCIL, lh.SCIL, lh.BasePacketHeader, lh.PayloadLen.GetValue())
+	return fmt.Sprintf("LongHeader:%s\tVer:%d\nDCIL:%d,SCIL:%d\n%s\nPayloadLen:%d", lh.PacketType, lh.Version, lh.DCIL, lh.SCIL, lh.BasePacketHeader, lh.PayloadLen)
 }
 
 func (lh LongHeader) genWire() (wire []byte, err error) {
-	wireLen := int(10 + lh.PayloadLen.ByteLen)
+	wireLen := int(10 + lh.PayloadLen.GetByteLen())
 
 	if lh.DCIL != 0 {
 		wireLen += int(lh.DCIL + 3)
@@ -234,7 +231,7 @@ func (lh LongHeader) genWire() (wire []byte, err error) {
 		idx += int(lh.SCIL + 3)
 	}
 	lh.PayloadLen.PutWire(wire[idx:])
-	idx += lh.PayloadLen.ByteLen
+	idx += lh.PayloadLen.GetByteLen()
 	binary.BigEndian.PutUint32(wire[idx:], uint32(lh.PacketNumber))
 	return
 }

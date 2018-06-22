@@ -7,12 +7,12 @@ import (
 )
 
 type baseFlowController struct {
-	bytesSent       uint64
-	bytesReceived   uint64
-	largestSent     uint64
-	largestReceived uint64
+	bytesSent       qtype.QuicInt
+	bytesReceived   qtype.QuicInt
+	largestSent     qtype.QuicInt
+	largestReceived qtype.QuicInt
 
-	MaxDataLimit uint64
+	MaxDataLimit qtype.QuicInt
 }
 
 func (f *baseFlowController) String() string {
@@ -35,7 +35,7 @@ const (
 	BothBlocked FlowControlFlag = 6
 )
 
-func (s *StreamFlowController) SendableByOffset(offset uint64, fin bool) FlowControlFlag {
+func (s *StreamFlowController) SendableByOffset(offset qtype.QuicInt, fin bool) FlowControlFlag {
 	connSendable := Sendable
 	streamSendable := Sendable
 	if !s.IsStreamZero && fin {
@@ -48,7 +48,7 @@ func (s *StreamFlowController) SendableByOffset(offset uint64, fin bool) FlowCon
 	return connSendable * streamSendable
 }
 
-func (s *StreamFlowController) ReceivableByOffset(offset uint64, fin bool) error {
+func (s *StreamFlowController) ReceivableByOffset(offset qtype.QuicInt, fin bool) error {
 	if !s.IsStreamZero && fin {
 		err := s.connFC.ReceivableByOffset(offset)
 		if err != nil {
@@ -63,11 +63,11 @@ func (s *StreamFlowController) ReceivableByOffset(offset uint64, fin bool) error
 	return nil
 }
 
-func (s *StreamFlowController) updateLargestReceived(offset uint64) {
+func (s *StreamFlowController) updateLargestReceived(offset qtype.QuicInt) {
 	s.largestReceived = offset
 }
 
-func (s *StreamFlowController) updateLargestSent(offset uint64) {
+func (s *StreamFlowController) updateLargestSent(offset qtype.QuicInt) {
 	s.largestSent = offset
 }
 
@@ -75,23 +75,23 @@ type ConnectionFlowController struct {
 	baseFlowController
 }
 
-func (c *ConnectionFlowController) SendableByOffset(largestOffset uint64) FlowControlFlag {
+func (c *ConnectionFlowController) SendableByOffset(largestOffset qtype.QuicInt) FlowControlFlag {
 	if c.bytesSent+largestOffset <= c.MaxDataLimit {
 		return Sendable
 	}
 	return ConnectionBlocked
 }
 
-func (c *ConnectionFlowController) ReceivableByOffset(largestOffset uint64) error {
+func (c *ConnectionFlowController) ReceivableByOffset(largestOffset qtype.QuicInt) error {
 	if c.bytesReceived+largestOffset > c.MaxDataLimit {
 		return qtype.FlowControlReceivedTooMuchData
 	}
 	return nil
 }
 
-func (c *ConnectionFlowController) updateByteSent(largestOffset uint64) {
+func (c *ConnectionFlowController) updateByteSent(largestOffset qtype.QuicInt) {
 	c.bytesSent += largestOffset
 }
-func (c *ConnectionFlowController) updateByteReceived(largestOffset uint64) {
+func (c *ConnectionFlowController) updateByteReceived(largestOffset qtype.QuicInt) {
 	c.bytesReceived += largestOffset
 }

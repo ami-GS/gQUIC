@@ -1,7 +1,7 @@
 package utils
 
 type Item struct {
-	Offset uint64
+	Offset qtype.QuicInt
 	Data   []byte
 }
 

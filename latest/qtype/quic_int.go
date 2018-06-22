@@ -20,87 +20,76 @@ import (
    +------+--------+-------------+-----------------------+
 */
 
-type QuicInt struct {
-	Value   uint64 // encoded
-	Flag    byte
-	ByteLen int
-}
+type QuicInt uint64
 
-func NewQuicInt(value uint64) (QuicInt, error) {
-	val, flag, err := EncodeToValue(value)
-	if err != nil {
-		return QuicInt{0, 0, 0}, err
+func (v QuicInt) GetEncoded() uint64 {
+	switch {
+	case 0 <= v && v <= 63:
+		return uint64(v)
+	case 0 <= v && v <= 16383:
+		return uint64(v) | 0x4000
+	case 0 <= v && v <= 1073741823:
+		return uint64(v) | 0x80000000
+	case 0 <= v && v <= 4611686018427387903:
+		return uint64(v) | 0xC000000000000000
+	default:
+		// error
+		return 0
 	}
-	return QuicInt{
-		Value:   val,
-		Flag:    flag,
-		ByteLen: int(math.Pow(2, float64(flag))),
-	}, nil
+	panic("")
 }
 
-func (v QuicInt) GetValue() uint64 {
-	switch v.Flag {
-	case 0x00:
-		return v.Value
-	case 0x01:
-		return v.Value & 0x3fff
-	case 0x02:
-		return v.Value & 0x7fffffff
-	case 0x03:
-		return v.Value & 0x3fffffffffffffff
+func (v QuicInt) GetFlag() byte {
+	switch {
+	case 0 <= v && v <= 63:
+		return 0x00
+	case 0 <= v && v <= 16383:
+		return 0x01
+	case 0 <= v && v <= 1073741823:
+		return 0x02
+	case 0 <= v && v <= 4611686018427387903:
+		return 0x03
+	default:
+		// error
+		return 255
 	}
-	return 0
 }
 
-func (v QuicInt) Less(right *QuicInt) bool {
-	return v.GetValue() < right.GetValue()
-}
-
-func (v QuicInt) Equal(right *QuicInt) bool {
-	return v.GetValue() == right.GetValue()
+func (v QuicInt) GetByteLen() int {
+	switch {
+	case 0 <= v && v <= 63:
+		return 1
+	case 0 <= v && v <= 16383:
+		return 2
+	case 0 <= v && v <= 1073741823:
+		return 4
+	case 0 <= v && v <= 4611686018427387903:
+		return 8
+	default:
+		// error
+		return 0
+	}
 }
 
 func (v QuicInt) PutWire(wire []byte) int {
-	utils.MyPutUint64(wire, v.Value, v.ByteLen)
-	return v.ByteLen
+	byteLen := v.GetByteLen()
+	utils.MyPutUint64(wire, uint64(v.GetEncoded()), byteLen)
+	return byteLen
 }
 
-func ParseQuicInt(data []byte) (QuicInt, error) {
+func DecodeQuicInt(data []byte) QuicInt {
 	flag := (data[0] & 0xc0) >> 6
-	ret := QuicInt{
-		Flag:    flag,
-		ByteLen: int(math.Pow(2, float64(flag))),
-		Value:   0,
+	byteLen := int(math.Pow(2, float64(flag)))
+	val := QuicInt(utils.MyUint64(data, byteLen))
+	switch byteLen {
+	case 1:
+		return val
+	case 2:
+		return val & 0x3fff
+	case 4:
+		return val & 0x3fffffff
+	case 8:
+		return val & 0x3fffffffffffffff
 	}
-	ret.Value = utils.MyUint64(data, ret.ByteLen)
-	return ret, nil
-}
-
-func EncodeToValue(val uint64) (ret uint64, byteFlag byte, err error) {
-	byteFlag = byte(0x00)
-	switch {
-	case 0 <= val && val <= 63:
-	case 0 <= val && val <= 16383:
-		byteFlag = 0x01
-	case 0 <= val && val <= 1073741823:
-		byteFlag = 0x02
-	case 0 <= val && val <= 4611686018427387903:
-		byteFlag = 0x03
-	default:
-		return 0, 0, err
-		// error
-	}
-	byteLen := int(math.Pow(2, float64(byteFlag)))
-
-	for i := 0; i < byteLen; i++ {
-		shift := uint8((byteLen - 1 - i) * 8)
-		if i == 0 {
-			ret |= uint64((val>>shift)&0xff) << shift
-			ret |= uint64(byteFlag) << byte(((byteLen * 8) - 2))
-		} else {
-			ret |= uint64((val>>shift)&0xff) << shift
-		}
-	}
-
-	return ret, byteFlag, nil
+	panic("")
 }

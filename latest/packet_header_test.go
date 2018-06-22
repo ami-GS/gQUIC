@@ -9,7 +9,6 @@ import (
 
 func TestNewLongHeader(t *testing.T) {
 	var err error
-	payloadLen, _ := qtype.NewQuicInt(0)
 	pn := qtype.InitialPacketNumber()
 	Convey("If connection IDs are absent, DCIL and SCIL should be 0", t, func() {
 		dstID := (qtype.ConnectionID)(nil)
@@ -24,7 +23,7 @@ func TestNewLongHeader(t *testing.T) {
 			Version:    qtype.VersionQuicTLS,
 			DCIL:       0,
 			SCIL:       0,
-			PayloadLen: payloadLen,
+			PayloadLen: qtype.QuicInt(0),
 		}
 		eHeader.wire, err = eHeader.genWire()
 		aHeader := NewLongHeader(InitialPacketType, qtype.VersionQuicTLS, dstID, srcID, pn, 0)
@@ -44,7 +43,7 @@ func TestNewLongHeader(t *testing.T) {
 			Version:    qtype.VersionQuicTLS,
 			DCIL:       byte(len(dstID)) - 3,
 			SCIL:       byte(len(srcID)) - 3,
-			PayloadLen: payloadLen,
+			PayloadLen: qtype.QuicInt(0),
 		}
 		eHeader.wire, err = eHeader.genWire()
 		aHeader := NewLongHeader(InitialPacketType, qtype.VersionQuicTLS, dstID, srcID, pn, 0)
@@ -143,7 +142,7 @@ func TestParseShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(ShortHeaderType) | ShortHeaderPacketType(pn.Flag()),
+			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | pn.Flag()),
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)
@@ -163,7 +162,7 @@ func TestParseShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(ShortHeaderType) | ShortHeaderPacketType(pn.Flag()),
+			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | pn.Flag()),
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)
@@ -183,7 +182,7 @@ func TestParseShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(ShortHeaderType) | ShortHeaderPacketType(pn.Flag()),
+			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | pn.Flag()),
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)
