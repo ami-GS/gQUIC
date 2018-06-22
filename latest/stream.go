@@ -142,8 +142,8 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 		return nil
 	}
 
-	//qtype.MaxPayloadSizeIPv4*0.8 = 958.4 -> 960
-	if f.(Frame).GetWireSize() >= 960 {
+	//qtype.MaxPayloadSizeIPv4*0.8 = 958.4
+	if float64(f.(Frame).GetWireSize()) >= qtype.HighPriorityWireSizeThreshold {
 		s.sess.sendFrameHPChan <- f.(Frame)
 	} else {
 		s.sess.sendFrameChan <- f.(Frame)

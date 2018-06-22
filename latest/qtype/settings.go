@@ -11,3 +11,5 @@ const MaxHeaderSize = 54
 
 const MaxPayloadSizeIPv4 = MTUIPv4 - MaxHeaderSize
 const MaxPayloadSizeIPv6 = MTUIPv6 - MaxHeaderSize
+
+const HighPriorityWireSizeThreshold = MaxPayloadSizeIPv4 * 0.8
