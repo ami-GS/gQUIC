@@ -241,14 +241,17 @@ func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.Conne
 	payloadLen := 0
 	for i := 0; i < len(frames); i++ {
 		switch frames[i].(type) {
+		case *ConnectionCloseFrame:
+			// This stands for the handshake is unsaccessful
+			minimumReq = true
 		case *StreamFrame:
 			minimumReq = true
-			payloadLen += frames[i].GetWireSize()
-		case *AckFrame, *PathChallengeFrame /*or*/, *PathResponseFrame, *ConnectionCloseFrame:
-			payloadLen += frames[i].GetWireSize()
+		case *AckFrame, *PathChallengeFrame /*or*/, *PathResponseFrame:
 		default:
+			// TODO: error, handshake packet cannot have these frames
 			return nil
 		}
+		payloadLen += frames[i].GetWireSize()
 	}
 	if !minimumReq {
 		return nil
