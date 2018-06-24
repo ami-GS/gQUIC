@@ -362,7 +362,8 @@ func (s *RecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
 		s.State = qtype.StreamResetRecvd
 	}
 
-	// TODO: discard data received?
+	// discard data received
+	s.ReorderBuffer.Delete()
 	return nil
 }
 
