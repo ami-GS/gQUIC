@@ -1,5 +1,10 @@
 package utils
 
+import (
+	"github.com/ami-GS/gQUIC/latest/qtype"
+)
+
+// should be interface{}?
 type Item struct {
 	Offset qtype.QuicInt
 	Data   []byte
@@ -24,4 +29,8 @@ func (h *Heap) Pop() interface{} {
 	x := old[n-1]
 	*h = old[0 : n-1]
 	return x
+}
+
+func (h *Heap) Delete() {
+	*h = Heap{}
 }
