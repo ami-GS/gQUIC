@@ -876,13 +876,6 @@ type AckBlock struct {
 	Gap   qtype.QuicInt
 }
 
-func NewAckBlock(ackBlock, gap qtype.QuicInt) *AckBlock {
-	return &AckBlock{
-		Block: ackBlock,
-		Gap:   gap,
-	}
-}
-
 type AckFrame struct {
 	*BaseFrame
 	LargestAcked  qtype.QuicInt

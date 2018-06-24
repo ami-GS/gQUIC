@@ -21,7 +21,7 @@ func TestNewPacket(t *testing.T) {
 	})
 	Convey("RetryPacketType", t, func() {
 		sFrame := NewStreamFrame(0, 0, true, true, true, []byte{0x11, 0x22})
-		aFrame := NewAckFrame(2, 3, []AckBlock{*NewAckBlock(32, 0)})
+		aFrame := NewAckFrame(2, 3, []AckBlock{AckBlock{32, 0}})
 		frames := []Frame{sFrame, aFrame}
 		payloadLen := 0
 		for _, f := range frames {
