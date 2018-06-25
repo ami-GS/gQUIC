@@ -6,7 +6,7 @@ import (
 	"math"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
-	"github.com/ami-GS/gQUIC/utils"
+	"github.com/ami-GS/gQUIC/latest/utils"
 )
 
 type LongHeaderPacketType byte

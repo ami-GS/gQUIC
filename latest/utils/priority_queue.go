@@ -1,12 +1,8 @@
 package utils
 
-import (
-	"github.com/ami-GS/gQUIC/latest/qtype"
-)
-
 // should be interface{}?
 type Item struct {
-	Offset qtype.QuicInt
+	Offset uint64
 	Data   []byte
 }
 

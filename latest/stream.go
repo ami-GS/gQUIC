@@ -293,7 +293,7 @@ func (s *RecvStream) ReadData() ([]byte, bool) {
 	out := make([]byte, s.DataSize)
 	for s.ReorderBuffer.Len() > 0 {
 		item := heap.Pop(s.ReorderBuffer).(*utils.Item)
-		copy(out[uint64(item.Offset)-uint64(len(item.Data)):], item.Data)
+		copy(out[item.Offset-uint64(len(item.Data)):], item.Data)
 	}
 
 	s.State = qtype.StreamDataRead
@@ -396,7 +396,7 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 	// TODO: copy workaround of data corrupting issue
 	data := make([]byte, len(f.Data))
 	copy(data, f.Data)
-	heap.Push(s.ReorderBuffer, &utils.Item{offsetValue, data})
+	heap.Push(s.ReorderBuffer, &utils.Item{uint64(offsetValue), data})
 
 	s.ReceiveAllDetector = s.ReceiveAllDetector ^ offsetValue ^ (offsetValue - f.Length)
 	if s.State == qtype.StreamSizeKnown && s.ReceiveAllDetector != 0 && s.ReceiveAllDetector == s.DataSize {
