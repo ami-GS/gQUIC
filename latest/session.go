@@ -336,3 +336,46 @@ func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 	}
 	return nil
 }
+
+func (s *Session) handleInitialPacket(p *InitialPacket) error {
+	if p.GetPayloadLen() < InitialPacketMinimumPayloadSize {
+		return qtype.ProtocolViolation
+	}
+	// If server want stateless retry, don't need ack for this packet.
+	// Next InitialPacket stands for ack implicitely
+
+	srcID, _ := p.GetHeader().GetConnectionIDPair()
+	// TODO: no need to be random for destID
+	dstID, _ := qtype.NewConnectionID(nil)
+
+	// WIP
+	sFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x11, 0x22})
+	aFrame := NewAckFrame(2, 3, []AckBlock{AckBlock{32, 0}})
+
+	s.sendPacketChan <- NewRetryPacket(s.versionDecided, srcID, dstID, p.GetHeader().GetPacketNumber(), []Frame{sFrame, aFrame})
+	// containing the server's cryptographic stateless retry material
+	//frame1 := NewStreamFrame(0, 0, 0, true, true, false, []byte{})
+
+	// ack for client's InitialPacket
+	//frame2 := NewAckFrame(lAcked, ackDelay, ackBlockCount uint64, ackBlocks []AckBlock)
+	// RetryPacket
+	return nil
+}
+
+func (h *Session) handleHandshakePacket(p *HandshakePacket) error {
+	return nil
+}
+
+func (h *Session) handleProtectedPacket(p *ProtectedPacket) error {
+	// Protected Packet whould be same in client & server
+	if p.RTT == 0 {
+
+	} else if p.RTT == 1 {
+
+	} else {
+		// error
+	}
+
+	// decrypt payload
+	return nil
+}
