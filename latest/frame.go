@@ -929,7 +929,7 @@ func ParseAckFrame(data []byte) (Frame, int, error) {
 }
 
 func (f AckFrame) String() string {
-	out := fmt.Sprintf("[%s]\n\tDelay:%d\tBlkCount:%d\n\tFirstAck:%d", f.BaseFrame, f.AckDelay, f.AckBlockCount, f.AckBlocks[0].Block)
+	out := fmt.Sprintf("[%s]\n\tLargest:%d\tDelay:%d\tBlkCount:%d\n\tFirstAck:%d", f.BaseFrame, f.LargestAcked, f.AckDelay, f.AckBlockCount, f.AckBlocks[0].Block)
 	for i := 1; i < int(f.AckBlockCount); i++ {
 		out += fmt.Sprintf("\n\tAck:%d\tGap:%d", f.AckBlocks[i].Block, f.AckBlocks[i].Gap)
 	}

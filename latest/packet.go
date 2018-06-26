@@ -455,5 +455,5 @@ func (p VersionNegotiationPacket) GetFrames() []Frame {
 	return nil
 }
 func (p VersionNegotiationPacket) String() string {
-	return fmt.Sprintf("NoHeader:VersionNegotiationPacket\tVer:%d\nDCIL:%d,SCIL:%d\n%s\nSupported Versions:%v", p.Version, p.DCIL, p.SCIL, p.BasePacketHeader, p.SupportedVersions)
+	return fmt.Sprintf("NoHeader:VersionNegotiationPacket\tVer:N/A(%d)\nDCIL:%d,SCIL:%d\n%s\nSupported Versions:%v", p.Version, p.DCIL, p.SCIL, p.BasePacketHeader, p.SupportedVersions)
 }

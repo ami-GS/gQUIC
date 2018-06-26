@@ -206,7 +206,7 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 }
 
 func (lh LongHeader) String() string {
-	return fmt.Sprintf("LongHeader:%s\tVer:%d\nDCIL:%d,SCIL:%d\n%s\nPayloadLen:%d", lh.PacketType, lh.Version, lh.DCIL, lh.SCIL, lh.BasePacketHeader, lh.PayloadLen)
+	return fmt.Sprintf("LongHeader:%s\tVer:%s\nDCIL:%d,SCIL:%d\n%s\nPayloadLen:%d", lh.PacketType, lh.Version, lh.DCIL, lh.SCIL, lh.BasePacketHeader, lh.PayloadLen)
 }
 
 func (lh LongHeader) genWire() (wire []byte, err error) {
