@@ -1,6 +1,7 @@
 package quiclatest
 
 import (
+	"sync"
 	"time"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
@@ -46,6 +47,9 @@ type Session struct {
 	LastPacketNumber qtype.PacketNumber
 
 	packetHandler PacketHandler
+
+	UnAckedPacket map[qtype.PacketNumber]Packet
+	mapMutex      *sync.Mutex
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
@@ -74,6 +78,8 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		PingTicker:       time.NewTicker(15 * time.Second),
 		versionDecided:   qtype.VersionPlaceholder,
 		LastPacketNumber: qtype.InitialPacketNumber(),
+		UnAckedPacket:    make(map[qtype.PacketNumber]Packet),
+		mapMutex:         new(sync.Mutex),
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess
@@ -187,6 +193,10 @@ func (s *Session) SendPacket(packet Packet) error {
 	if err != nil {
 		return err
 	}
+
+	s.mapMutex.Lock()
+	s.UnAckedPacket[packet.GetPacketNumber()] = packet
+	s.mapMutex.Unlock()
 	return s.conn.Write(wire)
 }
 
@@ -367,6 +377,25 @@ func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func (s *Session) handleAckFrame(frame *AckFrame) error {
+	largest := frame.LargestAcked
+	for _, block := range frame.AckBlocks {
+		if largest < 0 || largest < block.Block {
+			return qtype.FrameError | qtype.TransportError(AckFrameType)
+		}
+		for acked := largest; acked >= largest-block.Block; acked-- {
+			// TODO: would accerelate by using slice, not map
+			// TODO: should have AckedPackets map for detect duplicate ack (SHOULD NOT be allowed)
+			s.mapMutex.Lock()
+			delete(s.UnAckedPacket, qtype.PacketNumber(acked))
+			s.mapMutex.Unlock()
+		}
+		largest -= block.Gap + 2
+	}
+
 	return nil
 }
 
