@@ -233,17 +233,50 @@ func (s *Session) HandlePacket(p Packet) error {
 	return nil
 }
 
+// send ack frame if needed
 func (s *Session) maybeAckPacket(p Packet) {
 	// Retry and VersionNegotiation packets are acked by next Initial Packet
-	if _, ok := p.(RetryPacket); ok {
+	if _, ok := p.(*RetryPacket); ok {
 		return
 	}
-	if _, ok := p.(VersionNegotiationPacket); ok {
+	if _, ok := p.(*VersionNegotiationPacket); ok {
 		return
+	}
+	// ack for InitialPacket sent by handleInitialPacket()
+	if _, ok := p.(*InitialPacket); ok {
+		return
+	}
+
+	for i, frame := range p.GetFrames() {
+		if frame.GetType() != AckFrameType && frame.GetType() != PaddingFrameType {
+			break
+		}
+		if i == len(p.GetFrames())-1 {
+			// MUST NOT generate packets that only contain ACK
+			// frames in response to packets which only contain ACK frames.
+			return
+		}
 	}
 
 	// retrieve packet number from priority queue
 	// largest
+	// currently send ack for one packet,
+	// TODO: should assemble multiple packet number in one ack frame
+	// simple slice looks fast
+
+	// decide largest from packet slice
+	largest := qtype.QuicInt(p.GetPacketNumber())
+	// prepare blocks
+	size := 1
+	block := make([]AckBlock, size)
+	block[0] = AckBlock{largest - qtype.QuicInt(p.GetPacketNumber()), 0}
+	/*
+		for i := 1; i < size; i++ {
+			block[i] = AckBlock{largest - qtype.QuicInt(p.GetPacketNumber()), 0}
+		}
+	*/
+	s.sendFrameChan <- NewAckFrame(largest, 0, block)
+	s.AssembleFrameChan <- struct{}{}
 
 }
 
