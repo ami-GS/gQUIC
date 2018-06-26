@@ -27,6 +27,7 @@ type Session struct {
 	// high priority channel when wire has over 1000 (MTUIPv4*0.8)
 	sendFrameHPChan chan Frame
 	sendPacketChan  chan Packet
+	RetryPacketNum  qtype.PacketNumber
 
 	blockedFramesOnConnection *utils.RingBuffer
 
@@ -50,6 +51,8 @@ type Session struct {
 
 	UnAckedPacket map[qtype.PacketNumber]Packet
 	mapMutex      *sync.Mutex
+
+	server *Server
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
@@ -214,10 +217,9 @@ func (s *Session) RecvPacketLoop() {
 
 func (s *Session) HandlePacket(p Packet) error {
 	var err error
-
 	switch packet := p.(type) {
 	case *InitialPacket:
-		// must come from only client
+		// must come from only client, this method do ack by himself
 		err = s.packetHandler.handleInitialPacket(packet)
 	case *RetryPacket:
 		// must come from only server
@@ -328,7 +330,10 @@ func (s *Session) handleConnectionCloseFrame(frame *ConnectionCloseFrame) error 
 	if s.isClient {
 		// server shares the conn
 		s.conn.Close()
+	} else {
+		s.server.DeleteSessionFromMap(s.DestConnID)
 	}
+
 	return nil
 }
 
@@ -400,27 +405,44 @@ func (s *Session) handleAckFrame(frame *AckFrame) error {
 }
 
 func (s *Session) handleInitialPacket(p *InitialPacket) error {
+	// WIP
 	if p.GetPayloadLen() < InitialPacketMinimumPayloadSize {
 		return qtype.ProtocolViolation
 	}
-	// If server want stateless retry, don't need ack for this packet.
+
+	if s.RetryPacketNum != 0 {
+		s.mapMutex.Lock()
+		delete(s.UnAckedPacket, s.RetryPacketNum)
+		s.mapMutex.Unlock()
+		s.RetryPacketNum = 0
+		return nil
+	}
+
+	cliSrcID, origDstID := p.GetHeader().GetConnectionIDPair()
+	if len(origDstID) < 8 {
+		// If the client has not previously received a Retry packet from the server, it populates
+		// the Destination Connection ID field with a randomly selected value.
+		// This MUST be at least 8 octets in length.
+		return qtype.ProtocolViolation
+	}
+
+	// The server includes a connection ID of its choice in the Source Connection ID field.
+	srvSrcID, _ := qtype.NewConnectionID(nil)
+	s.server.ChangeConnectionID(origDstID, srvSrcID)
+
+	// send Retry Packet if server wishes to perform a stateless retry
+	// It MUST include a STREAM frame on stream 0 with offset 0 containing the server's cryptographic stateless retry material.
+	sFrame := NewStreamFrame(0, 0, true, true, false, []byte("server's cryptographic stateless retry material"))
+	// It MUST also include an ACK frame to acknowledge the client's Initial packet.
+	aFrame := NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, []AckBlock{AckBlock{0, 0}})
+	packet := NewRetryPacket(s.versionDecided, cliSrcID, srvSrcID, p.GetPacketNumber(), []Frame{sFrame, aFrame})
+
 	// Next InitialPacket stands for ack implicitely
-
-	srcID, _ := p.GetHeader().GetConnectionIDPair()
-	// TODO: no need to be random for destID
-	dstID, _ := qtype.NewConnectionID(nil)
-
-	// WIP
-	sFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x11, 0x22})
-	aFrame := NewAckFrame(2, 3, []AckBlock{AckBlock{32, 0}})
-
-	s.sendPacketChan <- NewRetryPacket(s.versionDecided, srcID, dstID, p.GetHeader().GetPacketNumber(), []Frame{sFrame, aFrame})
-	// containing the server's cryptographic stateless retry material
-	//frame1 := NewStreamFrame(0, 0, 0, true, true, false, []byte{})
-
-	// ack for client's InitialPacket
-	//frame2 := NewAckFrame(lAcked, ackDelay, ackBlockCount uint64, ackBlocks []AckBlock)
-	// RetryPacket
+	s.mapMutex.Lock()
+	s.UnAckedPacket[packet.GetPacketNumber()] = packet
+	s.mapMutex.Unlock()
+	s.RetryPacketNum = packet.GetPacketNumber()
+	s.sendPacketChan <- packet
 	return nil
 }
 
