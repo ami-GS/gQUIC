@@ -13,3 +13,6 @@ const MaxPayloadSizeIPv4 = MTUIPv4 - MaxHeaderSize
 const MaxPayloadSizeIPv6 = MTUIPv6 - MaxHeaderSize
 
 const HighPriorityWireSizeThreshold = MaxPayloadSizeIPv4 * 0.8
+
+const AckDelayExponentDefault = 3
+const AckDelayDefault = 8 // 2 ^ 3
