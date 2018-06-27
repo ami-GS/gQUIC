@@ -70,7 +70,7 @@ type PacketHeader interface {
 	genWire() ([]byte, error)
 	String() string
 	GetConnectionIDPair() (qtype.ConnectionID, qtype.ConnectionID) // srcID, destID
-	GetPacketNumber() qtype.PacketNumber
+	getPacketNumber() qtype.PacketNumber
 }
 
 type BasePacketHeader struct {
@@ -84,7 +84,7 @@ func (ph *BasePacketHeader) GetConnectionIDPair() (qtype.ConnectionID, qtype.Con
 	return ph.SrcConnID, ph.DestConnID
 }
 
-func (ph *BasePacketHeader) GetPacketNumber() qtype.PacketNumber {
+func (ph *BasePacketHeader) getPacketNumber() qtype.PacketNumber {
 	return ph.PacketNumber
 }
 

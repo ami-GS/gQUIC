@@ -16,6 +16,7 @@ type Packet interface {
 	String() string
 	SetHeader(ph PacketHeader)
 	GetFrames() []Frame
+	GetPacketNumber() qtype.PacketNumber
 	SetFrames(fs []Frame)
 }
 
@@ -62,6 +63,9 @@ func (bp *BasePacket) SetFrames(fs []Frame) {
 
 func (bp *BasePacket) GetFrames() []Frame {
 	return bp.Frames
+}
+func (bp *BasePacket) GetPacketNumber() qtype.PacketNumber {
+	return bp.Header.getPacketNumber()
 }
 
 func (bp *BasePacket) String() string {
@@ -444,6 +448,9 @@ func (p VersionNegotiationPacket) GetWire() ([]byte, error) {
 
 func (p VersionNegotiationPacket) GetHeader() PacketHeader {
 	return nil
+}
+func (p VersionNegotiationPacket) GetPacketNumber() qtype.PacketNumber {
+	return 0
 }
 func (p VersionNegotiationPacket) SetHeader(h PacketHeader) {
 	// no op?
