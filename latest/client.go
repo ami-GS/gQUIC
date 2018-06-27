@@ -62,7 +62,7 @@ func (c *Client) Connect() {
 
 	// first initial packet
 	destID, _ := qtype.NewConnectionID(nil)
-	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x00, 0x00})
+	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte("Initial Packet with ClientHello"))
 	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, destID, destID, c.session.LastPacketNumber, streamFrame)
 	c.session.DestConnID = destID
 	c.session.SrcConnID = destID
@@ -134,25 +134,41 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 	}
 	c.versionOffer = versionTBD
 	// WIP
-	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x00, 0x00})
+	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte("second Initial Packet for anwering VersionNegotiation Packet"))
 	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, c.session.DestConnID, c.session.SrcConnID, c.session.LastPacketNumber.Increase(), streamFrame)
 	return nil
 }
 
 func (c *Client) handleRetryPacket(packet *RetryPacket) error {
-	// second initial packet
+	// send second initial packet
 
-	// RetryPacket MUST contain at least two frames
-	// one is STREAM frame with ID of 0 and offset of 0
-	c.session.HandleFrames(packet.GetFrames())
+	// RetryPacket MUST contain at least two frames (Ack and Stream)
+	frames := packet.GetFrames()
+	requiredPacket := 0
+	for _, frame := range frames {
+		if frame.GetType() == AckFrameType {
+			// TODO: check largest acked is same as that of previous initial packet
+			requiredPacket++
+		} else if frame.GetType()&StreamFrameType == StreamFrameType {
+			stFrame := frame.(*StreamFrame)
+			if stFrame.Offset == 0 && stFrame.GetStreamID() == 0 {
+				requiredPacket++
+			}
+		}
+	}
+	if requiredPacket < 2 {
+		return qtype.ProtocolViolation
+	}
 
-	srcID, _ := c.PrevRetryPacket.GetHeader().GetConnectionIDPair()
-	// TODO: no need to be random for destID
-	c.session.DestConnID = srcID
-	// WIP
-	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte{0x00, 0x00})
+	// The client retains the state of its cryptographic handshake, but discards all transport state.
+	c.session.DestConnID, _ = packet.GetHeader().GetConnectionIDPair()
+	c.session.SrcConnID, _ = qtype.NewConnectionID(nil)
+
 	// try again with new transport, but MUST remember the results of any version negotiation that occurred
-	NewInitialPacket(c.session.versionDecided, srcID, c.session.DestConnID, c.PrevRetryPacket.GetHeader().GetPacketNumber()+1, streamFrame)
+	pn := packet.GetPacketNumber()
+
+	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, pn.Increase(),
+		NewStreamFrame(0, 0, true, true, false, []byte("Second Initial Packet response for Retry Packet")))
 	return nil
 }
 
