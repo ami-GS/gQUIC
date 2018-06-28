@@ -2,6 +2,7 @@ package quiclatest
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
@@ -12,11 +13,22 @@ type baseFlowController struct {
 	largestSent     qtype.QuicInt
 	largestReceived qtype.QuicInt
 
+	limitMutex   sync.Mutex
 	MaxDataLimit qtype.QuicInt
 }
 
 func (f *baseFlowController) String() string {
 	return fmt.Sprintf("sent:%d, recvd:%d, largestSent:%d, largestRcvd:%d\nMaxDataLimit:%d", f.bytesSent, f.bytesReceived, f.largestSent, f.largestReceived, f.MaxDataLimit)
+}
+
+func (f *baseFlowController) maybeUpdateMaxDataLimit(newLimit qtype.QuicInt) bool {
+	f.limitMutex.Lock()
+	defer f.limitMutex.Unlock()
+	if f.MaxDataLimit < newLimit {
+		f.MaxDataLimit = newLimit
+		return true
+	}
+	return false
 }
 
 type StreamFlowController struct {

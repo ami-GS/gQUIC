@@ -351,7 +351,7 @@ func (s *Session) QueueFrame(frame Frame) error {
 	case *ApplicationCloseFrame:
 	case *MaxDataFrame:
 		//TODO: controller should be prepared for both direction on Connection?
-		s.flowContoller.MaxDataLimit = f.Data
+		s.flowContoller.maybeUpdateMaxDataLimit(f.Data)
 	case *PingFrame:
 	case *BlockedFrame:
 	case *NewConnectionIDFrame:
@@ -375,8 +375,7 @@ func (s *Session) handleBlockedFrame(frame *BlockedFrame) error {
 }
 
 func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
-	if s.flowContoller.MaxDataLimit < frame.Data {
-		s.flowContoller.MaxDataLimit = frame.Data
+	if s.flowContoller.maybeUpdateMaxDataLimit(frame.Data) {
 		err := s.streamManager.resendBlockedFrames(s.blockedFramesOnConnection)
 		if err != nil {
 			return err

@@ -196,10 +196,7 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 		return nil
 	}
 	var err error
-	if s.flowcontroller.MaxDataLimit < f.Data {
-		s.flowcontroller.MaxDataLimit = f.Data
-
-		// this doesn't send anything for the first MAX_STREAM_DATA frame for first setting
+	if s.flowcontroller.maybeUpdateMaxDataLimit(f.Data) {
 		err = s.resendBlockedFrames()
 	}
 	return err
@@ -326,9 +323,7 @@ func (s *RecvStream) sendMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 	if s.State != qtype.StreamRecv {
 		return nil
 	}
-	if s.flowcontroller.MaxDataLimit < f.Data {
-		s.flowcontroller.MaxDataLimit = f.Data
-	}
+	s.flowcontroller.maybeUpdateMaxDataLimit(f.Data)
 	return nil
 }
 
