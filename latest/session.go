@@ -1,6 +1,7 @@
 package quiclatest
 
 import (
+	"bytes"
 	"sync"
 	"time"
 
@@ -53,6 +54,8 @@ type Session struct {
 	mapMutex      *sync.Mutex
 
 	server *Server
+
+	PathChallengeData [8]byte
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
@@ -309,8 +312,9 @@ func (s *Session) HandleFrames(fs []Frame) error {
 		case *AckFrame:
 			err = s.handleAckFrame(f)
 		case *PathChallengeFrame:
+			err = s.handlePathChallengeFrame()
 		case *PathResponseFrame:
-
+			err = s.handlePathResponseFrame(f)
 		case StreamLevelFrame:
 			err = s.streamManager.handleFrame(f)
 		default:
@@ -357,6 +361,7 @@ func (s *Session) QueueFrame(frame Frame) error {
 	case *NewConnectionIDFrame:
 	case *AckFrame:
 	case *PathChallengeFrame:
+		s.PathChallengeData = f.Data
 	case *PathResponseFrame:
 	case StreamLevelFrame:
 		err = s.streamManager.QueueFrame(f)
@@ -400,6 +405,18 @@ func (s *Session) handleAckFrame(frame *AckFrame) error {
 		largest -= block.Gap + 2
 	}
 
+	return nil
+}
+
+func (s *Session) handlePathChallengeFrame(frame *PathChallengeFrame) error {
+	// TODO: send path response with same data as received PathChallengeFrame
+	return nil
+}
+
+func (s *Session) handlePathResponseFrame(frame *PathResponseFrame) error {
+	if !bytes.Equal(frame.Data[:], s.PathChallengeData[:]) {
+		return qtype.UnsolicitedPathResponse
+	}
 	return nil
 }
 
