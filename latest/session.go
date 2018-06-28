@@ -417,8 +417,9 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 		return nil
 	}
 
-	cliSrcID, origDstID := p.GetHeader().GetConnectionIDPair()
-	if len(origDstID) < 8 {
+	var originalDestID qtype.ConnectionID
+	s.DestConnID, originalDestID = p.GetHeader().GetConnectionIDPair()
+	if len(originalDestID) < 8 {
 		// If the client has not previously received a Retry packet from the server, it populates
 		// the Destination Connection ID field with a randomly selected value.
 		// This MUST be at least 8 octets in length.
@@ -426,15 +427,15 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 	}
 
 	// The server includes a connection ID of its choice in the Source Connection ID field.
-	srvSrcID, _ := qtype.NewConnectionID(nil)
-	s.server.ChangeConnectionID(origDstID, srvSrcID)
+	s.SrcConnID, _ = qtype.NewConnectionID(nil)
+	s.server.ChangeConnectionID(originalDestID, s.SrcConnID)
 
 	// send Retry Packet if server wishes to perform a stateless retry
 	// It MUST include a STREAM frame on stream 0 with offset 0 containing the server's cryptographic stateless retry material.
 	sFrame := NewStreamFrame(0, 0, true, true, false, []byte("server's cryptographic stateless retry material"))
 	// It MUST also include an ACK frame to acknowledge the client's Initial packet.
 	aFrame := NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, []AckBlock{AckBlock{0, 0}})
-	packet := NewRetryPacket(s.versionDecided, cliSrcID, srvSrcID, p.GetPacketNumber(), []Frame{sFrame, aFrame})
+	packet := NewRetryPacket(s.versionDecided, s.DestConnID, s.SrcConnID, p.GetPacketNumber(), []Frame{sFrame, aFrame})
 
 	// Next InitialPacket stands for ack implicitely
 	s.mapMutex.Lock()

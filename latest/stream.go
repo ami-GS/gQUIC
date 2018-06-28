@@ -1,7 +1,6 @@
 package quiclatest
 
 import (
-	"container/heap"
 	"fmt"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
@@ -240,16 +239,14 @@ func (s *SendStream) ackedAllStreamData() {
 
 type RecvStream struct {
 	*BaseStream
-	ReorderBuffer *utils.Heap
-	DataSize      qtype.QuicInt // will be known after receiving all data
+	DataBuffer *utils.RingBuffer
+	DataSize   qtype.QuicInt // will be known after receiving all data
 
 	ReceiveAllDetector qtype.QuicInt
 	LargestOffset      qtype.QuicInt
 }
 
 func newRecvStream(streamID qtype.StreamID, sess *Session) *RecvStream {
-	h := &utils.Heap{}
-	heap.Init(h)
 	return &RecvStream{
 		BaseStream: &BaseStream{
 			ID:    streamID,
@@ -265,7 +262,8 @@ func newRecvStream(streamID qtype.StreamID, sess *Session) *RecvStream {
 			},
 		},
 		LargestOffset: qtype.QuicInt(0),
-		ReorderBuffer: h,
+		// TODO: need to adjust buffer size for data transfered
+		DataBuffer: utils.NewRingBuffer(100),
 	}
 }
 
@@ -288,8 +286,9 @@ func (s *RecvStream) ReadData() ([]byte, bool) {
 	}
 
 	out := make([]byte, s.DataSize)
-	for s.ReorderBuffer.Len() > 0 {
-		item := heap.Pop(s.ReorderBuffer).(*utils.Item)
+	size := s.DataBuffer.Size()
+	for i := 0; i < size; i++ {
+		item := s.DataBuffer.Dequeue().(*utils.StreamData)
 		copy(out[item.Offset-uint64(len(item.Data)):], item.Data)
 	}
 
@@ -358,7 +357,7 @@ func (s *RecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
 	}
 
 	// discard data received
-	s.ReorderBuffer.Delete()
+	s.DataBuffer.DeleteAll()
 	return nil
 }
 
@@ -391,7 +390,7 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 	// TODO: copy workaround of data corrupting issue
 	data := make([]byte, len(f.Data))
 	copy(data, f.Data)
-	heap.Push(s.ReorderBuffer, &utils.Item{uint64(offsetValue), data})
+	s.DataBuffer.Enqueue(&utils.StreamData{uint64(offsetValue), data})
 
 	s.ReceiveAllDetector = s.ReceiveAllDetector ^ offsetValue ^ (offsetValue - f.Length)
 	if s.State == qtype.StreamSizeKnown && s.ReceiveAllDetector != 0 && s.ReceiveAllDetector == s.DataSize {

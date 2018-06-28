@@ -1,5 +1,11 @@
 package utils
 
+// used for RecvStream's data reordering
+type StreamData struct {
+	Offset uint64
+	Data   []byte
+}
+
 // RingBuffer is just a ring buffer
 type RingBuffer struct {
 	buffer []interface{}
@@ -45,4 +51,10 @@ func (rb *RingBuffer) Dequeue() interface{} {
 }
 func (rb RingBuffer) Size() int {
 	return rb.size
+}
+
+func (rb *RingBuffer) DeleteAll() {
+	rb.size = 0
+	rb.head = 0
+	rb.tail = 0
 }
