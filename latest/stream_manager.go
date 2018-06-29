@@ -309,11 +309,11 @@ func (s *StreamManager) resendBlockedFrames(blockedFrames *utils.RingBuffer) err
 }
 
 func (s *StreamManager) Read() ([]byte, error) {
-	stream, ok := s.finishedStreams.Dequeue().(Stream)
+	stream, ok := s.finishedStreams.Dequeue().(*RecvStream)
 	if !ok || stream == nil {
 		return nil, nil
 	}
-	data, isReset := stream.(*RecvStream).ReadData()
+	data, isReset := stream.ReadData()
 	// TODO: use isReset to notify the stream was reset
 	if isReset {
 	}
