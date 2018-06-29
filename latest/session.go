@@ -312,7 +312,7 @@ func (s *Session) HandleFrames(fs []Frame) error {
 		case *AckFrame:
 			err = s.handleAckFrame(f)
 		case *PathChallengeFrame:
-			err = s.handlePathChallengeFrame()
+			err = s.handlePathChallengeFrame(f)
 		case *PathResponseFrame:
 			err = s.handlePathResponseFrame(f)
 		case StreamLevelFrame:
