@@ -92,7 +92,7 @@ func (frameType FrameType) String() string {
 		"STREAM_BLOCKED",
 		"STREAM_ID_BLOCKED",
 		"NEW_CONNECTION_ID",
-		"STOP_WAITING",
+		"STOP_SENDING",
 		"ACK",
 		"PATH_CHALLENGE",
 		"PATH_RESPONSE",
@@ -1152,7 +1152,7 @@ func (f StreamFrame) String() string {
 		length = fmt.Sprintf("%d", f.Length)
 	}
 
-	return fmt.Sprintf("[%s] %s\n\tOffset:%s\tLength:%s\tFinish:%v\n\tData:%v", f.BaseFrame, f.BaseStreamLevelFrame, offset, length, f.Finish, f.Data)
+	return fmt.Sprintf("[%s] %s\n\tOffset:%s\tLength:%s\tFinish:%v\n\tData:[%s]", f.BaseFrame, f.BaseStreamLevelFrame, offset, length, f.Finish, f.Data)
 }
 
 func (f StreamFrame) genWire() (wire []byte, err error) {
