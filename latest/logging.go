@@ -10,7 +10,7 @@ var LogLevel int
 
 func init() {
 	out := os.Getenv("DEBUG")
-	if level, err := strconv.Atoi(out); err == nil && 1 <= level && level <= 3 {
+	if level, err := strconv.Atoi(out); err == nil {
 		LogLevel = level
 	}
 }
