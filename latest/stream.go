@@ -386,6 +386,7 @@ func (s *RecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
 
 	// discard data received
 	s.DataBuffer.DeleteAll()
+	s.sess.streamManager.finishedStreams.Enqueue(s)
 	return nil
 }
 
