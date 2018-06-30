@@ -176,22 +176,7 @@ func (s *Session) Write(data []byte) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
-
-	offset := uint64(0)
-	// 2. loop to make packet which should have bellow or equal to MTUIPv4
-	for {
-		if len(data[offset:]) > qtype.MaxPayloadSizeIPv4 {
-			err = stream.QueueFrame(NewStreamFrame(stream.GetID(), qtype.QuicInt(offset)+qtype.MaxPayloadSizeIPv4, true, true, false, data[offset:offset+qtype.MaxPayloadSizeIPv4]))
-			offset += qtype.MaxPayloadSizeIPv4
-		} else {
-			err = stream.QueueFrame(NewStreamFrame(stream.GetID(), qtype.QuicInt(offset+uint64(len(data[offset:]))), true, true, true, data[offset:]))
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-	}
-	return len(data), err
+	return stream.(*SendStream).Write(data)
 }
 
 func (s *Session) SendPacket(packet Packet) error {
