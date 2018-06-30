@@ -25,9 +25,10 @@ type Stream interface {
 }
 
 type BaseStream struct {
-	ID    qtype.StreamID
-	State qtype.StreamState
-	sess  *Session
+	ID            qtype.StreamID
+	State         qtype.StreamState
+	sess          *Session
+	largestOffset qtype.QuicInt
 
 	flowcontroller *StreamFlowController
 }
@@ -65,6 +66,7 @@ type SendStream struct {
 	// application data can be buffered at "Ready" state
 	SendBuffer            []byte
 	blockedFramesOnStream *utils.RingBuffer
+	stopSendingCh         chan struct{}
 }
 
 func newSendStream(streamID qtype.StreamID, sess *Session) *SendStream {
@@ -83,6 +85,7 @@ func newSendStream(streamID qtype.StreamID, sess *Session) *SendStream {
 			},
 		},
 		blockedFramesOnStream: utils.NewRingBuffer(20),
+		stopSendingCh:         make(chan struct{}, 1),
 		// TODO : need to be able to set initial windowsize
 		//FlowControllBlocked: false,
 	}
@@ -95,6 +98,32 @@ func (s *SendStream) Close() {
 
 func (s SendStream) IsTerminated() bool {
 	return s.State == qtype.StreamDataRecvd || s.State == qtype.StreamResetRecvd
+}
+
+func (s *SendStream) Write(data []byte) (n int, err error) {
+	// 2. loop to make packet which should have bellow or equal to MTUIPv4
+READ_LOOP:
+	for uint64(s.largestOffset) < uint64(len(data)) {
+		select {
+		case <-s.stopSendingCh:
+			break READ_LOOP
+		default:
+			remainLen := qtype.QuicInt(len(data[s.largestOffset:]))
+			if remainLen > qtype.MaxPayloadSizeIPv4 {
+				s.largestOffset += qtype.MaxPayloadSizeIPv4
+				err = s.QueueFrame(NewStreamFrame(s.ID, qtype.QuicInt(s.largestOffset),
+					true, true, false, data[s.largestOffset-qtype.MaxPayloadSizeIPv4:s.largestOffset]))
+			} else {
+				s.largestOffset += remainLen
+				err = s.QueueFrame(NewStreamFrame(s.ID, qtype.QuicInt(s.largestOffset),
+					true, true, true, data[s.largestOffset-remainLen:]))
+			}
+			if err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(data), err
 }
 
 // QueueFrame is used for validate the frame can be sent, and then queue the frame
@@ -207,7 +236,8 @@ func (s *SendStream) handleStopSendingFrame(f *StopSendingFrame) error {
 		return qtype.ProtocolViolation
 	}
 	// respond by RstStreamFrame with error code of STOPPING
-	return s.QueueFrame(NewRstStreamFrame(f.StreamID, qtype.Stopping, 0))
+	s.stopSendingCh <- struct{}{}
+	return s.QueueFrame(NewRstStreamFrame(s.ID, qtype.Stopping, qtype.QuicInt(s.largestOffset)))
 }
 
 // AckFrame comes via connection level handling
@@ -243,7 +273,6 @@ type RecvStream struct {
 	DataSize   qtype.QuicInt // will be known after receiving all data
 
 	ReceiveAllDetector qtype.QuicInt
-	LargestOffset      qtype.QuicInt
 }
 
 func newRecvStream(streamID qtype.StreamID, sess *Session) *RecvStream {
@@ -261,7 +290,6 @@ func newRecvStream(streamID qtype.StreamID, sess *Session) *RecvStream {
 				},
 			},
 		},
-		LargestOffset: qtype.QuicInt(0),
 		// TODO: need to adjust buffer size for data transfered
 		DataBuffer: utils.NewRingBuffer(100),
 	}
@@ -344,8 +372,8 @@ func (s *RecvStream) handleStopSendingFrame(f *StopSendingFrame) error {
 }
 
 func (s *RecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
-	if f.FinalOffset < s.LargestOffset ||
-		s.State == qtype.StreamSizeKnown && f.FinalOffset != s.LargestOffset {
+	if f.FinalOffset < s.largestOffset ||
+		s.State == qtype.StreamSizeKnown && f.FinalOffset != s.largestOffset {
 		return qtype.FinalOffsetError
 	}
 
@@ -374,7 +402,7 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 	}
 
 	if s.State == qtype.StreamSizeKnown {
-		if s.LargestOffset < f.Offset {
+		if s.largestOffset < f.Offset {
 			return qtype.FinalOffsetError
 		}
 	}
@@ -383,10 +411,9 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 		s.State = qtype.StreamSizeKnown
 		s.DataSize = offsetValue
 	}
-	if s.LargestOffset < f.Offset {
-		s.LargestOffset = f.Offset
+	if s.largestOffset < f.Offset {
+		s.largestOffset = f.Offset
 	}
-
 	// TODO: copy workaround of data corrupting issue
 	data := make([]byte, len(f.Data))
 	copy(data, f.Data)
