@@ -101,6 +101,13 @@ func (s *Session) Run() {
 	assemble := func() []Frame {
 		frames := make([]Frame, 0)
 		byteSize := 0
+
+		ackFrame := s.AssembleAckFrame()
+		if ackFrame != nil {
+			frames = append(frames, ackFrame)
+			byteSize += ackFrame.GetWireSize()
+		}
+
 		for {
 			select {
 			case frame := <-s.sendFrameChan:
@@ -236,6 +243,32 @@ func (s *Session) HandlePacket(p Packet) error {
 	}
 	s.maybeAckPacket(p)
 	return nil
+}
+
+func (s *Session) AssembleAckFrame() *AckFrame {
+	if s.ackPacketQueue.Len() == 0 {
+		return nil
+	}
+	pLargest := qtype.PacketNumber(heap.Pop(s.ackPacketQueue).(uint64))
+	ackBlocks := []AckBlock{}
+	if s.ackPacketQueue.Len() == 0 {
+		ackBlocks = append(ackBlocks, AckBlock{0, 0})
+	}
+
+	prevpNum := pLargest
+	count := 0
+	for s.ackPacketQueue.Len() > 0 {
+		pNum := qtype.PacketNumber(heap.Pop(s.ackPacketQueue).(uint64))
+		if pNum == prevpNum-qtype.PacketNumberIncreaseSize {
+			count++
+			continue
+		} else {
+			ackBlocks = append(ackBlocks, AckBlock{qtype.QuicInt(count), qtype.QuicInt(prevpNum - pNum - 2)})
+			count = 0
+		}
+		prevpNum = pNum
+	}
+	return NewAckFrame(qtype.QuicInt(pLargest), 0, ackBlocks)
 }
 
 // send ack frame if needed
