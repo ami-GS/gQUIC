@@ -2,6 +2,7 @@ package quiclatest
 
 import (
 	"bytes"
+	"container/heap"
 	"sync"
 	"time"
 
@@ -50,8 +51,9 @@ type Session struct {
 
 	packetHandler PacketHandler
 
-	UnAckedPacket map[qtype.PacketNumber]Packet
-	mapMutex      *sync.Mutex
+	ackPacketQueue *utils.HeapUint64
+	UnAckedPacket  map[qtype.PacketNumber]Packet
+	mapMutex       *sync.Mutex
 
 	server *Server
 
@@ -59,6 +61,8 @@ type Session struct {
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
+	h := &utils.HeapUint64{}
+	heap.Init(h)
 	sess := &Session{
 		DestConnID:     dstConnID,
 		SrcConnID:      srcConnID,
@@ -84,6 +88,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		PingTicker:       time.NewTicker(15 * time.Second),
 		versionDecided:   qtype.VersionPlaceholder,
 		LastPacketNumber: qtype.InitialPacketNumber(),
+		ackPacketQueue:   h,
 		UnAckedPacket:    make(map[qtype.PacketNumber]Packet),
 		mapMutex:         new(sync.Mutex),
 	}
@@ -258,26 +263,8 @@ func (s *Session) maybeAckPacket(p Packet) {
 		}
 	}
 
-	// retrieve packet number from priority queue
-	// largest
-	// currently send ack for one packet,
-	// TODO: should assemble multiple packet number in one ack frame
-	// simple slice looks fast
-
-	// decide largest from packet slice
-	largest := qtype.QuicInt(p.GetPacketNumber())
-	// prepare blocks
-	size := 1
-	block := make([]AckBlock, size)
-	block[0] = AckBlock{largest - qtype.QuicInt(p.GetPacketNumber()), 0}
-	/*
-		for i := 1; i < size; i++ {
-			block[i] = AckBlock{largest - qtype.QuicInt(p.GetPacketNumber()), 0}
-		}
-	*/
-	s.sendFrameChan <- NewAckFrame(largest, 0, block)
-	s.AssembleFrameChan <- struct{}{}
-
+	heap.Push(s.ackPacketQueue, uint64(p.GetPacketNumber()))
+	// TODO: need to send ASAP, but how? need to pack acked packet in one frame as much as possible.
 }
 
 func (s *Session) HandleFrames(fs []Frame) error {
@@ -380,7 +367,7 @@ func (s *Session) handleAckFrame(frame *AckFrame) error {
 		if largest < 0 || largest < block.Block {
 			return qtype.FrameError | qtype.TransportError(AckFrameType)
 		}
-		for acked := largest; acked >= largest-block.Block; acked-- {
+		for acked := largest; acked >= largest-block.Block; acked -= qtype.PacketNumberIncreaseSize {
 			// TODO: would accerelate by using slice, not map
 			// TODO: should have AckedPackets map for detect duplicate ack (SHOULD NOT be allowed)
 			s.mapMutex.Lock()
