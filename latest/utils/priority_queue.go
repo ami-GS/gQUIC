@@ -1,25 +1,18 @@
 package utils
 
-// should be interface{}?
-type Item struct {
-	Offset uint64
-	Data   []byte
-}
+type MaxHeapUint64 []uint64
 
-// An Heap is a min-heap of ints.
-type Heap []*Item
+func (h MaxHeapUint64) Len() int           { return len(h) }
+func (h MaxHeapUint64) Less(i, j int) bool { return h[i] < h[j] }
+func (h MaxHeapUint64) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
-func (h Heap) Len() int           { return len(h) }
-func (h Heap) Less(i, j int) bool { return h[i].Offset < h[j].Offset }
-func (h Heap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-
-func (h *Heap) Push(x interface{}) {
+func (h *MaxHeapUint64) Push(x interface{}) {
 	// Push and Pop use pointer receivers because they modify the slice's length,
 	// not just its contents.
-	*h = append(*h, x.(*Item))
+	*h = append(*h, x.(uint64))
 }
 
-func (h *Heap) Pop() interface{} {
+func (h *MaxHeapUint64) Pop() interface{} {
 	old := *h
 	n := len(old)
 	x := old[n-1]
@@ -27,6 +20,6 @@ func (h *Heap) Pop() interface{} {
 	return x
 }
 
-func (h *Heap) Delete() {
-	*h = Heap{}
+func (h *MaxHeapUint64) Delete() {
+	*h = MaxHeapUint64{}
 }

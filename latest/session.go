@@ -51,7 +51,7 @@ type Session struct {
 
 	packetHandler PacketHandler
 
-	ackPacketQueue *utils.HeapUint64
+	ackPacketQueue *utils.MaxHeapUint64
 	UnAckedPacket  map[qtype.PacketNumber]Packet
 	mapMutex       *sync.Mutex
 
@@ -61,7 +61,7 @@ type Session struct {
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
-	h := &utils.HeapUint64{}
+	h := &utils.MaxHeapUint64{}
 	heap.Init(h)
 	sess := &Session{
 		DestConnID:     dstConnID,
