@@ -51,9 +51,10 @@ type Session struct {
 
 	packetHandler PacketHandler
 
-	ackPacketQueue *utils.MaxHeapUint64
-	UnAckedPacket  map[qtype.PacketNumber]Packet
-	mapMutex       *sync.Mutex
+	ackPacketQueue      *utils.MaxHeapUint64
+	ackPacketQueueMutex *sync.Mutex
+	UnAckedPacket       map[qtype.PacketNumber]Packet
+	mapMutex            *sync.Mutex
 
 	server *Server
 
@@ -85,12 +86,13 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		// TODO: this would be configurable
 		WaitFrameTimeout: time.NewTicker(10 * time.Millisecond),
 		// TODO: this should be configured by transport parameter
-		PingTicker:       time.NewTicker(15 * time.Second),
-		versionDecided:   qtype.VersionPlaceholder,
-		LastPacketNumber: qtype.InitialPacketNumber(),
-		ackPacketQueue:   h,
-		UnAckedPacket:    make(map[qtype.PacketNumber]Packet),
-		mapMutex:         new(sync.Mutex),
+		PingTicker:          time.NewTicker(15 * time.Second),
+		versionDecided:      qtype.VersionPlaceholder,
+		LastPacketNumber:    qtype.InitialPacketNumber(),
+		ackPacketQueue:      h,
+		ackPacketQueueMutex: new(sync.Mutex),
+		UnAckedPacket:       make(map[qtype.PacketNumber]Packet),
+		mapMutex:            new(sync.Mutex),
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess
@@ -246,28 +248,31 @@ func (s *Session) HandlePacket(p Packet) error {
 }
 
 func (s *Session) AssembleAckFrame() *AckFrame {
+	s.ackPacketQueueMutex.Lock()
+	defer s.ackPacketQueueMutex.Unlock()
 	if s.ackPacketQueue.Len() == 0 {
 		return nil
 	}
 	pLargest := qtype.PacketNumber(heap.Pop(s.ackPacketQueue).(uint64))
 	ackBlocks := []AckBlock{}
 	if s.ackPacketQueue.Len() == 0 {
-		ackBlocks = append(ackBlocks, AckBlock{0, 0})
+		return NewAckFrame(qtype.QuicInt(pLargest), 0, []AckBlock{AckBlock{0, 0}})
 	}
 
 	prevpNum := pLargest
+	pNum := pLargest
 	count := 0
 	for s.ackPacketQueue.Len() > 0 {
 		pNum := qtype.PacketNumber(heap.Pop(s.ackPacketQueue).(uint64))
 		if pNum == prevpNum-qtype.PacketNumberIncreaseSize {
 			count++
-			continue
 		} else {
 			ackBlocks = append(ackBlocks, AckBlock{qtype.QuicInt(count), qtype.QuicInt(prevpNum - pNum - 2)})
 			count = 0
 		}
 		prevpNum = pNum
 	}
+	ackBlocks = append(ackBlocks, AckBlock{qtype.QuicInt(count), qtype.QuicInt(prevpNum - pNum - 2)})
 	return NewAckFrame(qtype.QuicInt(pLargest), 0, ackBlocks)
 }
 

@@ -3,7 +3,7 @@ package utils
 type MaxHeapUint64 []uint64
 
 func (h MaxHeapUint64) Len() int           { return len(h) }
-func (h MaxHeapUint64) Less(i, j int) bool { return h[i] < h[j] }
+func (h MaxHeapUint64) Less(i, j int) bool { return h[i] > h[j] }
 func (h MaxHeapUint64) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *MaxHeapUint64) Push(x interface{}) {
