@@ -88,7 +88,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		// TODO: this should be configured by transport parameter
 		PingTicker:          time.NewTicker(15 * time.Second),
 		versionDecided:      qtype.VersionPlaceholder,
-		LastPacketNumber:    qtype.InitialPacketNumber(),
+		LastPacketNumber:    qtype.InitialPacketNumber,
 		ackPacketQueue:      h,
 		ackPacketQueueMutex: new(sync.Mutex),
 		UnAckedPacket:       make(map[qtype.PacketNumber]Packet),

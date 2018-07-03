@@ -1,6 +1,6 @@
 # gQUIC
 QUIC(Quick UDP Internet Connection) implementation in go
-[draft-ietf-quic-transport-11](https://tools.ietf.org/html/draft-ietf-quic-transport-11)
+[draft-ietf-quic-transport-12](https://tools.ietf.org/html/draft-ietf-quic-transport-12)
 
 Implementing in separate directory, because this draft is really progressing comparing to my previous implementation.
 

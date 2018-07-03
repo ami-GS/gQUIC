@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
-	"github.com/ami-GS/gQUIC/latest/utils"
 )
 
 type LongHeaderPacketType byte
@@ -200,7 +199,7 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	}
 	lh.PayloadLen = qtype.DecodeQuicInt(data[idx:])
 	idx += lh.PayloadLen.GetByteLen()
-	lh.PacketNumber = qtype.PacketNumber(binary.BigEndian.Uint32(data[idx:]))
+	lh.PacketNumber = qtype.DecodePacketNumber(data[idx:])
 	lh.wire = data[:idx+4]
 	return lh, idx + 4, nil
 }
@@ -233,7 +232,7 @@ func (lh LongHeader) genWire() (wire []byte, err error) {
 	}
 	lh.PayloadLen.PutWire(wire[idx:])
 	idx += lh.PayloadLen.GetByteLen()
-	binary.BigEndian.PutUint32(wire[idx:], uint32(lh.PacketNumber))
+	lh.PacketNumber.PutWire(wire[idx:])
 	return
 }
 
@@ -242,7 +241,7 @@ func (lh LongHeader) genWire() (wire []byte, err error) {
     0                   1                   2                   3
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
    +-+-+-+-+-+-+-+-+
-   |0|K|1|1|0|R|T T|
+   |0|K|1|1|0|R R R|
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                Destination Connection ID (0..144)           ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -258,7 +257,8 @@ type ShortHeader struct {
 }
 
 func NewShortHeader(key bool, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber) *ShortHeader {
-	packetType := ShortHeaderPacketType(ShortHeaderType) | ShortHeaderPacketType(packetNumber.Flag())
+	packetType := ShortHeaderPacketType(ShortHeaderType) | 0x30
+
 	if key {
 		packetType |= KeyPhase
 	}
@@ -296,7 +296,7 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 	idx += qtype.ConnectionIDLen
 
 	packetNumLen := int(math.Pow(2, float64(sh.PacketType&ShortHeaderPacketTypeMask)))
-	sh.PacketNumber = qtype.PacketNumber(utils.MyUint64(data[idx:], packetNumLen))
+	sh.PacketNumber = qtype.DecodePacketNumber(data[idx:])
 	idx += packetNumLen
 	sh.wire = data[:idx]
 	return sh, idx, nil
@@ -316,6 +316,6 @@ func (sh ShortHeader) genWire() (wire []byte, err error) {
 		copy(wire[idx:idx+connIDLen], sh.DestConnID)
 		idx += connIDLen
 	}
-	idx += utils.MyPutUint32(wire[idx:], uint32(sh.PacketNumber), packetNumLen)
+	sh.PacketNumber.PutWire(wire[idx:])
 	return
 }
