@@ -1,5 +1,7 @@
 package qtype
 
+import "math"
+
 // used in CONNECTION_CLOSE frame
 type TransportError uint16
 
@@ -48,10 +50,14 @@ func (e TransportError) Error() string {
 type ApplicationError uint16
 
 const (
-	Stopping ApplicationError = iota
+	Stopping             ApplicationError = iota
+	ApplicationErrorTest ApplicationError = math.MaxUint16
 )
 
 func (e ApplicationError) Error() string {
+	if e == ApplicationErrorTest {
+		return "Application Error Test"
+	}
 	return []string{
 		"Stopping",
 	}[e]
