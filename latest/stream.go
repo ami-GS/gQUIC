@@ -2,6 +2,7 @@ package quiclatest
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
 	"github.com/ami-GS/gQUIC/latest/utils"
@@ -66,6 +67,7 @@ type SendStream struct {
 	// application data can be buffered at "Ready" state
 	SendBuffer            []byte
 	blockedFramesOnStream *utils.RingBuffer
+	blockedFrameMutex     *sync.Mutex
 	stopSendingCh         chan struct{}
 }
 
@@ -84,7 +86,8 @@ func newSendStream(streamID qtype.StreamID, sess *Session) *SendStream {
 				},
 			},
 		},
-		blockedFramesOnStream: utils.NewRingBuffer(20),
+		blockedFramesOnStream: utils.NewRingBuffer(100),
+		blockedFrameMutex:     new(sync.Mutex),
 		stopSendingCh:         make(chan struct{}, 1),
 		// TODO : need to be able to set initial windowsize
 		//FlowControllBlocked: false,
@@ -181,6 +184,8 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 
 func (s *SendStream) resendBlockedFrames() error {
 	// TODO: be careful for multithread
+	s.blockedFrameMutex.Lock()
+	defer s.blockedFrameMutex.Unlock()
 	size := s.blockedFramesOnStream.Size()
 	for i := 0; i < size; i++ {
 		f := s.blockedFramesOnStream.Dequeue().(*StreamFrame)
