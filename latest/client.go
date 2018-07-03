@@ -82,14 +82,10 @@ func (c *Client) run() {
 		if err != nil {
 			//
 		}
-		/*
-			// TODO: Retry Packet ?
-						srcConnID, destConnID := packet.GetHeader().GetConnectionIDPair()
-						if len(destConnID) != 0 && !destConnID.Equal(c.session.DestConnID) {
-							// MAY discard
-						}
-		*/
-		c.handlePacket(packet)
+		err = c.handlePacket(packet)
+		if err != nil {
+			//
+		}
 	}
 }
 
