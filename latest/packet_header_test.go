@@ -9,7 +9,7 @@ import (
 
 func TestNewLongHeader(t *testing.T) {
 	var err error
-	pn := qtype.InitialPacketNumber()
+	pn := qtype.InitialPacketNumber
 	Convey("If connection IDs are absent, DCIL and SCIL should be 0", t, func() {
 		dstID := (qtype.ConnectionID)(nil)
 		srcID := (qtype.ConnectionID)(nil)
@@ -54,7 +54,7 @@ func TestNewLongHeader(t *testing.T) {
 
 func TestParseLongHeader(t *testing.T) {
 	Convey("Parse bytes of of InitialPacketType, Version:QuicTLS, DCIL:0, SCIL:0, dstID/srcID:nil/nil, PayloadLen:0, PacketNumber:1, Payload:nil", t, func() {
-		data := []byte{0xff, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
+		data := []byte{0xff, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01}
 		aHeader, aLen, err := ParseLongHeader(data)
 		eHeader := NewLongHeader(InitialPacketType, qtype.VersionQuicTLS, nil, nil, 1, 0)
 		So(aLen, ShouldEqual, len(data))
@@ -69,7 +69,7 @@ func TestParseLongHeader(t *testing.T) {
 		data := []byte{0xff, 0x00, 0x00, 0x00, 0x01, 0xff}
 		data = append(data, dstID.Bytes()...)
 		data = append(data, srcID.Bytes()...)
-		data = append(data, 0x00, 0x00, 0x00, 0x00, 0x01)
+		data = append(data, 0x00, 0x01)
 		aHeader, aLen, err := ParseLongHeader(data)
 		eHeader := NewLongHeader(InitialPacketType, qtype.VersionQuicTLS, dstID, srcID, 1, 0)
 		So(aLen, ShouldEqual, len(data))
@@ -90,7 +90,7 @@ func TestNewShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(ShortHeaderType) | ShortHeaderPacketType(pn.Flag()),
+			PacketType: ShortHeaderPacketType(ShortHeaderType) | 0x30,
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)
@@ -105,7 +105,7 @@ func TestNewShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(ShortHeaderType) | ShortHeaderPacketType(pn.Flag()),
+			PacketType: ShortHeaderPacketType(ShortHeaderType) | 0x30,
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)
@@ -120,7 +120,7 @@ func TestNewShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(ShortHeaderType) | ShortHeaderPacketType(pn.Flag()),
+			PacketType: ShortHeaderPacketType(ShortHeaderType) | 0x30,
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)
@@ -134,7 +134,9 @@ func TestParseShortHeader(t *testing.T) {
 		pn := qtype.PacketNumber(1)
 		data := []byte{0x30}
 		data = append(data, dstID.Bytes()...)
-		data = append(data, pn.Bytes()...)
+		pnWire := make([]byte, 1)
+		pn.PutWire(pnWire)
+		data = append(data, pnWire...)
 		aHeader, length, err := ParseShortHeader(data)
 		eHeader := &ShortHeader{
 			BasePacketHeader: &BasePacketHeader{
@@ -142,7 +144,7 @@ func TestParseShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | pn.Flag()),
+			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | 0x30),
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)
@@ -150,11 +152,13 @@ func TestParseShortHeader(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(aHeader, ShouldResemble, eHeader)
 	})
-	Convey("type:0x31, ConnectionID:rand, PacketNumber:256, payload:nil", t, func() {
-		pn := qtype.PacketNumber(256)
-		data := []byte{0x31}
+	Convey("type:0x30, ConnectionID:rand, PacketNumber:128, payload:nil", t, func() {
+		pn := qtype.PacketNumber(128)
+		data := []byte{0x30}
 		data = append(data, dstID.Bytes()...)
-		data = append(data, pn.Bytes()...)
+		pnWire := make([]byte, 2)
+		pn.PutWire(pnWire)
+		data = append(data, pnWire...)
 		aHeader, length, err := ParseShortHeader(data)
 		eHeader := &ShortHeader{
 			BasePacketHeader: &BasePacketHeader{
@@ -162,7 +166,7 @@ func TestParseShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | pn.Flag()),
+			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | 0x30),
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)
@@ -170,11 +174,13 @@ func TestParseShortHeader(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(aHeader, ShouldResemble, eHeader)
 	})
-	Convey("type:0x32, ConnectionID:rand, PacketNumber:65536, payload:nil", t, func() {
-		pn := qtype.PacketNumber(65536)
-		data := []byte{0x32}
+	Convey("type:0x30, ConnectionID:rand, PacketNumber:16384, payload:nil", t, func() {
+		pn := qtype.PacketNumber(16384)
+		data := []byte{0x30}
 		data = append(data, dstID.Bytes()...)
-		data = append(data, pn.Bytes()...)
+		pnWire := make([]byte, 4)
+		pn.PutWire(pnWire)
+		data = append(data, pnWire...)
 		aHeader, length, err := ParseShortHeader(data)
 		eHeader := &ShortHeader{
 			BasePacketHeader: &BasePacketHeader{
@@ -182,7 +188,7 @@ func TestParseShortHeader(t *testing.T) {
 				SrcConnID:    nil,
 				PacketNumber: pn,
 			},
-			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | pn.Flag()),
+			PacketType: ShortHeaderPacketType(byte(ShortHeaderReservedBits) | 0x30),
 		}
 		eHeader.wire, err = eHeader.genWire()
 		So(err, ShouldBeNil)

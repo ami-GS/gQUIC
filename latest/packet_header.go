@@ -3,7 +3,6 @@ package quiclatest
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
@@ -125,7 +124,7 @@ var PacketHeaderParserMap = map[PacketHeaderType]PacketHeaderPerser{
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                       Payload Length (i)                    ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                       Packet Number (32)                      |
+   |                       Packet Number (8/16/32)                 |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                          Payload (*)                        ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -200,8 +199,9 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	lh.PayloadLen = qtype.DecodeQuicInt(data[idx:])
 	idx += lh.PayloadLen.GetByteLen()
 	lh.PacketNumber = qtype.DecodePacketNumber(data[idx:])
-	lh.wire = data[:idx+4]
-	return lh, idx + 4, nil
+	idx += lh.PacketNumber.GetByteLen()
+	lh.wire = data[:idx]
+	return lh, idx, nil
 }
 
 func (lh LongHeader) String() string {
@@ -209,8 +209,8 @@ func (lh LongHeader) String() string {
 }
 
 func (lh LongHeader) genWire() (wire []byte, err error) {
-	wireLen := int(10 + lh.PayloadLen.GetByteLen())
 
+	wireLen := int(6 + lh.PacketNumber.GetByteLen() + lh.PayloadLen.GetByteLen())
 	if lh.DCIL != 0 {
 		wireLen += int(lh.DCIL + 3)
 	}
@@ -294,10 +294,8 @@ func ParseShortHeader(data []byte) (PacketHeader, int, error) {
 		return nil, 0, err
 	}
 	idx += qtype.ConnectionIDLen
-
-	packetNumLen := int(math.Pow(2, float64(sh.PacketType&ShortHeaderPacketTypeMask)))
 	sh.PacketNumber = qtype.DecodePacketNumber(data[idx:])
-	idx += packetNumLen
+	idx += sh.PacketNumber.GetByteLen()
 	sh.wire = data[:idx]
 	return sh, idx, nil
 }
@@ -307,9 +305,8 @@ func (sh ShortHeader) String() string {
 }
 
 func (sh ShortHeader) genWire() (wire []byte, err error) {
-	packetNumLen := int(math.Pow(2, float64(sh.PacketType&ShortHeaderPacketTypeMask)))
 	connIDLen := len(sh.DestConnID)
-	wire = make([]byte, 1+connIDLen+packetNumLen)
+	wire = make([]byte, 1+connIDLen+sh.PacketNumber.GetByteLen())
 	wire[0] = byte(sh.PacketType)
 	idx := 1
 	if connIDLen != 0 {
