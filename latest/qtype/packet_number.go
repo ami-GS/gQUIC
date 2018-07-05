@@ -56,7 +56,7 @@ func (pn PacketNumber) PutWire(wire []byte) int {
 func DecodePacketNumber(data []byte) PacketNumber {
 	flag := byte(0)
 	if data[0]>>7 != 0 {
-		flag = (data[0] & 0xc0) >> 6
+		flag = ((data[0] & 0xc0) >> 6) - 1
 	}
 	byteLen := int(math.Pow(2, float64(flag)))
 	val := PacketNumber(utils.MyUint32(data, byteLen))
