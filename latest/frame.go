@@ -886,7 +886,7 @@ type AckFrame struct {
 
 func NewAckFrame(lAcked, ackDelay qtype.QuicInt, ackBlocks []AckBlock) *AckFrame {
 	if ackBlocks == nil {
-		return nil
+		ackBlocks = []AckBlock{AckBlock{0, 0}}
 	}
 	f := &AckFrame{
 		BaseFrame:     NewBaseFrame(AckFrameType),
