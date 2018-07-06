@@ -122,7 +122,7 @@ var PacketHeaderParserMap = map[PacketHeaderType]PacketHeaderPerser{
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                 Source Connection ID (0/32..144)            ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                       Payload Length (i)                    ...
+   |                           Length (i)                        ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                       Packet Number (8/16/32)                 |
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -135,10 +135,10 @@ type LongHeader struct {
 	Version    qtype.Version
 	DCIL       byte
 	SCIL       byte
-	PayloadLen qtype.QuicInt
+	Length     qtype.QuicInt
 }
 
-func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, payloadlen qtype.QuicInt) *LongHeader {
+func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, length qtype.QuicInt) *LongHeader {
 	dcil := 0
 	if destConnID != nil {
 		dcil = len(destConnID) - 3
@@ -158,7 +158,7 @@ func NewLongHeader(packetType LongHeaderPacketType, version qtype.Version, destC
 		Version:    version,
 		DCIL:       byte(dcil),
 		SCIL:       byte(scil),
-		PayloadLen: payloadlen,
+		Length:     length,
 	}
 	var err error
 	lh.wire, err = lh.genWire()
@@ -196,8 +196,8 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 		}
 		idx += scil
 	}
-	lh.PayloadLen = qtype.DecodeQuicInt(data[idx:])
-	idx += lh.PayloadLen.GetByteLen()
+	lh.Length = qtype.DecodeQuicInt(data[idx:])
+	idx += lh.Length.GetByteLen()
 	lh.PacketNumber = qtype.DecodePacketNumber(data[idx:])
 	idx += lh.PacketNumber.GetByteLen()
 	lh.wire = data[:idx]
@@ -205,12 +205,11 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 }
 
 func (lh LongHeader) String() string {
-	return fmt.Sprintf("LongHeader:%s\tVer:%s\nDCIL:%d,SCIL:%d\n%s\nPayloadLen:%d", lh.PacketType, lh.Version, lh.DCIL, lh.SCIL, lh.BasePacketHeader, lh.PayloadLen)
+	return fmt.Sprintf("LongHeader:%s\tVer:%s\nDCIL:%d,SCIL:%d\n%s\nLength:%d", lh.PacketType, lh.Version, lh.DCIL, lh.SCIL, lh.BasePacketHeader, lh.Length)
 }
 
 func (lh LongHeader) genWire() (wire []byte, err error) {
-
-	wireLen := int(6 + lh.PacketNumber.GetByteLen() + lh.PayloadLen.GetByteLen())
+	wireLen := int(6 + lh.Length.GetByteLen() + lh.PacketNumber.GetByteLen())
 	if lh.DCIL != 0 {
 		wireLen += int(lh.DCIL + 3)
 	}
@@ -230,8 +229,8 @@ func (lh LongHeader) genWire() (wire []byte, err error) {
 		copy(wire[idx:], lh.SrcConnID.Bytes())
 		idx += int(lh.SCIL + 3)
 	}
-	lh.PayloadLen.PutWire(wire[idx:])
-	idx += lh.PayloadLen.GetByteLen()
+	lh.Length.PutWire(wire[idx:])
+	idx += lh.Length.GetByteLen()
 	lh.PacketNumber.PutWire(wire[idx:])
 	return
 }

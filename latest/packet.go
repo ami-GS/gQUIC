@@ -30,16 +30,19 @@ func ParsePacket(data []byte) (packet Packet, idx int, err error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	//TODO: want to know the number of padding
-	fs, idxTmp, err := ParseFrames(data[idx:])
+
+	if lh, ok := header.(*LongHeader); ok {
+		if lh.PacketType == InitialPacketType {
+		} else if lh.PacketType == RetryPacketType {
+
+		}
+	}
+	// TODO: not good name or return values
+	packet, idxTmp, err := newPacket(header, data[idx:])
 	if err != nil {
 		return nil, 0, err
 	}
-	packet, err = newPacket(header, fs)
 	packet.SetWire(data[idx:])
-	if err != nil {
-		return nil, 0, err
-	}
 	return packet, idx + idxTmp, err
 }
 
@@ -113,83 +116,127 @@ func (bp *BasePacket) GetWire() (wire []byte, err error) {
 	return append(hWire, bp.payload...), nil
 }
 
-func newPacket(ph PacketHeader, fs []Frame) (Packet, error) {
+func newPacket(ph PacketHeader, data []byte) (p Packet, idx int, err error) {
 	// TODO: needs frame type validation for each packet type
 	if lh, ok := ph.(*LongHeader); ok {
-		payloadLen := 0
-		for _, frame := range fs {
-			payloadLen += frame.GetWireSize()
-		}
-
 		switch lh.PacketType {
 		case InitialPacketType:
 			// TODO: check whether it is stream frame or not
-			return &InitialPacket{
+			initialPacket := &InitialPacket{
 				BasePacket: &BasePacket{
-					Header:     ph,
-					Frames:     fs,
-					PaddingNum: InitialPacketMinimumPayloadSize - payloadLen,
+					Header: ph,
 				},
-			}, nil
+			}
+			initialPacket.TokenLen = qtype.DecodeQuicInt(data)
+			idx += initialPacket.TokenLen.GetByteLen()
+			initialPacket.Token = data[idx : idx+int(initialPacket.TokenLen)]
+			idx += int(initialPacket.TokenLen)
+			p = Packet(initialPacket)
 		case RetryPacketType:
-			return &RetryPacket{
-				&BasePacket{
-					Header: ph,
-					Frames: fs,
-				},
-			}, nil
-		case HandshakePacketType:
-			return &HandshakePacket{
-				&BasePacket{
-					Header: ph,
-					Frames: fs,
-				},
-			}, nil
-		case ZeroRTTProtectedPacketType:
-			return &ProtectedPacket{
+			retryPacket := &RetryPacket{
 				BasePacket: &BasePacket{
 					Header: ph,
-					Frames: fs,
+				},
+			}
+			retryPacket.ODCIL = data[idx]
+			retryPacket.OriginalDestConnID, err = qtype.ReadConnectionID(data[idx+1:], int(retryPacket.ODCIL))
+			if err != nil {
+				return nil, 0, err
+			}
+			retryPacket.RetryToken = data[idx+1+int(retryPacket.ODCIL):]
+			// TODO: check no frame is correct
+			return retryPacket, idx + 1 + int(retryPacket.ODCIL) + len(data), nil
+		case HandshakePacketType:
+			p = &HandshakePacket{
+				&BasePacket{
+					Header: ph,
+				},
+			}
+		case ZeroRTTProtectedPacketType:
+			p = &ProtectedPacket{
+				BasePacket: &BasePacket{
+					Header: ph,
 				},
 				RTT: 0,
-			}, nil
+			}
 		default:
 			// error type is not defined
-			return nil, qtype.ProtocolViolation
+			return nil, 0, qtype.ProtocolViolation
 		}
 	} else if _, ok := ph.(*ShortHeader); ok {
-		return &ProtectedPacket{
+		p = &ProtectedPacket{
 			BasePacket: &BasePacket{
 				Header: ph,
-				Frames: fs,
 			},
 			RTT: 1,
-		}, nil
+		}
 	}
-	// error type is not defined
-	return nil, qtype.ProtocolViolation
+
+	fs, idxTmp, err := ParseFrames(data[idx:])
+	if err != nil {
+		return nil, 0, err
+	}
+	p.SetFrames(fs)
+	if initialPacket, ok := p.(*InitialPacket); ok {
+		length := ph.getPacketNumber().GetByteLen()
+		for _, frame := range fs {
+			length += frame.GetWireSize()
+		}
+
+		initialPacket.PaddingNum = InitialPacketMinimumPayloadSize - length
+	}
+
+	return p, idx + idxTmp, nil
 }
 
 // long header with type of 0x7F
 type InitialPacket struct {
 	*BasePacket
+	// Additional Header fields
+	TokenLen qtype.QuicInt
+	Token    []byte
 }
 
 const InitialPacketMinimumPayloadSize = 1200
 
-func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, sFrame *StreamFrame) *InitialPacket {
-	sFrameLen := sFrame.GetWireSize()
-	var frames []Frame
+// TODO: may contain AckFrame
+func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, token []byte, packetNumber qtype.PacketNumber, frames []Frame) *InitialPacket {
+	hasCrypto := false
+	hasAck := false
+	frameLen := 0
+	for _, frame := range frames {
+		if frame.GetType() == AckFrameType {
+			if hasAck {
+				// should be single ack?
+				return nil
+			}
+			hasAck = true
+		} else if frame.GetType() == CryptoFrameType {
+			if hasCrypto {
+				// should be single crypto?
+				return nil
+			}
+			hasCrypto = true
+		}
+		frameLen += frame.GetWireSize()
+	}
+	if !hasAck && !hasCrypto {
+		return nil
+	}
 	var lh *LongHeader
 	paddingNum := 0
-	if InitialPacketMinimumPayloadSize <= sFrameLen {
-		// TODO: need to check when sFrameLen is over MTUIPv4
-		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(sFrameLen))
-		frames = []Frame{sFrame}
+	additionalLen := 1
+	tknLen := 0
+	if token != nil {
+		tknLen = len(token)
+		additionalLen = tknLen + qtype.QuicInt(tknLen).GetByteLen()
+	}
+	length := frameLen + packetNumber.GetByteLen() + additionalLen
+	if InitialPacketMinimumPayloadSize <= length {
+		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length))
 	} else {
 		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, InitialPacketMinimumPayloadSize)
-		frames = []Frame{sFrame}
-		paddingNum = InitialPacketMinimumPayloadSize - sFrameLen
+		paddingNum = InitialPacketMinimumPayloadSize - length
 	}
 	p := &InitialPacket{
 		BasePacket: &BasePacket{
@@ -197,42 +244,85 @@ func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.Connect
 			Frames:     frames,
 			PaddingNum: paddingNum,
 		},
+		TokenLen: qtype.QuicInt(tknLen),
+		Token:    token,
 	}
 	return p
+}
+
+// TODO: can be optimized
+func (ip *InitialPacket) GetWire() (wire []byte, err error) {
+	if ip.payload != nil {
+		// bp.wire is filled after parsing
+		return append(ip.Header.GetWire(), ip.payload...), nil
+	}
+	// TODO: PutWire([]byte) is better?
+	hWire := ip.Header.GetWire()
+	if err != nil {
+		return nil, err
+	}
+	additionalhWire := make([]byte, ip.TokenLen.GetByteLen())
+	if ip.TokenLen >= 0 {
+		_ = ip.TokenLen.PutWire(additionalhWire)
+		hWire = append(hWire, append(additionalhWire, ip.Token...)...)
+	}
+
+	ip.payload, err = GetFrameWires(ip.Frames)
+	if err != nil {
+		return nil, err
+	}
+	if ip.PaddingNum != 0 {
+		ip.payload = append(ip.payload, make([]byte, ip.PaddingNum)...)
+	}
+	// TODO: protect for short header?
+	return append(hWire, ip.payload...), nil
 }
 
 // long header with type of 0x7E
 type RetryPacket struct {
 	*BasePacket
+	ODCIL              byte
+	OriginalDestConnID qtype.ConnectionID
+	RetryToken         []byte
 }
 
-func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *RetryPacket {
-	if len(frames) < 2 {
-		return nil
-	}
-	if _, ok := frames[0].(*StreamFrame); !ok {
-		return nil
-	}
-	if _, ok := frames[1].(*AckFrame); !ok {
-		return nil
-	}
-	for i := 2; i < len(frames); i++ {
-		if _, ok := frames[i].(*PaddingFrame); !ok {
-			return nil
-		}
-	}
-
-	payloadLen := 0
-	for i := 0; i < len(frames); i++ {
-		payloadLen += frames[i].GetWireSize()
-	}
-
+func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, originalDestConnID qtype.ConnectionID, retryToken []byte, packetNumber qtype.PacketNumber) *RetryPacket {
+	length := 1 + len(originalDestConnID) + len(retryToken) + packetNumber.GetByteLen()
 	return &RetryPacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(payloadLen)),
-			Frames: frames,
+			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length)),
+			Frames: nil,
 		},
+		ODCIL:              byte(len(originalDestConnID)),
+		OriginalDestConnID: originalDestConnID,
+		RetryToken:         retryToken,
 	}
+}
+
+// TODO: can be optimized
+func (rp *RetryPacket) GetWire() (wire []byte, err error) {
+	if rp.payload != nil {
+		// bp.wire is filled after parsing
+		return append(rp.Header.GetWire(), rp.payload...), nil
+	}
+	// TODO: PutWire([]byte) is better?
+	hWire := rp.Header.GetWire()
+	if err != nil {
+		return nil, err
+	}
+	hWire = append(hWire, append([]byte{rp.ODCIL}, append(rp.OriginalDestConnID.Bytes(), rp.RetryToken...)...)...)
+
+	if rp.Frames != nil {
+		rp.payload, err = GetFrameWires(rp.Frames)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if rp.PaddingNum != 0 {
+		rp.payload = append(rp.payload, make([]byte, rp.PaddingNum)...)
+	}
+	// TODO: protect for short header?
+	return append(hWire, rp.payload...), nil
 }
 
 // long header with type of 0x7D
@@ -242,20 +332,20 @@ type HandshakePacket struct {
 
 func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *HandshakePacket {
 	minimumReq := false
-	payloadLen := 0
+	length := packetNumber.GetByteLen()
 	for i := 0; i < len(frames); i++ {
 		switch frames[i].(type) {
 		case *ConnectionCloseFrame:
 			// This stands for the handshake is unsaccessful
 			minimumReq = true
-		case *StreamFrame:
+		case *CryptoFrame:
 			minimumReq = true
-		case *AckFrame, *PathChallengeFrame /*or*/, *PathResponseFrame:
+		case *AckFrame:
 		default:
 			// TODO: error, handshake packet cannot have these frames
 			return nil
 		}
-		payloadLen += frames[i].GetWireSize()
+		length += frames[i].GetWireSize()
 	}
 	if !minimumReq {
 		return nil
@@ -263,7 +353,7 @@ func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.Conne
 
 	return &HandshakePacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(payloadLen)),
+			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length)),
 			Frames: frames,
 		},
 	}
@@ -279,11 +369,11 @@ type ProtectedPacket struct {
 func NewProtectedPacket(version qtype.Version, key bool, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, rtt byte, frames []Frame) *ProtectedPacket {
 	var header PacketHeader
 	if rtt == 0 {
-		payloadLen := 0
+		length := packetNumber.GetByteLen()
 		for _, frame := range frames {
-			payloadLen += frame.GetWireSize()
+			length += frame.GetWireSize()
 		}
-		header = NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(payloadLen))
+		header = NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length))
 	} else if rtt == 1 {
 		header = NewShortHeader(key, destConnID, packetNumber)
 	} else {
@@ -374,8 +464,8 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 	idx++
 	packet.Version = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
 	if packet.Version != 0 {
-		// must be zero
-		// TODO: error
+		// must be zero, but the error is not defined
+		return nil, 0, qtype.ProtocolViolation
 	}
 	idx += 4
 	packet.DCIL = data[idx] >> 4
