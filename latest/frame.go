@@ -50,12 +50,15 @@ var FrameParserMap = map[FrameType]FrameParser{
 	AckFrameType:              ParseAckFrame,
 	PathChallengeFrameType:    ParsePathChallengeFrame,
 	PathResponseFrameType:     ParsePathResponseFrame,
-
 	// type should be (type & StreamFrameTypeCommon)
 	StreamFrameType: ParseStreamFrame,
+
+	CryptoFrameType:   ParseCryptoFrame,
+	NewTokenFrameType: ParseNewTokenFrame,
+	AckEcnFrameType:   ParseAckEcnFrame,
 }
 
-type FrameType uint8
+type FrameType qtype.QuicInt
 
 const (
 	PaddingFrameType FrameType = iota
@@ -74,8 +77,13 @@ const (
 	AckFrameType
 	PathChallengeFrameType
 	PathResponseFrameType
-	StreamFrameType       // 0x10-0x17
-	StreamFrameTypeCommon = 0x10
+	StreamFrameType           // 0x10-0x17
+	CryptoFrameType FrameType = iota + 7
+	NewTokenFrameType
+	AckEcnFrameType
+
+	StreamFrameTypeMax  = 0x17
+	StreamFrameTypeMask = 0x1f
 )
 
 func (frameType FrameType) String() string {
@@ -97,10 +105,20 @@ func (frameType FrameType) String() string {
 		"PATH_CHALLENGE",
 		"PATH_RESPONSE",
 		"STREAM",
+		"_",
+		"_",
+		"_",
+		"_",
+		"_",
+		"_",
+		"_",
+		"CRYPTO",
+		"NEW_TOKEN",
+		"ACK_ECN",
 	}
 	if 0x10 <= frameType && frameType <= 0x17 {
 		return "STREAM"
-	} else if frameType > 0x17 {
+	} else if frameType > 0x1a {
 		return "NO_SUCH_TYPE"
 	}
 	return names[int(frameType)]
@@ -134,12 +152,12 @@ func (f *BaseFrame) String() string {
 }
 
 func ParseFrame(data []byte) (f Frame, idx int, err error) {
-	if data[0] > 0x17 {
+	if data[0] > 0x1a {
 		// TODO: error needed, but not decided
 		return nil, 0, qtype.ProtocolViolation
 	}
-	if data[0]&StreamFrameTypeCommon == StreamFrameTypeCommon {
-		return FrameParserMap[StreamFrameTypeCommon](data)
+	if StreamFrameType <= FrameType(data[0]) && data[0]&StreamFrameTypeMask <= StreamFrameTypeMax {
+		return FrameParserMap[StreamFrameType](data)
 	}
 	return FrameParserMap[FrameType(data[0])](data)
 }
@@ -1175,4 +1193,216 @@ func (f StreamFrame) genWire() (wire []byte, err error) {
 	}
 	copy(wire[idx:], f.Data)
 	return
+}
+
+/*
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                          Offset (i)                         ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                          Length (i)                         ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        Crypto Data (*)                      ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
+type CryptoFrame struct {
+	*BaseFrame
+	Offset     qtype.QuicInt
+	Length     qtype.QuicInt
+	CryptoData []byte
+}
+
+func NewCryptoFrame(offset qtype.QuicInt, data []byte) *CryptoFrame {
+	f := &CryptoFrame{
+		BaseFrame:  NewBaseFrame(CryptoFrameType),
+		Offset:     offset,
+		Length:     qtype.QuicInt(len(data)),
+		CryptoData: data,
+	}
+	var err error
+	f.wire, err = f.genWire()
+	if err != nil {
+		// error
+	}
+	return f
+}
+
+func ParseCryptoFrame(data []byte) (Frame, int, error) {
+	f := &CryptoFrame{
+		BaseFrame: NewBaseFrame(CryptoFrameType),
+	}
+	idx := 1
+	f.Offset = qtype.DecodeQuicInt(data[idx:])
+	idx += f.Offset.GetByteLen()
+	f.Length = qtype.DecodeQuicInt(data[idx:])
+	idx += f.Length.GetByteLen()
+	f.CryptoData = data[idx:]
+	idx += int(f.Length)
+	f.wire = data[:idx]
+	return f, idx, nil
+}
+
+func (f CryptoFrame) genWire() (wire []byte, err error) {
+	wire = make([]byte, 1+f.Offset.GetByteLen()+f.Length.GetByteLen()+len(f.CryptoData))
+	wire[0] = byte(CryptoFrameType)
+	idx := f.Offset.PutWire(wire[1:]) + 1
+	idx += f.Length.PutWire(wire[idx:])
+	copy(wire[idx:], f.CryptoData)
+	return wire, nil
+}
+
+func (f CryptoFrame) String() string {
+	return fmt.Sprintf("[%s]\n\tOffset:%d\tLength:%d\n\tCrypto Data: %s", f.BaseFrame, f.Offset, f.Length, string(f.CryptoData))
+}
+
+/*
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                     Token Length (i)  ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                            Token (*)                        ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
+type NewTokenFrame struct {
+	*BaseFrame
+	TokenLen qtype.QuicInt
+	Token    []byte
+}
+
+func NewNewTokenFrame(token []byte) *NewTokenFrame {
+	f := &NewTokenFrame{
+		BaseFrame: NewBaseFrame(NewTokenFrameType),
+		TokenLen:  qtype.QuicInt(len(token)),
+		Token:     token,
+	}
+	var err error
+	f.wire, err = f.genWire()
+	if err != nil {
+		// error
+	}
+	return f
+}
+
+func ParseNewTokenFrame(data []byte) (Frame, int, error) {
+	f := &NewTokenFrame{
+		BaseFrame: NewBaseFrame(NewTokenFrameType),
+	}
+	idx := 1
+	f.TokenLen = qtype.DecodeQuicInt(data[idx:])
+	idx += f.TokenLen.GetByteLen()
+	f.Token = data[idx:]
+	f.wire = data[:idx+len(f.Token)]
+	return f, idx + len(f.Token), nil
+}
+
+func (f NewTokenFrame) genWire() (wire []byte, err error) {
+	wire = make([]byte, 1+f.TokenLen.GetByteLen()+len(f.Token))
+	wire[0] = byte(NewTokenFrameType)
+	idx := 1
+	idx += f.TokenLen.PutWire(wire[idx:])
+	copy(wire[idx:], f.Token)
+	return wire, nil
+}
+
+func (f NewTokenFrame) String() string {
+	return fmt.Sprintf("[%s]\n\tToken Length:%d\n\tToken: %s", f.BaseFrame, f.TokenLen, string(f.Token))
+}
+
+/*
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                     Largest Acknowledged (i)                ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                          ACK Delay (i)                      ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        ECT(0) Count (i)                     ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        ECT(1) Count (i)                     ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        ECN-CE Count (i)                     ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                       ACK Block Count (i)                   ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                          ACK Blocks (*)                     ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
+type AckEcnFrame struct {
+	*BaseFrame
+	LargestAcked  qtype.QuicInt
+	AckDelay      qtype.QuicInt
+	Etc0Count     qtype.QuicInt
+	Etc1Count     qtype.QuicInt
+	EcnCeCount    qtype.QuicInt
+	AckBlockCount qtype.QuicInt
+	AckBlocks     []AckBlock
+}
+
+func NewAckEcnFrame(lAcked, ackDelay, etc0count, etc1count, ecnCeCount qtype.QuicInt, ackBlocks []AckBlock) *AckEcnFrame {
+	f := &AckEcnFrame{
+		BaseFrame:     NewBaseFrame(AckEcnFrameType),
+		LargestAcked:  lAcked,
+		AckDelay:      ackDelay,
+		Etc0Count:     etc0count,
+		Etc1Count:     etc1count,
+		EcnCeCount:    ecnCeCount,
+		AckBlockCount: qtype.QuicInt(len(ackBlocks)),
+		AckBlocks:     ackBlocks,
+	}
+	var err error
+	f.wire, err = f.genWire()
+	if err != nil {
+		// error
+	}
+	return f
+}
+
+func ParseAckEcnFrame(data []byte) (Frame, int, error) {
+	f := &AckEcnFrame{
+		BaseFrame: NewBaseFrame(AckEcnFrameType),
+	}
+	idx := 1
+	f.LargestAcked = qtype.DecodeQuicInt(data[idx:])
+	idx += f.LargestAcked.GetByteLen()
+	f.AckDelay = qtype.DecodeQuicInt(data[idx:])
+	idx += f.AckDelay.GetByteLen()
+	f.Etc0Count = qtype.DecodeQuicInt(data[idx:])
+	idx += f.Etc0Count.GetByteLen()
+	f.Etc1Count = qtype.DecodeQuicInt(data[idx:])
+	idx += f.Etc1Count.GetByteLen()
+	f.EcnCeCount = qtype.DecodeQuicInt(data[idx:])
+	idx += f.EcnCeCount.GetByteLen()
+	f.AckBlockCount = qtype.DecodeQuicInt(data[idx:])
+	idx += f.AckBlockCount.GetByteLen()
+	f.AckBlocks = make([]AckBlock, f.AckBlockCount)
+	for i := 0; i < int(f.AckBlockCount); i++ {
+		f.AckBlocks[i].Block = qtype.DecodeQuicInt(data[idx:])
+		idx += f.AckBlocks[i].Block.GetByteLen()
+		f.AckBlocks[i].Gap = qtype.DecodeQuicInt(data[idx:])
+		idx += f.AckBlocks[i].Gap.GetByteLen()
+	}
+	f.wire = data[:idx]
+	return f, idx, nil
+}
+
+func (f AckEcnFrame) genWire() (wire []byte, err error) {
+	wireLen := 1 + f.LargestAcked.GetByteLen() + f.AckDelay.GetByteLen() + f.Etc0Count.GetByteLen() + f.Etc1Count.GetByteLen() + f.EcnCeCount.GetByteLen() + f.AckBlockCount.GetByteLen()
+	for _, ackBlock := range f.AckBlocks {
+		wireLen += ackBlock.Block.GetByteLen()
+		wireLen += ackBlock.Gap.GetByteLen()
+	}
+	return wire, nil
+}
+
+func (f AckEcnFrame) String() string {
+	blockStr := ""
+	for _, block := range f.AckBlocks {
+		blockStr += fmt.Sprintf("\n\tAck:%d\tGap%d", block.Block, block.Gap)
+	}
+	return fmt.Sprintf("[%s]\n\tLargest Acked:%d\tAck Delay:%d\tETC(0) Count:%d\tETC(1) Count:%d\n\tECN-CE Count:%d\tAck Block Count:%d\n\tAck Blocks:%s", f.BaseFrame, f.LargestAcked, f.AckDelay, f.Etc0Count, f.Etc1Count, f.EcnCeCount, f.AckBlockCount, blockStr)
 }

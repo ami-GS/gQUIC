@@ -325,6 +325,12 @@ func (s *Session) HandleFrames(fs []Frame) error {
 			err = s.handlePathChallengeFrame(f)
 		case *PathResponseFrame:
 			err = s.handlePathResponseFrame(f)
+		case *CryptoFrame:
+			err = s.handleCryptoFrame(f)
+		case *AckEcnFrame:
+			err = s.handleAckEcnFrame(f)
+		case *NewTokenFrame:
+			err = s.handleNewTokenFrame(f)
 		case StreamLevelFrame:
 			err = s.streamManager.handleFrame(f)
 		default:
@@ -373,6 +379,9 @@ func (s *Session) QueueFrame(frame Frame) error {
 	case *PathChallengeFrame:
 		s.PathChallengeData = f.Data
 	case *PathResponseFrame:
+	case *CryptoFrame:
+	case *AckEcnFrame:
+	case *NewTokenFrame:
 	case StreamLevelFrame:
 		err = s.streamManager.QueueFrame(f)
 		return err
@@ -427,6 +436,16 @@ func (s *Session) handlePathResponseFrame(frame *PathResponseFrame) error {
 	if !bytes.Equal(frame.Data[:], s.PathChallengeData[:]) {
 		return qtype.UnsolicitedPathResponse
 	}
+	return nil
+}
+
+func (s *Session) handleCryptoFrame(f *CryptoFrame) error {
+	return nil
+}
+func (s *Session) handleAckEcnFrame(f *AckEcnFrame) error {
+	return nil
+}
+func (s *Session) handleNewTokenFrame(f *NewTokenFrame) error {
 	return nil
 }
 
