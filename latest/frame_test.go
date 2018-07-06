@@ -22,7 +22,7 @@ func TestFrameTypeString(t *testing.T) {
 			"STREAM_BLOCKED",
 			"STREAM_ID_BLOCKED",
 			"NEW_CONNECTION_ID",
-			"STOP_WAITING",
+			"STOP_SENDING",
 			"ACK",
 			"PATH_CHALLENGE",
 			"PATH_RESPONSE",
