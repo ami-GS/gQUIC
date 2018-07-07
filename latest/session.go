@@ -27,9 +27,9 @@ type Session struct {
 	// or prepare several channel for priority based channels ?
 	sendFrameChan chan Frame
 	// high priority channel when wire has over 1000 (MTUIPv4*0.8)
-	sendFrameHPChan chan Frame
-	sendPacketChan  chan Packet
-	RetryPacketNum  qtype.PacketNumber
+	sendFrameHPChan      chan Frame
+	sendPacketChan       chan Packet
+	RetryPacketTokenSent string
 
 	blockedFramesOnConnection *utils.RingBuffer
 
@@ -451,16 +451,23 @@ func (s *Session) handleNewTokenFrame(f *NewTokenFrame) error {
 
 func (s *Session) handleInitialPacket(p *InitialPacket) error {
 	// WIP
-	if p.GetPayloadLen() < InitialPacketMinimumPayloadSize {
+	if lh, ok := p.GetHeader().(*LongHeader); ok && lh.Length < InitialPacketMinimumPayloadSize {
 		return qtype.ProtocolViolation
 	}
-
-	if s.RetryPacketNum != 0 {
-		s.mapMutex.Lock()
-		delete(s.UnAckedPacket, s.RetryPacketNum)
-		s.mapMutex.Unlock()
-		s.RetryPacketNum = 0
-		return nil
+	if p.TokenLen != 0 {
+		if bytes.Equal(p.Token, []byte(s.RetryPacketTokenSent)) {
+			return nil
+		}
+	}
+	for _, frame := range p.GetFrames() {
+		// TODO: check packet number
+		if frame.GetType() == AckFrameType {
+			if s.isClient {
+				s.sendPacketChan <- NewInitialPacket(s.versionDecided, s.DestConnID, s.SrcConnID, nil, s.LastPacketNumber.Increase(),
+					[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)})
+			}
+			return nil
+		}
 	}
 
 	var originalDestID qtype.ConnectionID
@@ -476,19 +483,34 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 	s.SrcConnID, _ = qtype.NewConnectionID(nil)
 	s.server.ChangeConnectionID(originalDestID, s.SrcConnID)
 
-	// send Retry Packet if server wishes to perform a stateless retry
-	// It MUST include a STREAM frame on stream 0 with offset 0 containing the server's cryptographic stateless retry material.
-	sFrame := NewStreamFrame(0, 0, true, true, false, []byte("server's cryptographic stateless retry material"))
-	// It MUST also include an ACK frame to acknowledge the client's Initial packet.
-	aFrame := NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, []AckBlock{AckBlock{0, 0}})
-	packet := NewRetryPacket(s.versionDecided, s.DestConnID, s.SrcConnID, p.GetPacketNumber(), []Frame{sFrame, aFrame})
+	// TODO: need to check condition
+	if true {
+		// initial packet from server or retry packet from server
+		s.sendPacketChan <- NewInitialPacket(s.versionDecided, s.DestConnID, s.SrcConnID, nil, s.LastPacketNumber,
+			[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message from server (HelloRetryRequest)")),
+				NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)})
+		// TODO: this is stil under investigating
+		s.sendPacketChan <- NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber,
+			[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message from server (HelloRetryRequest)")), []byte("CRYPTO[EE, CERT, CV, FIN]"))})
+		protectedFrames := []Frame{NewStreamFrame(1, 0, true, true, true, []byte("1-RTT[0]: STREAM[1, ...]"))}
+		if true {
+			// 1-RTT handshake
+			// TODO: need to know key is used or not
+			s.sendPacketChan <- NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber, 1,
+				protectedFrames)
+		} else {
+			// 0-RTT handshake
+			protectedFrames = append(protectedFrames, NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil))
+			s.sendPacketChan <- NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber, 0,
+				protectedFrames)
 
-	// Next InitialPacket stands for ack implicitely
-	s.mapMutex.Lock()
-	s.UnAckedPacket[packet.GetPacketNumber()] = packet
-	s.mapMutex.Unlock()
-	s.RetryPacketNum = packet.GetPacketNumber()
-	s.sendPacketChan <- packet
+		}
+	} else {
+		//TODO: should be hash?
+		s.RetryPacketTokenSent = "not sure what should be here"
+		s.sendPacketChan <- NewRetryPacket(s.versionDecided, s.DestConnID, s.SrcConnID, originalDestID,
+			[]byte(s.RetryPacketTokenSent), p.GetPacketNumber())
+	}
 	return nil
 }
 

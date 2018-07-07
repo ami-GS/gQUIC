@@ -53,6 +53,8 @@ func DialAddr(addr string) (*Client, error) {
 	}
 	cli.session.packetHandler = cli
 	go cli.run()
+	cli.Connect()
+
 	return cli, nil
 }
 
@@ -62,8 +64,8 @@ func (c *Client) Connect() {
 
 	// first initial packet
 	destID, _ := qtype.NewConnectionID(nil)
-	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte("Initial Packet with ClientHello"))
-	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, destID, destID, c.session.LastPacketNumber, streamFrame)
+	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, destID, destID, nil, c.session.LastPacketNumber,
+		[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message (ClientHello)"))})
 	c.session.DestConnID = destID
 	c.session.SrcConnID = destID
 
@@ -130,31 +132,15 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 	}
 	c.versionOffer = versionTBD
 	// WIP
-	streamFrame := NewStreamFrame(0, 0, true, true, false, []byte("second Initial Packet for anwering VersionNegotiation Packet"))
-	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, c.session.DestConnID, c.session.SrcConnID, c.session.LastPacketNumber.Increase(), streamFrame)
+
+	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, c.session.DestConnID, c.session.SrcConnID, nil,
+		c.session.LastPacketNumber.Increase(),
+		[]Frame{NewCryptoFrame(0, []byte("second cryptographic handshake message for answering VersionNegotiation Packet"))})
 	return nil
 }
 
 func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 	// send second initial packet
-
-	// RetryPacket MUST contain at least two frames (Ack and Stream)
-	frames := packet.GetFrames()
-	requiredPacket := 0
-	for _, frame := range frames {
-		if frame.GetType() == AckFrameType {
-			// TODO: check largest acked is same as that of previous initial packet
-			requiredPacket++
-		} else if frame.GetType()&StreamFrameType == StreamFrameType {
-			stFrame := frame.(*StreamFrame)
-			if stFrame.Offset == 0 && stFrame.GetStreamID() == 0 {
-				requiredPacket++
-			}
-		}
-	}
-	if requiredPacket < 2 {
-		return qtype.ProtocolViolation
-	}
 
 	// The client retains the state of its cryptographic handshake, but discards all transport state.
 	c.session.DestConnID, _ = packet.GetHeader().GetConnectionIDPair()
@@ -162,9 +148,9 @@ func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 
 	// try again with new transport, but MUST remember the results of any version negotiation that occurred
 	pn := packet.GetPacketNumber()
-
-	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, pn.Increase(),
-		NewStreamFrame(0, 0, true, true, false, []byte("Second Initial Packet response for Retry Packet")))
+	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID,
+		packet.RetryToken, pn.Increase(),
+		[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message (ClientHello)")), []byte("second cryptographic handshake message"))})
 	return nil
 }
 
