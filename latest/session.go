@@ -3,6 +3,7 @@ package quiclatest
 import (
 	"bytes"
 	"container/heap"
+	"log"
 	"sync"
 	"time"
 
@@ -202,6 +203,14 @@ func (s *Session) SendPacket(packet Packet) error {
 	s.mapMutex.Lock()
 	s.UnAckedPacket[packet.GetPacketNumber()] = packet
 	s.mapMutex.Unlock()
+	//s.sendPacketPreprocess(packet)
+	if LogLevel >= 1 {
+		host := "server"
+		if s.isClient {
+			host = "client"
+		}
+		log.Print("\n== ", host, "Send ====================================================================\n", packet, "\n\n")
+	}
 	return s.conn.Write(wire)
 }
 
@@ -218,6 +227,14 @@ func (s *Session) RecvPacketLoop() {
 }
 
 func (s *Session) HandlePacket(p Packet) error {
+	if LogLevel >= 1 {
+		host := "server"
+		if s.isClient {
+			host = "client"
+		}
+		log.Print("\n== ", host, "Received ====================================================================\n", p, "\n\n")
+	}
+
 	var err error
 	switch packet := p.(type) {
 	case *InitialPacket:
