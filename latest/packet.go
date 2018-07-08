@@ -556,3 +556,50 @@ func (p VersionNegotiationPacket) GetFrames() []Frame {
 func (p VersionNegotiationPacket) String() string {
 	return fmt.Sprintf("NoHeader:VersionNegotiationPacket\tVer:N/A(%d)\nDCIL:%d,SCIL:%d\n%s\nSupported Versions:%v", p.Version, p.DCIL, p.SCIL, p.BasePacketHeader, p.SupportedVersions)
 }
+
+type CoalescingPacket struct {
+	packets []Packet
+}
+
+func NewCoalescingPacket(packets []Packet) *CoalescingPacket {
+	for i, p := range packets {
+		if _, ok := p.GetHeader().(*ShortHeader); ok && len(packets)-1 != i {
+			panic("short header packet should be set at the end of coalescing packet")
+		}
+	}
+
+	return &CoalescingPacket{
+		packets: packets,
+	}
+}
+
+func (ps CoalescingPacket) GetWire() ([]byte, error) {
+	wire, err := ps.packets[0].GetWire()
+	if err != nil {
+		return nil, err
+	}
+	for i := 1; i < len(ps.packets); i++ {
+		p := ps.packets[i]
+		w, err := p.GetWire()
+		if err != nil {
+			return nil, err
+		}
+		wire = append(wire, w...)
+	}
+	return wire, nil
+}
+
+func (ps CoalescingPacket) String() string {
+	out := fmt.Sprintf("%s", ps.packets[0])
+	for i := 1; i < len(ps.packets); i++ {
+		out += fmt.Sprintf("\n%s", ps.packets[i])
+	}
+	return fmt.Sprintf("CoalescingPacket {\n%s}", out)
+}
+
+func (ps CoalescingPacket) SetWire(wire []byte)                 {}
+func (ps CoalescingPacket) SetHeader(ph PacketHeader)           {}
+func (ps CoalescingPacket) GetHeader() PacketHeader             { return nil }
+func (ps CoalescingPacket) GetFrames() []Frame                  { return nil }
+func (ps CoalescingPacket) GetPacketNumber() qtype.PacketNumber { return 0 }
+func (ps CoalescingPacket) SetFrames(fs []Frame)                {}
