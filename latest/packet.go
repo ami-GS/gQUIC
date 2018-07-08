@@ -366,26 +366,28 @@ type ProtectedPacket struct {
 	RTT byte
 }
 
-func NewProtectedPacket(version qtype.Version, key bool, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, rtt byte, frames []Frame) *ProtectedPacket {
-	var header PacketHeader
-	if rtt == 0 {
-		length := packetNumber.GetByteLen()
-		for _, frame := range frames {
-			length += frame.GetWireSize()
-		}
-		header = NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length))
-	} else if rtt == 1 {
-		header = NewShortHeader(key, destConnID, packetNumber)
-	} else {
-		// error
+func NewProtectedPacket1RTT(key bool, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *ProtectedPacket {
+	return &ProtectedPacket{
+		BasePacket: &BasePacket{
+			Header: NewShortHeader(key, destConnID, packetNumber),
+			Frames: frames,
+		},
+		RTT: 1,
+	}
+}
+
+func NewProtectedPacket0RTT(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *ProtectedPacket {
+	length := packetNumber.GetByteLen()
+	for _, frame := range frames {
+		length += frame.GetWireSize()
 	}
 
 	return &ProtectedPacket{
 		BasePacket: &BasePacket{
-			Header: header,
+			Header: NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length)),
 			Frames: frames,
 		},
-		RTT: rtt,
+		RTT: 0,
 	}
 }
 

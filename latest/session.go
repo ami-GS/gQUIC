@@ -146,12 +146,12 @@ RunLOOP:
 			if len(frames) == 0 {
 				continue
 			}
-			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 0, frames))
+			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), frames))
 		case <-s.PingTicker.C:
 			// currently 1 packet per 1 ping
-			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 0, []Frame{NewPingFrame()}))
+			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), []Frame{NewPingFrame()}))
 		case f := <-s.sendFrameHPChan:
-			err = s.SendPacket(NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), 0, []Frame{f}))
+			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), []Frame{f}))
 		case p := <-s.sendPacketChan:
 			// TODO: frames must be evaluated to be sent
 			// currently assuming all frames in p is valid
