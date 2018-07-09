@@ -21,29 +21,44 @@ type Packet interface {
 }
 
 func ParsePacket(data []byte) (packet Packet, idx int, err error) {
-	version := binary.BigEndian.Uint32(data[1:5])
-	if version == 0 {
-		// VersionNegotiationPacket use all UDP datagram (doesn't have frame)
-		return ParseVersionNegotiationPacket(data)
-	}
-	header, idx, err := PacketHeaderParserMap[PacketHeaderType(data[0]&0x80)](data) // ParseHeader
-	if err != nil {
-		return nil, 0, err
-	}
+	var idxTmp int
+	packets := []Packet{}
+	for {
+		version := binary.BigEndian.Uint32(data[idx+1 : idx+5])
+		if version == 0 {
+			packet, idxTmp, err = ParseVersionNegotiationPacket(data)
+		} else {
+			var header PacketHeader
+			header, idxTmp, err = PacketHeaderParserMap[PacketHeaderType(data[idx]&0x80)](data) // ParseHeader
+			if err != nil {
+				return nil, 0, err
+			}
+			idx += idxTmp
+			packet, idxTmp, err = newPacket(header, data[idx:])
+			if err != nil {
+				return nil, 0, err
+			}
 
-	if lh, ok := header.(*LongHeader); ok {
-		if lh.PacketType == InitialPacketType {
-		} else if lh.PacketType == RetryPacketType {
-
+			if lh, ok := header.(*LongHeader); ok {
+				packet.SetWire(data[idx : idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
+				if lh.PacketType == InitialPacketType {
+				} else if lh.PacketType == RetryPacketType {
+				}
+			} else { // ShortHeader
+				packet.SetWire(data[idx:])
+			}
 		}
+		idx += idxTmp
+		if idx >= len(data) {
+			break
+		}
+		packets = append(packets, packet)
 	}
-	// TODO: not good name or return values
-	packet, idxTmp, err := newPacket(header, data[idx:])
-	if err != nil {
-		return nil, 0, err
+	if len(packets) > 1 {
+		return NewCoalescingPacket(packets), idx, err
+	} else {
+		return packet, idx, err
 	}
-	packet.SetWire(data[idx:])
-	return packet, idx + idxTmp, err
 }
 
 type BasePacket struct {

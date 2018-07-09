@@ -201,7 +201,13 @@ func (s *Session) SendPacket(packet Packet) error {
 	}
 
 	s.mapMutex.Lock()
-	s.UnAckedPacket[packet.GetPacketNumber()] = packet
+	if ps, ok := packet.(*CoalescingPacket); ok {
+		for _, ps := range ps.packets {
+			s.UnAckedPacket[ps.GetPacketNumber()] = ps
+		}
+	} else {
+		s.UnAckedPacket[packet.GetPacketNumber()] = packet
+	}
 	s.mapMutex.Unlock()
 	//s.sendPacketPreprocess(packet)
 	if LogLevel >= 1 {
