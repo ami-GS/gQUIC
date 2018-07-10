@@ -473,26 +473,12 @@ func (s *Session) handleNewTokenFrame(f *NewTokenFrame) error {
 }
 
 func (s *Session) handleInitialPacket(p *InitialPacket) error {
-	// WIP
+	// TODO: clean up codes
+	oneRTTForNow := false
+	initialPacketForNow := false
 	if lh, ok := p.GetHeader().(*LongHeader); ok && lh.Length < InitialPacketMinimumPayloadSize {
 		return qtype.ProtocolViolation
 	}
-	if p.TokenLen != 0 {
-		if bytes.Equal(p.Token, []byte(s.RetryPacketTokenSent)) {
-			return nil
-		}
-	}
-	for _, frame := range p.GetFrames() {
-		// TODO: check packet number
-		if frame.GetType() == AckFrameType {
-			if s.isClient {
-				s.sendPacketChan <- NewInitialPacket(s.versionDecided, s.DestConnID, s.SrcConnID, nil, s.LastPacketNumber.Increase(),
-					[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)})
-			}
-			return nil
-		}
-	}
-
 	var originalDestID qtype.ConnectionID
 	s.DestConnID, originalDestID = p.GetHeader().GetConnectionIDPair()
 	if len(originalDestID) < 8 {
@@ -502,30 +488,89 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 		return qtype.ProtocolViolation
 	}
 
+	if p.TokenLen != 0 {
+		if bytes.Equal(p.Token, []byte(s.RetryPacketTokenSent)) {
+			return nil
+		}
+	}
+
+	packetNum := p.GetPacketNumber()
+	for _, frame := range p.GetFrames() {
+		// TODO: check packet number
+		if frame.GetType() == AckFrameType && packetNum == 0 {
+			if s.isClient {
+				packets := []Packet{}
+				packets = append(packets,
+					NewInitialPacket(s.versionDecided, s.DestConnID, s.SrcConnID, nil, 1,
+						[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)}),
+					NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, 0,
+						[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message (ClientHello)")), []byte("CRYPTO[FIN]")),
+							NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil),
+						}))
+				if oneRTTForNow {
+					s.sendPacketChan <- NewCoalescingPacket(append(packets, NewProtectedPacket1RTT(false, s.DestConnID, 0,
+						[]Frame{NewStreamFrame(0, 0, true, true, true, []byte("1-RTT[0]: STREAM[0, ...]")),
+							NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil),
+						})))
+				} else {
+					// TODO: unknown offset
+					s.sendPacketChan <- NewCoalescingPacket(append(packets,
+						NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, 1,
+							[]Frame{NewCryptoFrame(0, []byte("0-RTT[1]: CRYPTO[EOED]"))}),
+						NewProtectedPacket1RTT(false, s.DestConnID, 2,
+							[]Frame{NewStreamFrame(0, 0, true, true, true, []byte("1-RTT[2]: STREAM[0, ...]")),
+								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil),
+							})))
+				}
+			} else { // server
+				if oneRTTForNow {
+					s.sendPacketChan <- NewCoalescingPacket([]Packet{
+						NewProtectedPacket1RTT(false, s.DestConnID, 1,
+							[]Frame{NewStreamFrame(55, 0, true, true, true, []byte("1-RTT[1]: STREAM[55, ...]")),
+								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)}),
+						NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, 1,
+							[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)})})
+				} else {
+					s.sendPacketChan <- NewCoalescingPacket([]Packet{
+						NewProtectedPacket1RTT(false, s.DestConnID, 1,
+							[]Frame{NewStreamFrame(55, 0, true, true, true, []byte("1-RTT[1]: STREAM[55, ...]")),
+								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()+1), 0, nil)}),
+						NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber,
+							[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()+2), 0, []AckBlock{AckBlock{qtype.QuicInt(p.GetPacketNumber() + 1), 0}})}),
+					})
+				}
+			}
+			return nil
+		}
+	}
+	if packetNum != 0 {
+		return nil
+	}
+
 	// The server includes a connection ID of its choice in the Source Connection ID field.
 	s.SrcConnID, _ = qtype.NewConnectionID(nil)
 	s.server.ChangeConnectionID(originalDestID, s.SrcConnID)
 
 	// TODO: need to check condition
-	if true {
+	if initialPacketForNow {
 		// initial packet from server or retry packet from server
-		s.sendPacketChan <- NewInitialPacket(s.versionDecided, s.DestConnID, s.SrcConnID, nil, s.LastPacketNumber,
-			[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message from server (HelloRetryRequest)")),
-				NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)})
-		// TODO: this is stil under investigating
-		s.sendPacketChan <- NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber,
-			[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message from server (HelloRetryRequest)")), []byte("CRYPTO[EE, CERT, CV, FIN]"))})
+		packets := []Packet{
+			NewInitialPacket(s.versionDecided, s.DestConnID, s.SrcConnID, nil, 0,
+				[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message from server (HelloRetryRequest)")),
+					NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)}),
+			// TODO: this is stil under investigating
+			NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber,
+				[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message from server (HelloRetryRequest)")), []byte("CRYPTO[EE, CERT, CV, FIN]"))}),
+		}
 		protectedFrames := []Frame{NewStreamFrame(1, 0, true, true, true, []byte("1-RTT[0]: STREAM[1, ...]"))}
-		if true {
+		if oneRTTForNow {
 			// 1-RTT handshake
 			// TODO: need to know key is used or not
-			s.sendPacketChan <- NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber, 1,
-				protectedFrames)
+			s.sendPacketChan <- NewCoalescingPacket(append(packets, NewProtectedPacket1RTT(false, s.DestConnID, 0, protectedFrames)))
 		} else {
 			// 0-RTT handshake
-			protectedFrames = append(protectedFrames, NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil))
-			s.sendPacketChan <- NewProtectedPacket(s.versionDecided, false, s.DestConnID, s.SrcConnID, s.LastPacketNumber, 0,
-				protectedFrames)
+			s.sendPacketChan <- NewCoalescingPacket(append(packets, NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, 0,
+				append(protectedFrames, NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)))))
 
 		}
 	} else {
