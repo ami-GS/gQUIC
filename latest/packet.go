@@ -34,17 +34,22 @@ func ParsePackets(data []byte) (packets []Packet, idx int, err error) {
 				return nil, 0, err
 			}
 			idx += idxTmp
-			packet, idxTmp, err = newPacket(header, data[idx:])
-			if err != nil {
-				return nil, 0, err
-			}
 
 			if lh, ok := header.(*LongHeader); ok {
+				packet, idxTmp, err = newPacket(header, data[idx:idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
+				if err != nil {
+					return nil, 0, err
+				}
+
 				packet.SetWire(data[idx : idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
 				if lh.PacketType == InitialPacketType {
 				} else if lh.PacketType == RetryPacketType {
 				}
 			} else { // ShortHeader
+				packet, idxTmp, err = newPacket(header, data[idx:])
+				if err != nil {
+					return nil, 0, err
+				}
 				packet.SetWire(data[idx:])
 			}
 		}
