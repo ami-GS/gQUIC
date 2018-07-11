@@ -201,8 +201,8 @@ func (s *Session) SendPacket(packet Packet) error {
 	}
 
 	s.mapMutex.Lock()
-	if ps, ok := packet.(*CoalescingPacket); ok {
-		for _, ps := range ps.packets {
+	if coalescingPacket, ok := packet.(CoalescingPacket); ok {
+		for _, ps := range coalescingPacket {
 			s.UnAckedPacket[ps.GetPacketNumber()] = ps
 		}
 	} else {

@@ -78,16 +78,20 @@ func (c *Client) run() {
 	for {
 		length, _, err := c.session.conn.Read(buffer)
 		if err != nil {
-			//
+			panic(err)
 		}
-		packet, _, err := ParsePacket(buffer[:length])
+		packets, _, err := ParsePackets(buffer[:length])
 		if err != nil {
-			//
+			panic(err)
 		}
-		err = c.handlePacket(packet)
-		if err != nil {
-			//
+
+		for _, p := range packets {
+			err = c.handlePacket(p)
+			if err != nil {
+				panic(err)
+			}
 		}
+
 	}
 }
 

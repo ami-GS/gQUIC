@@ -50,17 +50,19 @@ func (s *Server) Serve() error {
 			s.conn.Close()
 			return err
 		}
-		packet, _, err := ParsePacket(buffer[:length])
+		packets, _, err := ParsePackets(buffer[:length])
 		if err != nil {
 			// TODO: this type assertion is dangerous
 			_ = s.Close(err.(qtype.TransportError))
 			return err
 		}
 
-		err = s.handlePacket(remoteAddr, packet)
-		if err != nil {
-			s.conn.Close()
-			return err
+		for _, p := range packets {
+			err = s.handlePacket(remoteAddr, p)
+			if err != nil {
+				s.conn.Close()
+				return err
+			}
 		}
 	}
 }

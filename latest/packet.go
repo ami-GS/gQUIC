@@ -20,9 +20,9 @@ type Packet interface {
 	SetFrames(fs []Frame)
 }
 
-func ParsePacket(data []byte) (packet Packet, idx int, err error) {
+func ParsePackets(data []byte) (packets []Packet, idx int, err error) {
+	var packet Packet
 	var idxTmp int
-	packets := []Packet{}
 	for {
 		version := binary.BigEndian.Uint32(data[idx+1 : idx+5])
 		if version == 0 {
@@ -56,9 +56,9 @@ func ParsePacket(data []byte) (packet Packet, idx int, err error) {
 	}
 	if len(packets) > 1 {
 		return NewCoalescingPacket(packets), idx, err
-	} else {
-		return packet, idx, err
 	}
+	return []Packet{packet}, idx, err
+
 }
 
 type BasePacket struct {
@@ -572,29 +572,25 @@ func (p VersionNegotiationPacket) String() string {
 	return fmt.Sprintf("NoHeader:VersionNegotiationPacket\tVer:N/A(%d)\nDCIL:%d,SCIL:%d\n%s\nSupported Versions:%v", p.Version, p.DCIL, p.SCIL, p.BasePacketHeader, p.SupportedVersions)
 }
 
-type CoalescingPacket struct {
-	packets []Packet
-}
+type CoalescingPacket []Packet
 
-func NewCoalescingPacket(packets []Packet) *CoalescingPacket {
+func NewCoalescingPacket(packets []Packet) CoalescingPacket {
 	for i, p := range packets {
 		if _, ok := p.GetHeader().(*ShortHeader); ok && len(packets)-1 != i {
 			panic("short header packet should be set at the end of coalescing packet")
 		}
 	}
 
-	return &CoalescingPacket{
-		packets: packets,
-	}
+	return CoalescingPacket(packets)
 }
 
 func (ps CoalescingPacket) GetWire() ([]byte, error) {
-	wire, err := ps.packets[0].GetWire()
+	wire, err := ps[0].GetWire()
 	if err != nil {
 		return nil, err
 	}
-	for i := 1; i < len(ps.packets); i++ {
-		p := ps.packets[i]
+	for i := 1; i < len(ps); i++ {
+		p := ps[i]
 		w, err := p.GetWire()
 		if err != nil {
 			return nil, err
@@ -605,9 +601,9 @@ func (ps CoalescingPacket) GetWire() ([]byte, error) {
 }
 
 func (ps CoalescingPacket) String() string {
-	out := fmt.Sprintf("%s", ps.packets[0])
-	for i := 1; i < len(ps.packets); i++ {
-		out += fmt.Sprintf("\n%s", ps.packets[i])
+	out := fmt.Sprintf("%s", ps[0])
+	for i := 1; i < len(ps); i++ {
+		out += fmt.Sprintf("\n%s", ps[i])
 	}
 	return fmt.Sprintf("CoalescingPacket {\n%s}", out)
 }
