@@ -116,7 +116,7 @@ func (s *Session) Run() {
 			case frame := <-s.sendFrameChan:
 				//frames in sendFrameChan is already evaluated by sess.QueueFrame and stream.QueueFrame
 				size := frame.GetWireSize()
-				if byteSize+size > qtype.MTUIPv4 {
+				if byteSize+size > qtype.MaxPayloadSizeIPv4 {
 					// TODO: this should be problem
 					// big frame would never be sent
 					s.sendFrameChan <- frame
