@@ -118,8 +118,8 @@ func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 			// might be deleted after handling packet
 			s.sessionsMutex.Lock()
 			s.sessions[destID.String()] = sess
-			s.sessionsMutex.Unlock()
 			s.addrSessions[remoteAddr.String()] = sess
+			s.sessionsMutex.Unlock()
 		}
 	} else {
 		sess, ok = s.addrSessions[remoteAddr.String()]
@@ -160,16 +160,16 @@ func (s *Server) IsAcceptableSession(version qtype.Version, srcID, destID qtype.
 
 func (s *Server) DeleteSessionFromMap(ID qtype.ConnectionID) {
 	s.sessionsMutex.Lock()
+	defer s.sessionsMutex.Unlock()
 	delete(s.sessions, ID.String())
-	s.sessionsMutex.Unlock()
 }
 
 func (s *Server) ChangeConnectionID(fromID, toID qtype.ConnectionID) {
 	s.sessionsMutex.Lock()
+	defer s.sessionsMutex.Unlock()
 	session := s.sessions[fromID.String()]
 	delete(s.sessions, fromID.String())
 	s.sessions[toID.String()] = session
-	s.sessionsMutex.Unlock()
 }
 
 func (s *Server) SendVersionNegotiationPacket(srcID, destID qtype.ConnectionID, remoteAddr net.Addr) error {
