@@ -87,22 +87,23 @@ func (s *Server) Close(err qtype.TransportError) error {
 func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 	ph := packet.GetHeader()
 	srcID, destID := ph.GetConnectionIDPair()
-	lh, ok := ph.(*LongHeader)
+	lh, longHeaderOK := ph.(*LongHeader)
 	// need to check session existence?
-	if ok && !s.IsVersionSupported(lh.Version) {
+	if longHeaderOK && !s.IsVersionSupported(lh.Version) {
 		err := s.SendVersionNegotiationPacket(srcID, destID, remoteAddr)
 		if err != nil {
 		}
 		return nil
 	}
 
+	var ok bool
 	var sess *Session
 	if len(destID) != 0 {
 		s.sessionsMutex.Lock()
 		sess, ok = s.sessions[destID.String()]
 		s.sessionsMutex.Unlock()
 		if !ok {
-			if !s.IsAcceptableSession(lh.Version, srcID, destID, remoteAddr) {
+			if longHeaderOK && !s.IsAcceptableSession(lh.Version, srcID, destID, remoteAddr) {
 				return nil
 			}
 
@@ -112,7 +113,12 @@ func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 			// packet handler for each session on server is now defined in session.go
 			sess.packetHandler = sess
 			// TODO: be careful to use lh
-			sess.versionDecided = lh.Version
+			if longHeaderOK {
+				sess.versionDecided = lh.Version
+			} else {
+				// error ?
+				panic("not a long header")
+			}
 			go sess.Run()
 
 			// might be deleted after handling packet
