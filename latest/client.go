@@ -48,7 +48,7 @@ func DialAddr(addr string) (*Client, error) {
 	cli := &Client{
 		remoteAddr:        remoteAddr,
 		session:           NewSession(&Connection{conn: udpConn, remoteAddr: remoteAddr}, srcConnID, destConnID, true),
-		versionOffer:      qtype.VersionQuicTLS,
+		versionOffer:      qtype.VersionUnsupportedTest,
 		versionNegotiated: false,
 	}
 	cli.session.packetHandler = cli
@@ -64,8 +64,11 @@ func (c *Client) Connect() {
 
 	// first initial packet
 	destID, _ := qtype.NewConnectionID(nil)
-	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, destID, destID, nil, c.session.LastPacketNumber,
+	c.session.sendPacketChan <- //NewCoalescingPacket([]Packet{
+	NewInitialPacket(c.versionOffer, destID, destID, nil, c.session.LastPacketNumber,
 		[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message (ClientHello)"))})
+	//NewProtectedPacket0RTT(c.versionOffer, destID, destID, c.session.LastPacketNumber, []Frame{NewStreamFrame(0, 0, true, true, false, []byte("0-RTT[0]: STREAM[0, ...]"))}),
+	//})
 	c.session.DestConnID = destID
 	c.session.SrcConnID = destID
 
@@ -138,7 +141,7 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 	// WIP
 
 	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, c.session.DestConnID, c.session.SrcConnID, nil,
-		c.session.LastPacketNumber.Increase(),
+		c.session.LastPacketNumber,
 		[]Frame{NewCryptoFrame(0, []byte("second cryptographic handshake message for answering VersionNegotiation Packet"))})
 	return nil
 }
