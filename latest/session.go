@@ -194,6 +194,10 @@ func (s *Session) Write(data []byte) (n int, err error) {
 	return stream.(*SendStream).Write(data)
 }
 
+func (s *Session) SetFinishedStream(stream *RecvStream) {
+	s.streamManager.finishedStreams.Enqueue(stream)
+}
+
 func (s *Session) SendPacket(packet Packet) error {
 	wire, err := packet.GetWire()
 	if err != nil {

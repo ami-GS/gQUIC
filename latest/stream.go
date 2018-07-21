@@ -391,7 +391,7 @@ func (s *RecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
 
 	// discard data received
 	s.DataBuffer.DeleteAll()
-	s.sess.streamManager.finishedStreams.Enqueue(s)
+	s.sess.SetFinishedStream(s)
 	return nil
 }
 
@@ -428,8 +428,7 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 	s.ReceiveAllDetector = s.ReceiveAllDetector ^ offsetValue ^ (offsetValue - f.Length)
 	if s.State == qtype.StreamSizeKnown && s.ReceiveAllDetector != 0 && s.ReceiveAllDetector == s.DataSize {
 		s.State = qtype.StreamDataRecvd
-		// bellow is ugly
-		s.sess.streamManager.finishedStreams.Enqueue(s)
+		s.sess.SetFinishedStream(s)
 	}
 
 	s.UpdateStreamOffsetReceived(f.Offset)
