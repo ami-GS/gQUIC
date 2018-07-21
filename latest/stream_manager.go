@@ -7,15 +7,23 @@ import (
 	"github.com/ami-GS/gQUIC/latest/utils"
 )
 
+type signedChannel struct {
+	ch     chan struct{}
+	closed bool
+}
+
 type StreamManager struct {
 	streamMap map[qtype.StreamID]Stream
 	// would be RcvStream or SendRcvStream
-	finishedStreams *utils.RingBuffer
-	maxStreamIDUni  qtype.StreamID
-	nxtStreamIDUni  qtype.StreamID
-	maxStreamIDBidi qtype.StreamID
-	nxtStreamIDBidi qtype.StreamID
-	sess            *Session
+	finishedStreams    *utils.RingBuffer
+	maxStreamIDUni     qtype.StreamID
+	nxtSendStreamIDUni qtype.StreamID
+	maxStreamIDBidi    qtype.StreamID
+	nxtStreamIDBidi    qtype.StreamID
+	sess               *Session
+	// TODO: name should be considered
+	blockedIDs      map[qtype.StreamID]*signedChannel
+	blockedIDsMutex *sync.Mutex
 }
 
 func NewStreamManager(sess *Session) *StreamManager {
@@ -33,10 +41,12 @@ func NewStreamManager(sess *Session) *StreamManager {
 		sess:            sess,
 		finishedStreams: utils.NewRingBuffer(20),
 		// may be set after handshake, or MAX_STREAM_ID frame
-		maxStreamIDUni:  100,
-		nxtStreamIDUni:  nxtUniID,
-		maxStreamIDBidi: 100,
-		nxtStreamIDBidi: nxtBidiID,
+		maxStreamIDUni:     1,
+		nxtSendStreamIDUni: nxtUniID,
+		maxStreamIDBidi:    100,
+		nxtStreamIDBidi:    nxtBidiID,
+		blockedIDs:         make(map[qtype.StreamID]*signedChannel),
+		blockedIDsMutex:    new(sync.Mutex),
 	}
 }
 
@@ -56,15 +66,25 @@ func (s *StreamManager) IsValidID(streamID qtype.StreamID) error {
 }
 
 func (s *StreamManager) StartNewSendStream() (Stream, error) {
-	isNew := false
-	var err error
-	var stream Stream
-	for !isNew {
-		stream, isNew, err = s.GetOrNewStream(s.nxtStreamIDUni, true)
-		if err != nil {
-			return nil, err
-		}
-		s.nxtStreamIDUni.Increment()
+	targetID := s.nxtSendStreamIDUni
+	// TODO: atmic increment?
+	s.nxtSendStreamIDUni.Increment()
+
+	if targetID > s.maxStreamIDUni {
+		blockedChan := &signedChannel{make(chan struct{}), false}
+		s.blockedIDsMutex.Lock()
+		s.blockedIDs[targetID] = blockedChan
+		s.blockedIDsMutex.Unlock()
+		s.sess.sendFrameChan <- NewStreamIDBlockedFrame(targetID)
+
+		<-blockedChan.ch
+		delete(s.blockedIDs, targetID)
+		close(blockedChan.ch)
+	}
+
+	stream, _, err := s.GetOrNewStream(targetID, true)
+	if err != nil {
+		return nil, err
 	}
 	return stream, nil
 }
@@ -280,6 +300,14 @@ func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
 		}
 		s.maxStreamIDBidi = frame.StreamID
 	}
+	s.blockedIDsMutex.Lock()
+	for blockedID, val := range s.blockedIDs {
+		if !val.closed && sid >= blockedID {
+			val.closed = true
+			val.ch <- struct{}{}
+		}
+	}
+	s.blockedIDsMutex.Unlock()
 	return nil
 }
 
