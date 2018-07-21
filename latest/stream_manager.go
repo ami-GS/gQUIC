@@ -24,6 +24,8 @@ type StreamManager struct {
 	// TODO: name should be considered
 	blockedIDs      map[qtype.StreamID]*signedChannel
 	blockedIDsMutex *sync.Mutex
+
+	waitReadingChs *utils.RingBuffer
 }
 
 func NewStreamManager(sess *Session) *StreamManager {
@@ -47,6 +49,8 @@ func NewStreamManager(sess *Session) *StreamManager {
 		nxtStreamIDBidi:    nxtBidiID,
 		blockedIDs:         make(map[qtype.StreamID]*signedChannel),
 		blockedIDsMutex:    new(sync.Mutex),
+		// TODO: should be big enough and be able to configurable
+		waitReadingChs: utils.NewRingBuffer(30),
 	}
 }
 
@@ -341,6 +345,12 @@ func (s *StreamManager) resendBlockedFrames(blockedFrames *utils.RingBuffer) err
 }
 
 func (s *StreamManager) Read() ([]byte, error) {
+	if s.finishedStreams.Empty() {
+		waiting := make(chan struct{})
+		s.waitReadingChs.Enqueue(&waiting)
+		<-waiting
+		close(waiting)
+	}
 	stream, ok := s.finishedStreams.Dequeue().(*RecvStream)
 	if !ok || stream == nil {
 		return nil, nil

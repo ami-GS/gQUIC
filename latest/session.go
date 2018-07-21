@@ -196,6 +196,10 @@ func (s *Session) Write(data []byte) (n int, err error) {
 
 func (s *Session) SetFinishedStream(stream *RecvStream) {
 	s.streamManager.finishedStreams.Enqueue(stream)
+	if !s.streamManager.waitReadingChs.Empty() {
+		ch := s.streamManager.waitReadingChs.Dequeue().(*(chan struct{}))
+		*(ch) <- struct{}{}
+	}
 }
 
 func (s *Session) SendPacket(packet Packet) error {
