@@ -71,17 +71,13 @@ func (s *StreamManager) StartNewSendStream() (Stream, error) {
 
 func (s *StreamManager) GetOrNewStream(streamID qtype.StreamID, send bool) (st Stream, isNew bool, err error) {
 	if streamID == 0 {
-		return s.getOrNewSendRecvStream(streamID, s.sess)
+		return s.getOrNewBidiStream(streamID, s.sess)
 	}
 
 	if streamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
-		if send {
-			st, isNew, err = s.getOrNewSendStream(streamID, s.sess)
-		} else {
-			st, isNew, err = s.getOrNewRecvStream(streamID, s.sess)
-		}
+		st, isNew, err = s.getOrNewUniStream(streamID, s.sess, send)
 	} else {
-		st, isNew, err = s.getOrNewSendRecvStream(streamID, s.sess)
+		st, isNew, err = s.getOrNewBidiStream(streamID, s.sess)
 	}
 
 	if err != nil {
@@ -97,41 +93,42 @@ func (s *StreamManager) GetOrNewStream(streamID qtype.StreamID, send bool) (st S
 			return nil, false, err
 		}
 	}
+
 	return st, isNew, err
 }
 
-func (s *StreamManager) getOrNewRecvStream(streamID qtype.StreamID, sess *Session) (*RecvStream, bool, error) {
+func (s *StreamManager) getOrNewUniStream(streamID qtype.StreamID, sess *Session, send bool) (Stream, bool, error) {
 	stream, ok := s.streamMap[streamID]
+	// get
 	if ok {
+		if send {
+			st, ok := stream.(*SendStream)
+			if !ok {
+				// TODO: what error?
+				return nil, false, nil
+			}
+			return st, false, nil
+		}
 		st, ok := stream.(*RecvStream)
 		if !ok {
 			// TODO: what error?
 			return nil, false, nil
 		}
 		return st, false, nil
+
+	}
+	// new
+	if send {
+		st := newSendStream(streamID, sess)
+		s.streamMap[streamID] = st
+		return st, true, nil
 	}
 	st := newRecvStream(streamID, sess)
 	s.streamMap[streamID] = st
 	return st, true, nil
 }
 
-func (s *StreamManager) getOrNewSendStream(streamID qtype.StreamID, sess *Session) (*SendStream, bool, error) {
-	sidVal := streamID
-	stream, ok := s.streamMap[streamID]
-	if ok {
-		st, ok := stream.(*SendStream)
-		if !ok {
-			// TODO: what error?
-			return nil, false, nil
-		}
-		return st, false, nil
-	}
-	st := newSendStream(streamID, sess)
-	s.streamMap[sidVal] = st
-	return st, true, nil
-}
-
-func (s *StreamManager) getOrNewSendRecvStream(streamID qtype.StreamID, sess *Session) (*SendRecvStream, bool, error) {
+func (s *StreamManager) getOrNewBidiStream(streamID qtype.StreamID, sess *Session) (*SendRecvStream, bool, error) {
 	sidVal := streamID
 	stream, ok := s.streamMap[streamID]
 	if ok {
@@ -255,7 +252,14 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 
 func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) error {
 	// should be from sender stream which needs new ID, but could not open due to limit
-	s.sess.sendFrameChan <- NewMaxStreamIDFrame(frame.StreamID + 1)
+
+	if frame.StreamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
+		s.maxStreamIDUni = frame.StreamID
+	} else {
+		s.maxStreamIDBidi = frame.StreamID
+	}
+
+	s.sess.sendFrameChan <- NewMaxStreamIDFrame(frame.StreamID)
 	return nil
 }
 func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
