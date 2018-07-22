@@ -155,7 +155,7 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
 			return nil
 		case BothBlocked:
-			s.sess.blockedFramesOnConnection.Enqueue(frame) // avoid duplicate
+			s.blockedFramesOnStream.Enqueue(frame) // avoid duplicate
 			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID(), dataOffset))
 			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
 			return nil
