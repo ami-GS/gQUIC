@@ -24,6 +24,7 @@ type StreamManager struct {
 	// TODO: name should be considered
 	blockedIDs      map[qtype.StreamID]*signedChannel
 	blockedIDsMutex *sync.Mutex
+	handleMaxStreamIDMutex *sync.Mutex
 
 	waitReadingChs *utils.RingBuffer
 }
@@ -49,6 +50,7 @@ func NewStreamManager(sess *Session) *StreamManager {
 		nxtStreamIDBidi:    nxtBidiID,
 		blockedIDs:         make(map[qtype.StreamID]*signedChannel),
 		blockedIDsMutex:    new(sync.Mutex),
+		handleMaxStreamIDMutex:  new(sync.Mutex),
 		// TODO: should be big enough and be able to configurable
 		waitReadingChs: utils.NewRingBuffer(30),
 	}
@@ -288,7 +290,7 @@ func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) 
 }
 func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
 	sid := frame.StreamID
-
+	s.handleMaxStreamIDMutex.Lock()
 	if sid&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
 		if sid < s.maxStreamIDUni {
@@ -304,6 +306,8 @@ func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
 		}
 		s.maxStreamIDBidi = frame.StreamID
 	}
+	s.handleMaxStreamIDMutex.Unlock()
+
 	s.blockedIDsMutex.Lock()
 	for blockedID, val := range s.blockedIDs {
 		if !val.closed && sid >= blockedID {
