@@ -337,41 +337,44 @@ func (s *Session) maybeAckPacket(p Packet) {
 }
 
 func (s *Session) HandleFrames(fs []Frame) error {
-	var err error
-	for _, frame := range fs {
-		switch f := frame.(type) {
-		case *PaddingFrame:
-		case *ConnectionCloseFrame:
-			err = s.handleConnectionCloseFrame(f)
-		case *ApplicationCloseFrame:
-		case *MaxDataFrame:
-			err = s.handleMaxDataFrame(f)
-		case *PingFrame:
-		case *BlockedFrame:
-			err = s.handleBlockedFrame(f)
-		case *NewConnectionIDFrame:
-		case *AckFrame:
-			err = s.handleAckFrame(f)
-		case *PathChallengeFrame:
-			err = s.handlePathChallengeFrame(f)
-		case *PathResponseFrame:
-			err = s.handlePathResponseFrame(f)
-		case *CryptoFrame:
-			err = s.handleCryptoFrame(f)
-		case *AckEcnFrame:
-			err = s.handleAckEcnFrame(f)
-		case *NewTokenFrame:
-			err = s.handleNewTokenFrame(f)
-		case StreamLevelFrame:
-			err = s.streamManager.handleFrame(f)
-		default:
-			// error
-			//return nil
-		}
-		if err != nil {
-			//return err
-		}
+	// TODO: error should be handled appropriately
+	for _, oneFrame := range fs {
+		go func(frame Frame) {
+			var err error
+			switch f := frame.(type) {
+			case *PaddingFrame:
+			case *ConnectionCloseFrame:
+				err = s.handleConnectionCloseFrame(f)
+			case *ApplicationCloseFrame:
+			case *MaxDataFrame:
+				err = s.handleMaxDataFrame(f)
+			case *PingFrame:
+			case *BlockedFrame:
+				err = s.handleBlockedFrame(f)
+			case *NewConnectionIDFrame:
+			case *AckFrame:
+				err = s.handleAckFrame(f)
+			case *PathChallengeFrame:
+				err = s.handlePathChallengeFrame(f)
+			case *PathResponseFrame:
+				err = s.handlePathResponseFrame(f)
+			case *CryptoFrame:
+				err = s.handleCryptoFrame(f)
+			case *AckEcnFrame:
+				err = s.handleAckEcnFrame(f)
+			case *NewTokenFrame:
+				err = s.handleNewTokenFrame(f)
+			case StreamLevelFrame:
+				err = s.streamManager.handleFrame(f)
+			default:
+				panic("not supported Frame type")
+			}
+			if err != nil {
+				panic(err)
+			}
+		}(oneFrame)
 	}
+
 	return nil
 }
 
