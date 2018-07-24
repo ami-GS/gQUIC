@@ -36,7 +36,7 @@ type Session struct {
 
 	streamManager *StreamManager
 
-	flowContoller *ConnectionFlowController
+	flowController *ConnectionFlowController
 
 	AssembleFrameChan chan struct{}
 	WaitFrameTimeout  *time.Ticker
@@ -76,7 +76,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		sendFrameHPChan: make(chan Frame, 100),
 		sendPacketChan:  make(chan Packet, 100),
 		closeChan:       make(chan struct{}),
-		flowContoller: &ConnectionFlowController{
+		flowController: &ConnectionFlowController{
 			baseFlowController: baseFlowController{
 				MaxDataLimit: qtype.MaxPayloadSizeIPv4, //TODO: set appropriate
 			},
@@ -405,7 +405,7 @@ func (s *Session) QueueFrame(frame Frame) error {
 	case *ApplicationCloseFrame:
 	case *MaxDataFrame:
 		//TODO: controller should be prepared for both direction on Connection?
-		s.flowContoller.maybeUpdateMaxDataLimit(f.Data)
+		s.flowController.maybeUpdateMaxDataLimit(f.Data)
 	case *PingFrame:
 	case *BlockedFrame:
 	case *NewConnectionIDFrame:
@@ -433,7 +433,7 @@ func (s *Session) handleBlockedFrame(frame *BlockedFrame) error {
 }
 
 func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
-	if s.flowContoller.maybeUpdateMaxDataLimit(frame.Data) {
+	if s.flowController.maybeUpdateMaxDataLimit(frame.Data) {
 		err := s.streamManager.resendBlockedFrames(s.blockedFramesOnConnection)
 		if err != nil {
 			return err

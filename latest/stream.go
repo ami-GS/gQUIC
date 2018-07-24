@@ -80,7 +80,7 @@ func newSendStream(streamID qtype.StreamID, sess *Session) *SendStream {
 			// TODO: need to check default MAX_STREAM_DATA
 			flowcontroller: &StreamFlowController{
 				IsStreamZero: streamID == 0,
-				connFC:       sess.flowContoller,
+				connFC:       sess.flowController,
 				baseFlowController: baseFlowController{
 					MaxDataLimit: qtype.MaxPayloadSizeIPv4, // TODO: set appropriately
 				},
@@ -289,7 +289,7 @@ func newRecvStream(streamID qtype.StreamID, sess *Session) *RecvStream {
 			// TODO: need to check default MAX_DATA
 			flowcontroller: &StreamFlowController{
 				IsStreamZero: streamID == 0,
-				connFC:       sess.flowContoller,
+				connFC:       sess.flowController,
 				baseFlowController: baseFlowController{
 					MaxDataLimit: qtype.MaxPayloadSizeIPv4, // TODO: set appropriately
 				},
