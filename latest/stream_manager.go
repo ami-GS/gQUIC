@@ -22,8 +22,8 @@ type StreamManager struct {
 	nxtStreamIDBidi    qtype.StreamID
 	sess               *Session
 	// TODO: name should be considered
-	blockedIDs      map[qtype.StreamID]*signedChannel
-	blockedIDsMutex *sync.Mutex
+	blockedIDs             map[qtype.StreamID]*signedChannel
+	blockedIDsMutex        *sync.Mutex
 	handleMaxStreamIDMutex *sync.Mutex
 
 	waitReadingChs *utils.RingBuffer
@@ -82,9 +82,10 @@ func (s *StreamManager) StartNewSendStream() (Stream, error) {
 		s.blockedIDs[targetID] = blockedChan
 		s.blockedIDsMutex.Unlock()
 		s.sess.sendFrameChan <- NewStreamIDBlockedFrame(targetID)
-
 		<-blockedChan.ch
+		s.blockedIDsMutex.Lock()
 		delete(s.blockedIDs, targetID)
+		s.blockedIDsMutex.Unlock()
 		close(blockedChan.ch)
 	}
 
