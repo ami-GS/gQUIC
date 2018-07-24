@@ -26,6 +26,8 @@ type StreamManager struct {
 	blockedIDsMutex        *sync.Mutex
 	handleMaxStreamIDMutex *sync.Mutex
 
+	newUniStreamMutex  *sync.Mutex
+	newBidiStreamMutex *sync.Mutex
 	waitReadingChs *utils.RingBuffer
 }
 
@@ -51,6 +53,8 @@ func NewStreamManager(sess *Session) *StreamManager {
 		blockedIDs:         make(map[qtype.StreamID]*signedChannel),
 		blockedIDsMutex:    new(sync.Mutex),
 		handleMaxStreamIDMutex:  new(sync.Mutex),
+		newUniStreamMutex:       new(sync.Mutex),
+		newBidiStreamMutex:      new(sync.Mutex),
 		// TODO: should be big enough and be able to configurable
 		waitReadingChs: utils.NewRingBuffer(30),
 	}
@@ -125,6 +129,8 @@ func (s *StreamManager) GetOrNewStream(streamID qtype.StreamID, send bool) (st S
 }
 
 func (s *StreamManager) getOrNewUniStream(streamID qtype.StreamID, sess *Session, send bool) (Stream, bool, error) {
+	s.newUniStreamMutex.Lock()
+	defer s.newUniStreamMutex.Unlock()
 	stream, ok := s.streamMap[streamID]
 	// get
 	if ok {
@@ -156,7 +162,8 @@ func (s *StreamManager) getOrNewUniStream(streamID qtype.StreamID, sess *Session
 }
 
 func (s *StreamManager) getOrNewBidiStream(streamID qtype.StreamID, sess *Session) (*SendRecvStream, bool, error) {
-	sidVal := streamID
+	s.newBidiStreamMutex.Lock()
+	defer s.newBidiStreamMutex.Unlock()
 	stream, ok := s.streamMap[streamID]
 	if ok {
 		st, ok := stream.(*SendRecvStream)
@@ -167,7 +174,7 @@ func (s *StreamManager) getOrNewBidiStream(streamID qtype.StreamID, sess *Sessio
 		return st, false, nil
 	}
 	st := newSendRecvStream(streamID, sess)
-	s.streamMap[sidVal] = st
+	s.streamMap[streamID] = st
 	return st, true, nil
 }
 
