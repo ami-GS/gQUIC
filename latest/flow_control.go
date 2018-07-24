@@ -85,6 +85,7 @@ func (s *StreamFlowController) updateLargestSent(offset qtype.QuicInt) {
 
 type ConnectionFlowController struct {
 	baseFlowController
+	updateMutex *sync.Mutex
 }
 
 func (c *ConnectionFlowController) SendableByOffset(largestOffset qtype.QuicInt) FlowControlFlag {
@@ -102,6 +103,8 @@ func (c *ConnectionFlowController) ReceivableByOffset(largestOffset qtype.QuicIn
 }
 
 func (c *ConnectionFlowController) updateByteSent(largestOffset qtype.QuicInt) {
+	c.updateMutex.Lock()
+	defer c.updateMutex.Unlock()
 	c.bytesSent += largestOffset
 }
 func (c *ConnectionFlowController) updateByteReceived(largestOffset qtype.QuicInt) {

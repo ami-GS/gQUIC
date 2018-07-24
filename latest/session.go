@@ -80,6 +80,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 			baseFlowController: baseFlowController{
 				MaxDataLimit: qtype.MaxPayloadSizeIPv4, //TODO: set appropriate
 			},
+			updateMutex: new(sync.Mutex),
 		},
 		blockedFramesOnConnection: utils.NewRingBuffer(20),
 		// used for send frame ASAP after generate frame
@@ -426,6 +427,10 @@ func (s *Session) QueueFrame(frame Frame) error {
 
 	s.sendFrameChan <- frame
 	return err
+}
+
+func (s *Session) UpdateConnectionOffsetSent(offset qtype.QuicInt) {
+	s.flowController.updateByteSent(offset)
 }
 
 func (s *Session) handleBlockedFrame(frame *BlockedFrame) error {

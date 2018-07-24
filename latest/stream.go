@@ -152,12 +152,12 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 			return nil
 		case ConnectionBlocked:
 			s.sess.blockedFramesOnConnection.Enqueue(frame)
-			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
+			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset + s.sess.flowController.bytesSent))
 			return nil
 		case BothBlocked:
 			s.blockedFramesOnStream.Enqueue(frame) // avoid duplicate
 			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID(), dataOffset))
-			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset))
+			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset + s.sess.flowController.bytesSent))
 			return nil
 		}
 	case *StreamBlockedFrame:
@@ -202,10 +202,15 @@ func (s *SendStream) resendBlockedFrames() error {
 func (s *SendStream) sendStreamFrame(f *StreamFrame) error {
 	if s.State == qtype.StreamReady {
 		s.State = qtype.StreamSend
+
 	} else if s.State == qtype.StreamSend && f.Finish {
 		s.State = qtype.StreamDataSent
 	}
 	s.UpdateStreamOffsetSent(f.Offset)
+	if f.Finish {
+		s.sess.UpdateConnectionOffsetSent(f.Offset)
+	}
+
 	return nil
 }
 
@@ -218,6 +223,7 @@ func (s *SendStream) sendStreamBlockedFrame(f *StreamBlockedFrame) error {
 
 func (s *SendStream) sendRstStreamFrame(f *RstStreamFrame) error {
 	s.State = qtype.StreamResetSent
+	s.sess.UpdateConnectionOffsetSent(f.FinalOffset)
 	//TODO: ResetRecvd after Ack
 	return nil
 }
