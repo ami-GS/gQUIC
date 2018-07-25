@@ -28,6 +28,8 @@ type StreamManager struct {
 
 	newUniStreamMutex  *sync.Mutex
 	newBidiStreamMutex *sync.Mutex
+	resendMutex        *sync.Mutex
+
 	waitReadingChs *utils.RingBuffer
 }
 
@@ -55,6 +57,7 @@ func NewStreamManager(sess *Session) *StreamManager {
 		handleMaxStreamIDMutex:  new(sync.Mutex),
 		newUniStreamMutex:       new(sync.Mutex),
 		newBidiStreamMutex:      new(sync.Mutex),
+		resendMutex:             new(sync.Mutex),
 		// TODO: should be big enough and be able to configurable
 		waitReadingChs: utils.NewRingBuffer(30),
 	}
@@ -328,7 +331,8 @@ func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
 }
 
 func (s *StreamManager) resendBlockedFrames(blockedFrames *utils.RingBuffer) error {
-
+	s.resendMutex.Lock()
+	defer s.resendMutex.Unlock()
 	var stream Stream
 	var isNew bool
 	var err error

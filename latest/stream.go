@@ -68,6 +68,7 @@ type SendStream struct {
 	SendBuffer            []byte
 	blockedFramesOnStream *utils.RingBuffer
 	blockedFrameMutex     *sync.Mutex
+	queueingMutex         *sync.Mutex
 	stopSendingCh         chan struct{}
 }
 
@@ -88,6 +89,7 @@ func newSendStream(streamID qtype.StreamID, sess *Session) *SendStream {
 		},
 		blockedFramesOnStream: utils.NewRingBuffer(100),
 		blockedFrameMutex:     new(sync.Mutex),
+		queueingMutex:         new(sync.Mutex),
 		stopSendingCh:         make(chan struct{}, 1),
 		// TODO : need to be able to set initial windowsize
 		//FlowControllBlocked: false,
@@ -151,6 +153,9 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID(), dataOffset))
 			return nil
 		case ConnectionBlocked:
+			// Connection level blocked frame queue is shared, should be Locked
+			s.queueingMutex.Lock()
+			defer s.queueingMutex.Unlock()
 			s.sess.blockedFramesOnConnection.Enqueue(frame)
 			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset + s.sess.flowController.bytesSent))
 			return nil
