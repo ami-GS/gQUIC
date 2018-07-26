@@ -305,8 +305,9 @@ func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) 
 	return nil
 }
 func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
-	sid := frame.StreamID
 	s.handleMaxStreamIDMutex.Lock()
+	defer s.handleMaxStreamIDMutex.Unlock()
+	sid := frame.StreamID
 	if sid&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
 		if sid < s.maxStreamIDUni {
@@ -322,16 +323,15 @@ func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
 		}
 		s.maxStreamIDBidi = frame.StreamID
 	}
-	s.handleMaxStreamIDMutex.Unlock()
 
 	s.blockedIDsMutex.Lock()
+	defer s.blockedIDsMutex.Unlock()
 	for blockedID, val := range s.blockedIDs {
 		if !val.closed && sid >= blockedID {
 			val.closed = true
 			val.ch <- struct{}{}
 		}
 	}
-	s.blockedIDsMutex.Unlock()
 	return nil
 }
 
