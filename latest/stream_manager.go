@@ -15,12 +15,14 @@ type signedChannel struct {
 type StreamManager struct {
 	streamMap map[qtype.StreamID]Stream
 	// would be RcvStream or SendRcvStream
-	finishedStreams    *utils.RingBuffer
-	maxStreamIDUni     qtype.StreamID
-	nxtSendStreamIDUni qtype.StreamID
-	maxStreamIDBidi    qtype.StreamID
-	nxtStreamIDBidi    qtype.StreamID
-	sess               *Session
+	finishedStreams     *utils.RingBuffer
+	maxStreamIDUni      qtype.StreamID
+	maxStreamIDUniMutex *sync.Mutex
+	nxtSendStreamIDUni  qtype.StreamID
+
+	maxStreamIDBidi qtype.StreamID
+	nxtStreamIDBidi qtype.StreamID
+	sess            *Session
 	// TODO: name should be considered
 	blockedIDs             map[qtype.StreamID]*signedChannel
 	blockedIDsMutex        *sync.Mutex
@@ -48,12 +50,13 @@ func NewStreamManager(sess *Session) *StreamManager {
 		sess:            sess,
 		finishedStreams: utils.NewRingBuffer(20),
 		// may be set after handshake, or MAX_STREAM_ID frame
-		maxStreamIDUni:     1,
-		nxtSendStreamIDUni: nxtUniID,
-		maxStreamIDBidi:    100,
-		nxtStreamIDBidi:    nxtBidiID,
-		blockedIDs:         make(map[qtype.StreamID]*signedChannel),
-		blockedIDsMutex:    new(sync.Mutex),
+		maxStreamIDUni:          1,
+		maxStreamIDUniMutex:     new(sync.Mutex),
+		nxtSendStreamIDUni:      nxtUniID,
+		maxStreamIDBidi:         100,
+		nxtStreamIDBidi:         nxtBidiID,
+		blockedIDs:              make(map[qtype.StreamID]*signedChannel),
+		blockedIDsMutex:         new(sync.Mutex),
 		handleMaxStreamIDMutex:  new(sync.Mutex),
 		newUniStreamMutex:       new(sync.Mutex),
 		newBidiStreamMutex:      new(sync.Mutex),
@@ -289,12 +292,14 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 
 func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) error {
 	// should be from sender stream which needs new ID, but could not open due to limit
-
+	s.maxStreamIDUniMutex.Lock()
+	// TODO: these setter should be sender of MaxStreamID?
 	if frame.StreamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		s.maxStreamIDUni = frame.StreamID
 	} else {
 		s.maxStreamIDBidi = frame.StreamID
 	}
+	s.maxStreamIDUniMutex.Unlock()
 
 	s.sess.sendFrameChan <- NewMaxStreamIDFrame(frame.StreamID)
 	return nil
