@@ -10,6 +10,9 @@ type PacketNumber uint32
 
 const InitialPacketNumber PacketNumber = 0
 
+// 2^62 - 1
+const MaxPacketNumber = 4611686018427387903
+
 const PacketNumberIncreaseSize = 1
 
 // TODO: will be deprecated

@@ -167,7 +167,8 @@ RunLOOP:
 
 func (s *Session) Close(f *ConnectionCloseFrame) error {
 	if f != nil {
-		// f == nil when called by handleConnectinCloseFrame()
+		// f == nil when called by handleConnectinCloseFrame() and
+		// PacketNumber reaches maximum
 		s.QueueFrame(f)
 	}
 	_ = s.streamManager.CloseAllStream()
@@ -219,6 +220,11 @@ func (s *Session) SendPacket(packet Packet) error {
 	}
 	s.mapMutex.Unlock()
 	//s.sendPacketPreprocess(packet)
+
+	// NOTICE: unreachable as of now
+	if uint64(packet.GetPacketNumber()) == qtype.MaxPacketNumber {
+		s.Close(nil)
+	}
 	if LogLevel >= 1 {
 		host := "server"
 		if s.isClient {
