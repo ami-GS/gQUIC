@@ -43,8 +43,10 @@ type Session struct {
 
 	closeChan chan struct{}
 
-	PingTicker   *time.Ticker
-	timePingSent time.Time
+	PingTicker    *time.Ticker
+	pingInfoMutex *sync.Mutex
+	timePingSent  map[qtype.PacketNumber]time.Time
+	pingDuration  map[qtype.PacketNumber]time.Duration
 
 	versionDecided qtype.Version
 
@@ -95,6 +97,9 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		ackPacketQueueMutex: new(sync.Mutex),
 		UnAckedPacket:       make(map[qtype.PacketNumber]Packet),
 		mapMutex:            new(sync.Mutex),
+		pingInfoMutex:       new(sync.Mutex),
+		timePingSent:        make(map[qtype.PacketNumber]time.Time),
+		pingDuration:        make(map[qtype.PacketNumber]time.Duration),
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess
@@ -177,6 +182,10 @@ func (s *Session) Close(f *ConnectionCloseFrame) error {
 	return nil
 }
 
+func (s *Session) ping() {
+	s.sendFrameHPChan <- NewPingFrame()
+}
+
 // TODO: want to implement Read(data []byte) (n int, err error)
 func (s *Session) Read() (data []byte, err error) {
 	data, err = s.streamManager.Read()
@@ -219,12 +228,13 @@ func (s *Session) SendPacket(packet Packet) error {
 		s.UnAckedPacket[packet.GetPacketNumber()] = packet
 	}
 	s.mapMutex.Unlock()
-	//s.sendPacketPreprocess(packet)
 
 	// NOTICE: unreachable as of now
 	if uint64(packet.GetPacketNumber()) == qtype.MaxPacketNumber {
 		s.Close(nil)
 	}
+
+	s.preprocessWrittenPacket(packet)
 	if LogLevel >= 1 {
 		host := "server"
 		if s.isClient {
@@ -235,14 +245,15 @@ func (s *Session) SendPacket(packet Packet) error {
 	return s.conn.Write(wire)
 }
 
-func (s *Session) RecvPacketLoop() {
-	for {
-		select {
-		case p := <-s.recvPacketChan:
-			// TODO: parallel?
-			// would be possible, but need to use Mutex Lock
-			s.HandlePacket(p)
+func (s *Session) preprocessWrittenPacket(p Packet) {
+	for _, frame := range p.GetFrames() {
+		switch frame.GetType() {
+		case PingFrameType:
+			s.pingInfoMutex.Lock()
+			s.timePingSent[p.GetPacketNumber()] = time.Now()
+			s.pingInfoMutex.Unlock()
 		default:
+			//pass
 		}
 	}
 }
@@ -454,6 +465,8 @@ func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 }
 
 func (s *Session) handleAckFrame(frame *AckFrame) error {
+	//ackedPNs := make([]qtype.PacketNumber, 1+frame.AckBlockCount)
+	//idx := 0
 	var ackedPNs []qtype.PacketNumber
 	largest := frame.LargestAcked
 	for _, block := range frame.AckBlocks {
@@ -470,6 +483,17 @@ func (s *Session) handleAckFrame(frame *AckFrame) error {
 	s.mapMutex.Lock()
 	defer s.mapMutex.Unlock()
 	for _, pn := range ackedPNs {
+		// TODO: not good for performance?
+		if timeSent, ok := s.timePingSent[pn]; ok {
+			s.pingInfoMutex.Lock()
+			s.pingDuration[pn] = time.Now().Sub(timeSent)
+			delete(s.timePingSent, pn)
+			s.pingInfoMutex.Unlock()
+			if LogLevel >= 0 {
+				// TODO: needs more fancy output
+				log.Println(s.pingDuration)
+			}
+		}
 		// TODO: would accerelate by using slice, not map
 		// TODO: should have AckedPackets map for detect duplicate ack (SHOULD NOT be allowed)
 		delete(s.UnAckedPacket, pn)

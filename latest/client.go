@@ -15,6 +15,10 @@ type Client struct {
 	versionNegotiated bool
 }
 
+func (c *Client) Ping() {
+	c.session.ping()
+}
+
 func (s *Client) Send(data []byte) (int, error) {
 	return s.session.Write(data)
 }
