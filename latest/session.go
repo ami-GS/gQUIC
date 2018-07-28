@@ -454,19 +454,25 @@ func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 }
 
 func (s *Session) handleAckFrame(frame *AckFrame) error {
+	var ackedPNs []qtype.PacketNumber
 	largest := frame.LargestAcked
 	for _, block := range frame.AckBlocks {
 		if largest < 0 || largest < block.Block {
 			return qtype.FrameError | qtype.TransportError(AckFrameType)
 		}
 		for acked := largest; acked >= largest-block.Block; acked -= qtype.PacketNumberIncreaseSize {
-			// TODO: would accerelate by using slice, not map
-			// TODO: should have AckedPackets map for detect duplicate ack (SHOULD NOT be allowed)
-			s.mapMutex.Lock()
-			delete(s.UnAckedPacket, qtype.PacketNumber(acked))
-			s.mapMutex.Unlock()
+			//ackedPNs[idx] = qtype.PacketNumber(acked)
+			ackedPNs = append(ackedPNs, qtype.PacketNumber(acked))
 		}
 		largest -= block.Gap + 2
+	}
+
+	s.mapMutex.Lock()
+	defer s.mapMutex.Unlock()
+	for _, pn := range ackedPNs {
+		// TODO: would accerelate by using slice, not map
+		// TODO: should have AckedPackets map for detect duplicate ack (SHOULD NOT be allowed)
+		delete(s.UnAckedPacket, pn)
 	}
 
 	return nil
