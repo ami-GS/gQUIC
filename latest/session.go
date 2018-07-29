@@ -198,11 +198,7 @@ func (s *Session) Read() (data []byte, err error) {
 // Write() starts new Stream to send data
 func (s *Session) Write(data []byte) (n int, err error) {
 	// TODO: encrypt data
-	stream, err := s.streamManager.StartNewSendStream()
-	if err != nil {
-		return 0, err
-	}
-	return stream.(*SendStream).Write(data)
+	return s.streamManager.Write(data)
 }
 
 func (s *Session) SetFinishedStream(stream *RecvStream) {

@@ -103,32 +103,6 @@ func (s SendStream) IsTerminated() bool {
 	return s.State == qtype.StreamDataRecvd || s.State == qtype.StreamResetRecvd
 }
 
-func (s *SendStream) Write(data []byte) (n int, err error) {
-	// 2. loop to make packet which should have bellow or equal to MTUIPv4
-READ_LOOP:
-	for uint64(s.largestOffset) < uint64(len(data)) {
-		select {
-		case <-s.stopSendingCh:
-			break READ_LOOP
-		default:
-			remainLen := qtype.QuicInt(len(data[s.largestOffset:]))
-			if remainLen > qtype.MaxPayloadSizeIPv4 {
-				s.largestOffset += qtype.MaxPayloadSizeIPv4
-				err = s.QueueFrame(NewStreamFrame(s.ID, qtype.QuicInt(s.largestOffset),
-					true, true, false, data[s.largestOffset-qtype.MaxPayloadSizeIPv4:s.largestOffset]))
-			} else {
-				s.largestOffset += remainLen
-				err = s.QueueFrame(NewStreamFrame(s.ID, qtype.QuicInt(s.largestOffset),
-					true, true, true, data[s.largestOffset-remainLen:]))
-			}
-			if err != nil {
-				return 0, err
-			}
-		}
-	}
-	return len(data), err
-}
-
 // QueueFrame is used for validate the frame can be sent, and then queue the frame
 func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 	if s.IsTerminated() {
@@ -149,19 +123,6 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 		case StreamBlocked:
 			s.blockedFramesOnStream.Enqueue(frame)
 			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID(), dataOffset))
-			return nil
-		case ConnectionBlocked:
-			// Connection level blocked frame queue is shared, should be Locked
-			s.sess.streamManager.resendMutex.Lock()
-			defer s.sess.streamManager.resendMutex.Unlock()
-			s.sess.blockedFramesOnConnection.Enqueue(frame)
-			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset + s.sess.flowController.bytesSent))
-			return nil
-		case BothBlocked:
-			// TODO: implement hierarchical model
-			s.blockedFramesOnStream.Enqueue(frame) // avoid duplicate
-			err = s.QueueFrame(NewStreamBlockedFrame(s.GetID(), dataOffset))
-			err = s.sess.QueueFrame(NewBlockedFrame(dataOffset + s.sess.flowController.bytesSent))
 			return nil
 		}
 	case *StreamBlockedFrame:

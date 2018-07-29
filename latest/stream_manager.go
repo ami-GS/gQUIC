@@ -195,8 +195,19 @@ func (s *StreamManager) QueueFrame(f StreamLevelFrame) error {
 	var stream Stream
 	var err error
 	//var isNew bool
-	switch f.(type) {
-	case *StreamFrame, *RstStreamFrame, *StreamBlockedFrame:
+	switch frame := f.(type) {
+	case *StreamFrame:
+		if sid != 0 && frame.Finish {
+			if s.sess.flowController.SendableByOffset(frame.Offset) == ConnectionBlocked {
+				s.sess.streamManager.resendMutex.Lock()
+				s.sess.blockedFramesOnConnection.Enqueue(frame)
+				s.sess.streamManager.resendMutex.Unlock()
+				err = s.sess.QueueFrame(NewBlockedFrame(frame.Offset + s.sess.flowController.bytesSent))
+				return err
+			}
+		}
+		stream, _, err = s.GetOrNewStream(sid, true)
+	case *RstStreamFrame, *StreamBlockedFrame:
 		stream, _, err = s.GetOrNewStream(sid, true)
 	case *MaxStreamDataFrame, *StopSendingFrame:
 		stream, _, err = s.GetOrNewStream(sid, false)
@@ -386,6 +397,38 @@ func (s *StreamManager) Read() ([]byte, error) {
 	if isReset {
 	}
 	return data, nil
+}
+
+func (s *StreamManager) Write(data []byte) (n int, err error) {
+	streamI, err := s.StartNewSendStream()
+	stream := streamI.(*SendStream)
+	if err != nil {
+		return 0, err
+	}
+	//return stream.(*SendStream).Write(data)
+	// 2. loop to make packet which should have bellow or equal to MTUIPv4
+READ_LOOP:
+	for uint64(stream.largestOffset) < uint64(len(data)) {
+		select {
+		case <-stream.stopSendingCh:
+			break READ_LOOP
+		default:
+			remainLen := qtype.QuicInt(len(data[stream.largestOffset:]))
+			if remainLen > qtype.MaxPayloadSizeIPv4 {
+				stream.largestOffset += qtype.MaxPayloadSizeIPv4
+				err = s.QueueFrame(NewStreamFrame(stream.ID, qtype.QuicInt(stream.largestOffset),
+					true, true, false, data[stream.largestOffset-qtype.MaxPayloadSizeIPv4:stream.largestOffset]))
+			} else {
+				stream.largestOffset += remainLen
+				err = s.QueueFrame(NewStreamFrame(stream.ID, qtype.QuicInt(stream.largestOffset),
+					true, true, true, data[stream.largestOffset-remainLen:]))
+			}
+			if err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(data), err
 }
 
 func (s *StreamManager) CloseAllStream() error {
