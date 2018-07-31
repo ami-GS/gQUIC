@@ -19,6 +19,8 @@ type StreamManager struct {
 	maxStreamIDUni      qtype.StreamID
 	maxStreamIDUniMutex *sync.Mutex
 	nxtSendStreamIDUni  qtype.StreamID
+	// TODO: should be replaced by atomic add
+	nxtSendStreamIDUniMutex *sync.Mutex
 
 	maxStreamIDBidi qtype.StreamID
 	nxtStreamIDBidi qtype.StreamID
@@ -53,6 +55,7 @@ func NewStreamManager(sess *Session) *StreamManager {
 		maxStreamIDUni:          1,
 		maxStreamIDUniMutex:     new(sync.Mutex),
 		nxtSendStreamIDUni:      nxtUniID,
+		nxtSendStreamIDUniMutex: new(sync.Mutex),
 		maxStreamIDBidi:         100,
 		nxtStreamIDBidi:         nxtBidiID,
 		blockedIDs:              make(map[qtype.StreamID]*signedChannel),
@@ -82,10 +85,12 @@ func (s *StreamManager) IsValidID(streamID qtype.StreamID) error {
 }
 
 func (s *StreamManager) StartNewSendStream() (Stream, error) {
+	s.nxtSendStreamIDUniMutex.Lock()
 	targetID := s.nxtSendStreamIDUni
 	// TODO: atmic increment?
+	// looks not working well
 	s.nxtSendStreamIDUni.Increment()
-
+	s.nxtSendStreamIDUniMutex.Unlock()
 	if targetID > s.maxStreamIDUni {
 		blockedChan := &signedChannel{make(chan struct{}), false}
 		s.blockedIDsMutex.Lock()
