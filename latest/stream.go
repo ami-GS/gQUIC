@@ -172,10 +172,7 @@ func (s *SendStream) sendStreamFrame(f *StreamFrame) error {
 		s.State = qtype.StreamDataSent
 	}
 	s.UpdateStreamOffsetSent(f.Offset)
-	if f.Finish {
-		s.sess.UpdateConnectionOffsetSent(f.Offset)
-	}
-
+	// update for connection was already done in stream_manager
 	return nil
 }
 

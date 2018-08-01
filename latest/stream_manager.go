@@ -190,9 +190,8 @@ func (s *StreamManager) getOrNewBidiStream(streamID qtype.StreamID, sess *Sessio
 }
 
 // called from session.QueueFrame(f)
-func (s *StreamManager) QueueFrame(f StreamLevelFrame) error {
+func (s *StreamManager) QueueFrame(stream Stream, f StreamLevelFrame) error {
 	sid := f.GetStreamID()
-	var stream Stream
 	var err error
 	//var isNew bool
 	switch frame := f.(type) {
@@ -205,12 +204,19 @@ func (s *StreamManager) QueueFrame(f StreamLevelFrame) error {
 				err = s.sess.QueueFrame(NewBlockedFrame(frame.Offset + s.sess.flowController.bytesSent))
 				return err
 			}
+			s.sess.UpdateConnectionOffsetSent(frame.Offset)
 		}
-		stream, _, err = s.GetOrNewStream(sid, true)
+		if stream == nil {
+			stream, _, err = s.GetOrNewStream(sid, true)
+		}
 	case *RstStreamFrame, *StreamBlockedFrame:
-		stream, _, err = s.GetOrNewStream(sid, true)
+		if stream == nil {
+			stream, _, err = s.GetOrNewStream(sid, true)
+		}
 	case *MaxStreamDataFrame, *StopSendingFrame:
-		stream, _, err = s.GetOrNewStream(sid, false)
+		if stream == nil {
+			stream, _, err = s.GetOrNewStream(sid, false)
+		}
 	case *MaxStreamIDFrame:
 		// this is special, affect only stream_manager
 		//s.sess.sendFrameChan <- f
@@ -352,28 +358,28 @@ func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
 }
 
 func (s *StreamManager) resendBlockedFrames(blockedFrames *utils.RingBuffer) error {
-	s.resendMutex.Lock()
-	defer s.resendMutex.Unlock()
 	var stream Stream
 	var isNew bool
 	var err error
 	sID := qtype.StreamID(0)
+	s.resendMutex.Lock()
 	size := blockedFrames.Size()
+	s.resendMutex.Unlock()
 	for i := 0; i < size; i++ {
+		s.resendMutex.Lock()
 		frame := blockedFrames.Dequeue().(*StreamFrame)
-		if sID != frame.GetStreamID() {
-			sID = frame.GetStreamID()
-			stream, isNew, err = s.GetOrNewStream(sID, true)
-			if err != nil {
-				return err
-			}
-			if isNew {
-				delete(s.streamMap, sID)
-				return nil
-			}
+		s.resendMutex.Unlock()
+		sID = frame.GetStreamID()
+		stream, isNew, err = s.GetOrNewStream(sID, true)
+		if err != nil {
+			return err
 		}
-		// TODO: stream might be nil
-		err := stream.(*SendStream).QueueFrame(frame)
+		if isNew {
+			// error
+			delete(s.streamMap, sID)
+			panic("New stream creation for resending frame")
+		}
+		err := s.QueueFrame(stream, frame)
 		if err != nil {
 			return err
 		}
@@ -416,11 +422,11 @@ READ_LOOP:
 			remainLen := qtype.QuicInt(len(data[stream.largestOffset:]))
 			if remainLen > qtype.MaxPayloadSizeIPv4 {
 				stream.largestOffset += qtype.MaxPayloadSizeIPv4
-				err = s.QueueFrame(NewStreamFrame(stream.ID, qtype.QuicInt(stream.largestOffset),
+				err = s.QueueFrame(stream, NewStreamFrame(stream.ID, qtype.QuicInt(stream.largestOffset),
 					true, true, false, data[stream.largestOffset-qtype.MaxPayloadSizeIPv4:stream.largestOffset]))
 			} else {
 				stream.largestOffset += remainLen
-				err = s.QueueFrame(NewStreamFrame(stream.ID, qtype.QuicInt(stream.largestOffset),
+				err = s.QueueFrame(stream, NewStreamFrame(stream.ID, qtype.QuicInt(stream.largestOffset),
 					true, true, true, data[stream.largestOffset-remainLen:]))
 			}
 			if err != nil {

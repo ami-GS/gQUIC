@@ -431,7 +431,7 @@ func (s *Session) QueueFrame(frame Frame) error {
 	case *AckEcnFrame:
 	case *NewTokenFrame:
 	case StreamLevelFrame:
-		err = s.streamManager.QueueFrame(f)
+		err = s.streamManager.QueueFrame(nil, f)
 		return err
 	default:
 		// error
