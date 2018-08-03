@@ -47,17 +47,11 @@ const (
 	BothBlocked FlowControlFlag = 6
 )
 
-func (s *StreamFlowController) SendableByOffset(offset qtype.QuicInt, fin bool) FlowControlFlag {
-	connSendable := Sendable
-	streamSendable := Sendable
-	if !s.IsStreamZero && fin {
-		connSendable = s.connFC.SendableByOffset(offset)
-	}
-	// TODO: stream 0 can exceed the limit until handshake is finished
+func (s *StreamFlowController) SendableByOffset(offset qtype.QuicInt) FlowControlFlag {
 	if offset > s.MaxDataLimit {
-		streamSendable = StreamBlocked
+		return StreamBlocked
 	}
-	return connSendable * streamSendable
+	return Sendable
 }
 
 func (s *StreamFlowController) ReceivableByOffset(offset qtype.QuicInt, fin bool) error {

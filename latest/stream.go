@@ -117,7 +117,7 @@ func (s *SendStream) QueueFrame(f StreamLevelFrame) (err error) {
 			return nil
 		}
 		dataOffset := frame.Offset
-		switch s.flowcontroller.SendableByOffset(dataOffset, frame.Finish) {
+		switch s.flowcontroller.SendableByOffset(dataOffset) {
 		case Sendable:
 			err = s.sendStreamFrame(frame)
 		case StreamBlocked:
