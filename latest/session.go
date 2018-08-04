@@ -43,10 +43,7 @@ type Session struct {
 
 	closeChan chan struct{}
 
-	PingTicker    *time.Ticker
-	pingInfoMutex *sync.Mutex
-	timePingSent  map[qtype.PacketNumber]time.Time
-	pingDuration  map[qtype.PacketNumber]time.Duration
+	pingHelper *PingHelper
 
 	versionDecided qtype.Version
 
@@ -90,16 +87,13 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		// TODO: this would be configurable
 		WaitFrameTimeout: time.NewTicker(10 * time.Millisecond),
 		// TODO: this should be configured by transport parameter
-		PingTicker:          time.NewTicker(15 * time.Second),
 		versionDecided:      qtype.VersionPlaceholder,
 		LastPacketNumber:    qtype.InitialPacketNumber,
 		ackPacketQueue:      h,
 		ackPacketQueueMutex: new(sync.Mutex),
 		UnAckedPacket:       make(map[qtype.PacketNumber]Packet),
 		mapMutex:            new(sync.Mutex),
-		pingInfoMutex:       new(sync.Mutex),
-		timePingSent:        make(map[qtype.PacketNumber]time.Time),
-		pingDuration:        make(map[qtype.PacketNumber]time.Duration),
+		pingHelper:          NewPingHelper(15 * time.Second),
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess
@@ -153,7 +147,7 @@ RunLOOP:
 				continue
 			}
 			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), frames))
-		case <-s.PingTicker.C:
+		case <-s.pingHelper.Ticker.C:
 			// currently 1 packet per 1 ping
 			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), []Frame{NewPingFrame()}))
 		case f := <-s.sendFrameHPChan:
@@ -245,9 +239,7 @@ func (s *Session) preprocessWrittenPacket(p Packet) {
 	for _, frame := range p.GetFrames() {
 		switch frame.GetType() {
 		case PingFrameType:
-			s.pingInfoMutex.Lock()
-			s.timePingSent[p.GetPacketNumber()] = time.Now()
-			s.pingInfoMutex.Unlock()
+			s.pingHelper.storeSendTime(p.GetPacketNumber())
 		default:
 			//pass
 		}
@@ -480,16 +472,7 @@ func (s *Session) handleAckFrame(frame *AckFrame) error {
 	defer s.mapMutex.Unlock()
 	for _, pn := range ackedPNs {
 		// TODO: not good for performance?
-		if timeSent, ok := s.timePingSent[pn]; ok {
-			s.pingInfoMutex.Lock()
-			s.pingDuration[pn] = time.Now().Sub(timeSent)
-			delete(s.timePingSent, pn)
-			s.pingInfoMutex.Unlock()
-			if LogLevel >= 0 {
-				// TODO: needs more fancy output
-				log.Println(s.pingDuration)
-			}
-		}
+		s.pingHelper.calcPingDuration(pn)
 		// TODO: would accerelate by using slice, not map
 		// TODO: should have AckedPackets map for detect duplicate ack (SHOULD NOT be allowed)
 		delete(s.UnAckedPacket, pn)
