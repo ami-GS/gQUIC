@@ -54,15 +54,7 @@ func (s *StreamFlowController) SendableByOffset(offset qtype.QuicInt) FlowContro
 	return Sendable
 }
 
-func (s *StreamFlowController) ReceivableByOffset(offset qtype.QuicInt, fin bool) error {
-	if !s.IsStreamZero && fin {
-		err := s.connFC.ReceivableByOffset(offset)
-		if err != nil {
-			return err
-		}
-	}
-
-	// TODO: stream 0 can exceed the limit until handshake is finished
+func (s *StreamFlowController) ReceivableByOffset(offset qtype.QuicInt) error {
 	if offset > s.MaxDataLimit {
 		return qtype.FlowControlError
 	}

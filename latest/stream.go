@@ -370,7 +370,7 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 	}
 
 	offsetValue := f.Offset
-	err := s.flowcontroller.ReceivableByOffset(offsetValue, f.Finish)
+	err := s.flowcontroller.ReceivableByOffset(offsetValue)
 	if err != nil {
 		return err
 	}

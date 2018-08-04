@@ -265,6 +265,12 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 		if err != nil {
 			return err
 		}
+		if sid != 0 && frame.Finish {
+			err := s.sess.flowController.ReceivableByOffset(frame.Offset)
+			if err != nil {
+				return err
+			}
+		}
 		err = stream.handleStreamFrame(frame)
 	case *RstStreamFrame:
 		stream, _, err = s.GetOrNewStream(sid, false)
