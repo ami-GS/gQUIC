@@ -75,13 +75,8 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		sendFrameHPChan: make(chan Frame, 100),
 		sendPacketChan:  make(chan Packet, 100),
 		closeChan:       make(chan struct{}),
-		flowController: &ConnectionFlowController{
-			baseFlowController: baseFlowController{
-				MaxDataLimit: qtype.MaxPayloadSizeIPv4, //TODO: set appropriate
-			},
-			updateMutex: new(sync.Mutex),
-		},
-		blockedFramesOnConnection: utils.NewRingBuffer(20),
+		flowController:            NewConnectionFlowController(),
+		blockedFramesOnConnection: utils.NewRingBuffer(256),
 		// used for send frame ASAP after generate frame
 		AssembleFrameChan: make(chan struct{}, 1),
 		// TODO: this would be configurable

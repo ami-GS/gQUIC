@@ -78,13 +78,7 @@ func newSendStream(streamID qtype.StreamID, sess *Session) *SendStream {
 			State: qtype.StreamReady,
 			sess:  sess,
 			// TODO: need to check default MAX_STREAM_DATA
-			flowcontroller: &StreamFlowController{
-				IsStreamZero: streamID == 0,
-				connFC:       sess.flowController,
-				baseFlowController: baseFlowController{
-					MaxDataLimit: qtype.MaxPayloadSizeIPv4, // TODO: set appropriately
-				},
-			},
+			flowcontroller: NewStreamFlowController(streamID == 0, sess.flowController),
 		},
 		blockedFramesOnStream: utils.NewRingBuffer(100),
 		blockedFrameMutex:     new(sync.Mutex),
@@ -255,13 +249,7 @@ func newRecvStream(streamID qtype.StreamID, sess *Session) *RecvStream {
 			State: qtype.StreamRecv,
 			sess:  sess,
 			// TODO: need to check default MAX_DATA
-			flowcontroller: &StreamFlowController{
-				IsStreamZero: streamID == 0,
-				connFC:       sess.flowController,
-				baseFlowController: baseFlowController{
-					MaxDataLimit: qtype.MaxPayloadSizeIPv4, // TODO: set appropriately
-				},
-			},
+			flowcontroller: NewStreamFlowController(streamID == 0, sess.flowController),
 		},
 		// TODO: need to adjust buffer size for data transfered
 		DataBuffer: utils.NewRingBuffer(100),

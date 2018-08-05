@@ -37,6 +37,16 @@ type StreamFlowController struct {
 	connFC *ConnectionFlowController
 }
 
+func NewStreamFlowController(isZero bool, connFC *ConnectionFlowController) *StreamFlowController {
+	return &StreamFlowController{
+		IsStreamZero: isZero,
+		connFC:       connFC,
+		baseFlowController: baseFlowController{
+			MaxDataLimit: qtype.MaxPayloadSizeIPv4, // TODO: set appropriately
+		},
+	}
+}
+
 type FlowControlFlag byte
 
 const (
@@ -72,6 +82,15 @@ func (s *StreamFlowController) updateLargestSent(offset qtype.QuicInt) {
 type ConnectionFlowController struct {
 	baseFlowController
 	updateMutex *sync.Mutex
+}
+
+func NewConnectionFlowController() *ConnectionFlowController {
+	return &ConnectionFlowController{
+		baseFlowController: baseFlowController{
+			MaxDataLimit: qtype.MaxPayloadSizeIPv4, //TODO: set appropriate
+		},
+		updateMutex: new(sync.Mutex),
+	}
 }
 
 func (c *ConnectionFlowController) SendableByOffset(largestOffset qtype.QuicInt) FlowControlFlag {
