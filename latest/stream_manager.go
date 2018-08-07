@@ -84,6 +84,19 @@ func (s *StreamManager) IsValidID(streamID qtype.StreamID) error {
 	return nil
 }
 
+func (s *StreamManager) requestMaxStreamID(targetID qtype.StreamID) {
+	blockedChan := &signedChannel{make(chan struct{}), false}
+	s.blockedIDsMutex.Lock()
+	s.blockedIDs[targetID] = blockedChan
+	s.blockedIDsMutex.Unlock()
+	s.sess.sendFrameChan <- NewStreamIDBlockedFrame(targetID)
+	<-blockedChan.ch
+	s.blockedIDsMutex.Lock()
+	delete(s.blockedIDs, targetID)
+	s.blockedIDsMutex.Unlock()
+	close(blockedChan.ch)
+}
+
 func (s *StreamManager) StartNewSendStream() (Stream, error) {
 	s.nxtSendStreamIDUniMutex.Lock()
 	targetID := s.nxtSendStreamIDUni
@@ -92,16 +105,7 @@ func (s *StreamManager) StartNewSendStream() (Stream, error) {
 	s.nxtSendStreamIDUni.Increment()
 	s.nxtSendStreamIDUniMutex.Unlock()
 	if targetID > s.maxStreamIDUni {
-		blockedChan := &signedChannel{make(chan struct{}), false}
-		s.blockedIDsMutex.Lock()
-		s.blockedIDs[targetID] = blockedChan
-		s.blockedIDsMutex.Unlock()
-		s.sess.sendFrameChan <- NewStreamIDBlockedFrame(targetID)
-		<-blockedChan.ch
-		s.blockedIDsMutex.Lock()
-		delete(s.blockedIDs, targetID)
-		s.blockedIDsMutex.Unlock()
-		close(blockedChan.ch)
+		s.requestMaxStreamID(targetID)
 	}
 
 	stream, _, err := s.GetOrNewStream(targetID, true)
@@ -393,12 +397,16 @@ func (s *StreamManager) resendBlockedFrames(blockedFrames *utils.RingBuffer) err
 	return nil
 }
 
+func (s *StreamManager) waitData() {
+	waiting := make(chan struct{})
+	s.waitReadingChs.Enqueue(&waiting)
+	<-waiting
+	close(waiting)
+}
+
 func (s *StreamManager) Read() ([]byte, error) {
 	if s.finishedStreams.Empty() {
-		waiting := make(chan struct{})
-		s.waitReadingChs.Enqueue(&waiting)
-		<-waiting
-		close(waiting)
+		s.waitData()
 	}
 	stream, ok := s.finishedStreams.Dequeue().(*RecvStream)
 	if !ok || stream == nil {
