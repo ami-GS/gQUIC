@@ -36,14 +36,18 @@ func ParsePackets(data []byte) (packets []Packet, idx int, err error) {
 			idx += idxTmp
 
 			if lh, ok := header.(*LongHeader); ok {
-				packet, idxTmp, err = newPacket(header, data[idx:idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
-				if err != nil {
-					return nil, 0, err
-				}
+				if lh.PacketType == RetryPacketType {
+					packet, idxTmp, err = ParseRetryPacket(lh, data)
+				} else {
 
-				packet.SetWire(data[idx : idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
-				if lh.PacketType == InitialPacketType {
-				} else if lh.PacketType == RetryPacketType {
+					packet, idxTmp, err = newPacket(header, data[idx:idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
+					if err != nil {
+						return nil, 0, err
+					}
+
+					packet.SetWire(data[idx : idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
+					if lh.PacketType == InitialPacketType {
+					}
 				}
 			} else { // ShortHeader
 				packet, idxTmp, err = newPacket(header, data[idx:])
@@ -298,6 +302,26 @@ func (ip *InitialPacket) GetWire() (wire []byte, err error) {
 	return append(hWire, ip.payload...), nil
 }
 
+/*
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+
+   |1|    0x7e     |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                         Version (32)                          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |DCIL(4)|SCIL(4)|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |               Destination Connection ID (0/32..144)         ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                 Source Connection ID (0/32..144)            ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |    ODCIL(8)   |      Original Destination Connection ID (*)   |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        Retry Token (*)                      ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
 // long header with type of 0x7E
 type RetryPacket struct {
 	*BasePacket
@@ -306,17 +330,34 @@ type RetryPacket struct {
 	RetryToken         []byte
 }
 
-func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, originalDestConnID qtype.ConnectionID, retryToken []byte, packetNumber qtype.PacketNumber) *RetryPacket {
-	length := 1 + len(originalDestConnID) + len(retryToken) + packetNumber.GetByteLen()
+func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, originalDestConnID qtype.ConnectionID, retryToken []byte) *RetryPacket {
 	return &RetryPacket{
 		BasePacket: &BasePacket{
-			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length)),
+			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, 0, qtype.QuicInt(0)),
 			Frames: nil,
 		},
 		ODCIL:              byte(len(originalDestConnID)),
 		OriginalDestConnID: originalDestConnID,
 		RetryToken:         retryToken,
 	}
+}
+
+func ParseRetryPacket(header *LongHeader, data []byte) (Packet, int, error) {
+	p := &RetryPacket{
+		BasePacket: &BasePacket{
+			Header: header,
+			Frames: nil,
+		},
+	}
+	var err error
+	p.ODCIL = data[0]
+	p.OriginalDestConnID, err = qtype.ReadConnectionID(data[1:], int(p.ODCIL))
+	if err != nil {
+		return nil, 0, err
+	}
+	// TODO: token length?
+	p.RetryToken = data[1+p.ODCIL:]
+	return p, len(data), err
 }
 
 // TODO: can be optimized
@@ -330,7 +371,8 @@ func (rp *RetryPacket) GetWire() (wire []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	hWire = append(hWire, append([]byte{rp.ODCIL}, append(rp.OriginalDestConnID.Bytes(), rp.RetryToken...)...)...)
+	partialLength := 6 + rp.Header.(*LongHeader).DCIL + rp.Header.(*LongHeader).SCIL + 6
+	hWire = append(hWire[:partialLength], append([]byte{rp.ODCIL}, append(rp.OriginalDestConnID.Bytes(), rp.RetryToken...)...)...)
 
 	if rp.Frames != nil {
 		rp.payload, err = GetFrameWires(rp.Frames)
