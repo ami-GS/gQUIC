@@ -3,6 +3,7 @@ package quiclatest
 import (
 	"encoding/binary"
 	"fmt"
+	"math/rand"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
@@ -298,6 +299,8 @@ func (sh ShortHeader) genWire() (wire []byte, err error) {
 	connIDLen := len(sh.DestConnID)
 	wire = make([]byte, 1+connIDLen+sh.PacketNumber.GetByteLen())
 	wire[0] = byte(sh.PacketType)
+	// set reserved bit randomely for security reason
+	wire[0] |= byte(rand.Intn(7))
 	idx := 1
 	if connIDLen != 0 {
 		copy(wire[idx:idx+connIDLen], sh.DestConnID)
