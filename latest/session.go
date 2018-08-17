@@ -603,7 +603,7 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 		//TODO: should be hash?
 		s.RetryPacketTokenSent = "not sure what should be here"
 		s.sendPacketChan <- NewRetryPacket(s.versionDecided, s.DestConnID, s.SrcConnID, originalDestID,
-			[]byte(s.RetryPacketTokenSent), p.GetPacketNumber())
+			[]byte(s.RetryPacketTokenSent))
 	}
 	return nil
 }

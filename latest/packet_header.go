@@ -187,6 +187,10 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 		}
 		idx += scil
 	}
+	if lh.PacketType == RetryPacketType {
+		lh.wire = data[:idx]
+		return lh, idx, nil
+	}
 	lh.Length = qtype.DecodeQuicInt(data[idx:])
 	idx += lh.Length.GetByteLen()
 	lh.PacketNumber = qtype.DecodePacketNumber(data[idx:])

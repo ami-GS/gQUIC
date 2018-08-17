@@ -37,7 +37,7 @@ func ParsePackets(data []byte) (packets []Packet, idx int, err error) {
 
 			if lh, ok := header.(*LongHeader); ok {
 				if lh.PacketType == RetryPacketType {
-					packet, idxTmp, err = ParseRetryPacket(lh, data)
+					packet, idxTmp, err = ParseRetryPacket(lh, data[idx:])
 				} else {
 
 					packet, idxTmp, err = newPacket(header, data[idx:idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
