@@ -191,6 +191,9 @@ func ParseLongHeader(data []byte) (PacketHeader, int, error) {
 	if lh.PacketType == RetryPacketType {
 		lh.wire = data[:idx]
 		return lh, idx, nil
+	} else if lh.PacketType == InitialPacketType {
+		lh.wire = data[:idx]
+		return lh, idx, nil
 	}
 	lh.Length = qtype.DecodeQuicInt(data[idx:])
 	idx += lh.Length.GetByteLen()
@@ -205,7 +208,10 @@ func (lh LongHeader) String() string {
 }
 
 func (lh LongHeader) genWire() (wire []byte, err error) {
-	wireLen := int(6 + lh.Length.GetByteLen() + lh.PacketNumber.GetByteLen())
+	wireLen := 6
+	if lh.PacketType != InitialPacketType && lh.PacketType != RetryPacketType {
+		wireLen += int(lh.Length.GetByteLen() + lh.PacketNumber.GetByteLen())
+	}
 	if lh.DCIL != 0 {
 		wireLen += int(lh.DCIL + 3)
 	}
@@ -224,6 +230,10 @@ func (lh LongHeader) genWire() (wire []byte, err error) {
 	if lh.SCIL != 0 {
 		copy(wire[idx:], lh.SrcConnID.Bytes())
 		idx += int(lh.SCIL + 3)
+	}
+	if lh.PacketType == InitialPacketType || lh.PacketType == RetryPacketType {
+		// These packets are exceptional
+		return
 	}
 	lh.Length.PutWire(wire[idx:])
 	idx += lh.Length.GetByteLen()

@@ -357,21 +357,21 @@ func ParseRetryPacket(header *LongHeader, data []byte) (Packet, int, error) {
 	}
 	// TODO: token length?
 	p.RetryToken = data[1+p.ODCIL:]
+	// this is not payload strictly saying, but storing
+	p.payload = data
 	return p, len(data), err
 }
 
 // TODO: can be optimized
 func (rp *RetryPacket) GetWire() (wire []byte, err error) {
-	if rp.payload != nil {
-		// bp.wire is filled after parsing
-		return append(rp.Header.GetWire(), rp.payload...), nil
-	}
 	// TODO: PutWire([]byte) is better?
 	hWire := rp.Header.GetWire()
-	if err != nil {
-		return nil, err
+	if rp.payload != nil {
+		// bp.wire is filled after parsing
+		return append(hWire, rp.payload...), nil
 	}
-	partialLength := 6 + rp.Header.(*LongHeader).DCIL + rp.Header.(*LongHeader).SCIL + 6
+	lh := rp.Header.(*LongHeader)
+	partialLength := 6 + lh.DCIL + lh.SCIL + 6
 	hWire = append(hWire[:partialLength], append([]byte{rp.ODCIL}, append(rp.OriginalDestConnID.Bytes(), rp.RetryToken...)...)...)
 
 	if rp.Frames != nil {
