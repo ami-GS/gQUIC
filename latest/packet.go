@@ -38,8 +38,24 @@ func ParsePackets(data []byte) (packets []Packet, idx int, err error) {
 			if lh, ok := header.(*LongHeader); ok {
 				if lh.PacketType == RetryPacketType {
 					packet, idxTmp, err = ParseRetryPacket(lh, data[idx:])
-				} else {
+				} else if lh.PacketType == InitialPacketType {
+					packet, idxTmp, err = ParseInitialPacket(lh, data[idx:])
+					idx += idxTmp
+					fs, idxTmp, err := ParseFrames(data[idx:])
+					if err != nil {
+						return nil, 0, err
+					}
+					packet.SetFrames(fs)
+					if initialPacket, ok := packet.(*InitialPacket); ok {
+						length := lh.getPacketNumber().GetByteLen()
+						for _, frame := range fs {
+							length += frame.GetWireSize()
+						}
 
+						initialPacket.PaddingNum = InitialPacketMinimumPayloadSize - length
+					}
+					idx += idxTmp
+				} else {
 					packet, idxTmp, err = newPacket(header, data[idx:idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
 					if err != nil {
 						return nil, 0, err
@@ -144,18 +160,6 @@ func newPacket(ph PacketHeader, data []byte) (p Packet, idx int, err error) {
 	// TODO: needs frame type validation for each packet type
 	if lh, ok := ph.(*LongHeader); ok {
 		switch lh.PacketType {
-		case InitialPacketType:
-			// TODO: check whether it is stream frame or not
-			initialPacket := &InitialPacket{
-				BasePacket: &BasePacket{
-					Header: ph,
-				},
-			}
-			initialPacket.TokenLen = qtype.DecodeQuicInt(data)
-			idx += initialPacket.TokenLen.GetByteLen()
-			initialPacket.Token = data[idx : idx+int(initialPacket.TokenLen)]
-			idx += int(initialPacket.TokenLen)
-			p = Packet(initialPacket)
 		case RetryPacketType:
 			retryPacket := &RetryPacket{
 				BasePacket: &BasePacket{
@@ -201,17 +205,33 @@ func newPacket(ph PacketHeader, data []byte) (p Packet, idx int, err error) {
 		return nil, 0, err
 	}
 	p.SetFrames(fs)
-	if initialPacket, ok := p.(*InitialPacket); ok {
-		length := ph.getPacketNumber().GetByteLen()
-		for _, frame := range fs {
-			length += frame.GetWireSize()
-		}
-
-		initialPacket.PaddingNum = InitialPacketMinimumPayloadSize - length
-	}
 
 	return p, idx + idxTmp, nil
 }
+
+/*
+   +-+-+-+-+-+-+-+-+
+   |1|    0x7f     |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                         Version (32)                          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |DCIL(4)|SCIL(4)|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |               Destination Connection ID (0/32..144)         ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                 Source Connection ID (0/32..144)            ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                         Token Length (i)                    ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                            Token (*)                        ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                           Length (i)                        ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                     Packet Number (8/16/32)                   |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                          Payload (*)                        ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
 
 // long header with type of 0x7F
 type InitialPacket struct {
@@ -222,6 +242,27 @@ type InitialPacket struct {
 }
 
 const InitialPacketMinimumPayloadSize = 1200
+
+func ParseInitialPacket(lh *LongHeader, data []byte) (*InitialPacket, int, error) {
+	initialPacket := &InitialPacket{
+		BasePacket: &BasePacket{
+			Header: lh,
+		},
+	}
+	initialPacket.TokenLen = qtype.DecodeQuicInt(data)
+	idx := initialPacket.TokenLen.GetByteLen()
+	initialPacket.Token = data[idx : idx+int(initialPacket.TokenLen)]
+	idx += int(initialPacket.TokenLen)
+
+	lh.Length = qtype.DecodeQuicInt(data[idx:])
+	idx += lh.Length.GetByteLen()
+	lh.PacketNumber = qtype.DecodePacketNumber(data[idx:])
+	idx += lh.PacketNumber.GetByteLen()
+	lh.wire = data[:idx]
+
+	initialPacket.payload = data[idx:]
+	return initialPacket, idx, nil
+}
 
 // TODO: may contain AckFrame
 func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, token []byte, packetNumber qtype.PacketNumber, frames []Frame) *InitialPacket {
@@ -248,14 +289,12 @@ func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.Connect
 		return nil
 	}
 	var lh *LongHeader
-	paddingNum := 0
-	additionalLen := 1
 	tknLen := 0
 	if token != nil {
 		tknLen = len(token)
-		additionalLen = tknLen + qtype.QuicInt(tknLen).GetByteLen()
 	}
-	length := frameLen + packetNumber.GetByteLen() + additionalLen
+	length := frameLen + packetNumber.GetByteLen()
+	paddingNum := 0
 	if InitialPacketMinimumPayloadSize <= length {
 		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length))
 	} else {
@@ -276,19 +315,23 @@ func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.Connect
 
 // TODO: can be optimized
 func (ip *InitialPacket) GetWire() (wire []byte, err error) {
-	if ip.payload != nil {
-		// bp.wire is filled after parsing
-		return append(ip.Header.GetWire(), ip.payload...), nil
-	}
-	// TODO: PutWire([]byte) is better?
 	hWire := ip.Header.GetWire()
-	if err != nil {
-		return nil, err
-	}
 	additionalhWire := make([]byte, ip.TokenLen.GetByteLen())
 	if ip.TokenLen >= 0 {
 		_ = ip.TokenLen.PutWire(additionalhWire)
 		hWire = append(hWire, append(additionalhWire, ip.Token...)...)
+	}
+
+	// here is long-header's part
+	lh := ip.Header.(*LongHeader)
+	longHeaderAdditionalWire := make([]byte, lh.Length.GetByteLen()+lh.PacketNumber.GetByteLen())
+
+	lh.Length.PutWire(longHeaderAdditionalWire)
+	idx := lh.Length.GetByteLen()
+	lh.PacketNumber.PutWire(longHeaderAdditionalWire[idx:])
+
+	if ip.payload != nil {
+		return append(append(hWire, longHeaderAdditionalWire...), ip.payload...), nil
 	}
 
 	ip.payload, err = GetFrameWires(ip.Frames)
@@ -299,7 +342,7 @@ func (ip *InitialPacket) GetWire() (wire []byte, err error) {
 		ip.payload = append(ip.payload, make([]byte, ip.PaddingNum)...)
 	}
 	// TODO: protect for short header?
-	return append(hWire, ip.payload...), nil
+	return append(append(hWire, longHeaderAdditionalWire...), ip.payload...), nil
 }
 
 /*
