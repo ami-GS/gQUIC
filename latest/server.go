@@ -53,7 +53,8 @@ func (s *Server) Serve() error {
 		packets, _, err := ParsePackets(buffer[:length])
 		if err != nil {
 			// TODO: this type assertion is dangerous
-			_ = s.Close(err.(qtype.TransportError))
+			// TODO: err should have frame info and pass as 1st argument
+			_ = s.Close(0, err.(qtype.TransportError))
 			return err
 		}
 
@@ -67,9 +68,9 @@ func (s *Server) Serve() error {
 	}
 }
 
-func (s *Server) Close(err qtype.TransportError) error {
+func (s *Server) Close(fType FrameType, err qtype.TransportError) error {
 	wg := &sync.WaitGroup{}
-	frame := NewConnectionCloseFrame(err, "error: experimental")
+	frame := NewConnectionCloseFrame(fType, err, "error: experimental")
 	for _, session := range s.sessions {
 		wg.Add(1)
 		go func(sess *Session) {
@@ -153,7 +154,7 @@ func (s *Server) IsAcceptableSession(version qtype.Version, srcID, destID qtype.
 	s.sessionsMutex.Unlock()
 	if sessionNum >= s.SessionLimitNum {
 		p := NewHandshakePacket(version, srcID, destID, qtype.InitialPacketNumber,
-			[]Frame{NewConnectionCloseFrame(qtype.ServerBusy, "The number of session reached server limit")})
+			[]Frame{NewConnectionCloseFrame(0, qtype.ServerBusy, "The number of session reached server limit")})
 		wire, err := p.GetWire()
 		if err != nil {
 			//

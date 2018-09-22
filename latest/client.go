@@ -29,7 +29,7 @@ func (s *Client) Close() {
 
 func (s *Client) close(f *ConnectionCloseFrame) {
 	if f == nil {
-		f = NewConnectionCloseFrame(qtype.NoError, "Close request from client")
+		f = NewConnectionCloseFrame(0, qtype.NoError, "Close request from client")
 	}
 	s.session.Close(f)
 }

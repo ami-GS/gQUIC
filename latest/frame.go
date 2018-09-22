@@ -61,6 +61,7 @@ var FrameParserMap = map[FrameType]FrameParser{
 type FrameType qtype.QuicInt
 
 const (
+	// Unknown Frame is 0, same as Padding Frame
 	PaddingFrameType FrameType = iota
 	RstStreamFrameType
 	ConnectionCloseFrameType
@@ -197,7 +198,11 @@ func GetFrameWires(frames []Frame) (allWire []byte, err error) {
     0                   1                   2                   3
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |           Error Code (16)     |   Reason Phrase Length (i)  ...
+   |           Error Code (16)     |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                         Frame Type (i)                      ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Reason Phrase Length (i)                 ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                        Reason Phrase (*)                    ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -206,13 +211,15 @@ func GetFrameWires(frames []Frame) (allWire []byte, err error) {
 type ConnectionCloseFrame struct {
 	*BaseFrame
 	ErrorCode    qtype.TransportError
+	FrameType    FrameType
 	ReasonLength qtype.QuicInt
 	Reason       string
 }
 
-func NewConnectionCloseFrame(errorCode qtype.TransportError, reason string) *ConnectionCloseFrame {
+func NewConnectionCloseFrame(frameType FrameType, errorCode qtype.TransportError, reason string) *ConnectionCloseFrame {
 	f := &ConnectionCloseFrame{
 		BaseFrame:    NewBaseFrame(ConnectionCloseFrameType),
+		FrameType:    frameType,
 		ErrorCode:    errorCode,
 		ReasonLength: qtype.QuicInt(uint64(len(reason))),
 		Reason:       reason,
@@ -233,6 +240,9 @@ func ParseConnectionCloseFrame(data []byte) (Frame, int, error) {
 	f.ErrorCode = qtype.TransportError(binary.BigEndian.Uint16(data[idx:]))
 	// TODO: check whether the code exists
 	idx += 2
+	frameType := qtype.DecodeQuicInt(data[idx:])
+	f.FrameType = FrameType(frameType)
+	idx += frameType.GetByteLen()
 	f.ReasonLength = qtype.DecodeQuicInt(data[idx:])
 	idx += f.ReasonLength.GetByteLen()
 	f.Reason = string(data[idx : idx+int(f.ReasonLength)])
@@ -250,7 +260,8 @@ func (f ConnectionCloseFrame) genWire() (wire []byte, err error) {
 	wire = make([]byte, 3+f.ReasonLength.GetByteLen()+len(f.Reason))
 	wire[0] = byte(ConnectionCloseFrameType)
 	binary.BigEndian.PutUint16(wire[1:], uint16(f.ErrorCode))
-	idx := f.ReasonLength.PutWire(wire[3:]) + 3
+	idx := qtype.QuicInt(f.FrameType).PutWire(wire[3:]) + 3
+	idx += f.ReasonLength.PutWire(wire[idx:])
 	copy(wire[idx:], []byte(f.Reason))
 	return
 }
@@ -259,7 +270,9 @@ func (f ConnectionCloseFrame) genWire() (wire []byte, err error) {
     0                   1                   2                   3
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |           Error Code (16)     |   Reason Phrase Length (i)  ...
+   |           Error Code (16)     |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Reason Phrase Length (i)                 ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                        Reason Phrase (*)                    ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
