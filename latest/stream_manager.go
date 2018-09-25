@@ -327,9 +327,14 @@ func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) 
 	s.maxStreamIDUniMutex.Lock()
 	// TODO: these setter should be sender of MaxStreamID?
 	if frame.StreamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
-		s.maxStreamIDUni = frame.StreamID
+		// This if is not in spec, but should be needed for unordered StreamIDBlocked Frame
+		if s.maxStreamIDUni < frame.StreamID {
+			s.maxStreamIDUni = frame.StreamID
+		}
 	} else {
-		s.maxStreamIDBidi = frame.StreamID
+		if s.maxStreamIDBidi < frame.StreamID {
+			s.maxStreamIDBidi = frame.StreamID
+		}
 	}
 	s.maxStreamIDUniMutex.Unlock()
 
