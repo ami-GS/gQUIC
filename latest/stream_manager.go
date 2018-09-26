@@ -15,10 +15,10 @@ type signedChannel struct {
 type StreamManager struct {
 	streamMap map[qtype.StreamID]Stream
 	// would be RcvStream or SendRcvStream
-	finishedStreams     *utils.RingBuffer
-	maxStreamIDUni      qtype.StreamID
-	maxStreamIDUniMutex *sync.Mutex
-	nxtSendStreamIDUni  qtype.StreamID
+	finishedStreams    *utils.RingBuffer
+	maxStreamIDUni     qtype.StreamID
+	maxStreamIDMutex   *sync.Mutex
+	nxtSendStreamIDUni qtype.StreamID
 	// TODO: should be replaced by atomic add
 	nxtSendStreamIDUniMutex *sync.Mutex
 
@@ -26,9 +26,8 @@ type StreamManager struct {
 	nxtStreamIDBidi qtype.StreamID
 	sess            *Session
 	// TODO: name should be considered
-	blockedIDs             map[qtype.StreamID]*signedChannel
-	blockedIDsMutex        *sync.Mutex
-	handleMaxStreamIDMutex *sync.Mutex
+	blockedIDs      map[qtype.StreamID]*signedChannel
+	blockedIDsMutex *sync.Mutex
 
 	newUniStreamMutex  *sync.Mutex
 	newBidiStreamMutex *sync.Mutex
@@ -53,14 +52,13 @@ func NewStreamManager(sess *Session) *StreamManager {
 		finishedStreams: utils.NewRingBuffer(20),
 		// may be set after handshake, or MAX_STREAM_ID frame
 		maxStreamIDUni:          1,
-		maxStreamIDUniMutex:     new(sync.Mutex),
+		maxStreamIDMutex:        new(sync.Mutex),
 		nxtSendStreamIDUni:      nxtUniID,
 		nxtSendStreamIDUniMutex: new(sync.Mutex),
 		maxStreamIDBidi:         100,
 		nxtStreamIDBidi:         nxtBidiID,
 		blockedIDs:              make(map[qtype.StreamID]*signedChannel),
 		blockedIDsMutex:         new(sync.Mutex),
-		handleMaxStreamIDMutex:  new(sync.Mutex),
 		newUniStreamMutex:       new(sync.Mutex),
 		newBidiStreamMutex:      new(sync.Mutex),
 		resendMutex:             new(sync.Mutex),
@@ -70,6 +68,8 @@ func NewStreamManager(sess *Session) *StreamManager {
 }
 
 func (s *StreamManager) IsValidID(streamID qtype.StreamID) error {
+	s.maxStreamIDMutex.Lock()
+	defer s.maxStreamIDMutex.Unlock()
 	if streamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
 		if streamID > s.maxStreamIDUni {
@@ -324,7 +324,7 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 
 func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) error {
 	// should be from sender stream which needs new ID, but could not open due to limit
-	s.maxStreamIDUniMutex.Lock()
+	s.maxStreamIDMutex.Lock()
 	// TODO: these setter should be sender of MaxStreamID?
 	if frame.StreamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// This if is not in spec, but should be needed for unordered StreamIDBlocked Frame
@@ -336,14 +336,14 @@ func (s *StreamManager) handleStreamIDBlockedFrame(frame *StreamIDBlockedFrame) 
 			s.maxStreamIDBidi = frame.StreamID
 		}
 	}
-	s.maxStreamIDUniMutex.Unlock()
+	s.maxStreamIDMutex.Unlock()
 
 	s.sess.sendFrameChan <- NewMaxStreamIDFrame(frame.StreamID)
 	return nil
 }
 func (s *StreamManager) handleMaxStreamIDFrame(frame *MaxStreamIDFrame) error {
-	s.handleMaxStreamIDMutex.Lock()
-	defer s.handleMaxStreamIDMutex.Unlock()
+	s.maxStreamIDMutex.Lock()
+	defer s.maxStreamIDMutex.Unlock()
 	sid := frame.StreamID
 	if sid&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
