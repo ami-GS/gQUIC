@@ -210,19 +210,19 @@ func GetFrameWires(frames []Frame) (allWire []byte, err error) {
 
 type ConnectionCloseFrame struct {
 	*BaseFrame
-	ErrorCode    qtype.TransportError
-	FrameType    FrameType
-	ReasonLength qtype.QuicInt
-	Reason       string
+	ErrorCode      qtype.TransportError
+	ErrorFrameType FrameType
+	ReasonLength   qtype.QuicInt
+	Reason         string
 }
 
-func NewConnectionCloseFrame(frameType FrameType, errorCode qtype.TransportError, reason string) *ConnectionCloseFrame {
+func NewConnectionCloseFrame(errFrameType FrameType, errorCode qtype.TransportError, reason string) *ConnectionCloseFrame {
 	f := &ConnectionCloseFrame{
-		BaseFrame:    NewBaseFrame(ConnectionCloseFrameType),
-		FrameType:    frameType,
-		ErrorCode:    errorCode,
-		ReasonLength: qtype.QuicInt(uint64(len(reason))),
-		Reason:       reason,
+		BaseFrame:      NewBaseFrame(ConnectionCloseFrameType),
+		ErrorFrameType: errFrameType,
+		ErrorCode:      errorCode,
+		ReasonLength:   qtype.QuicInt(uint64(len(reason))),
+		Reason:         reason,
 	}
 	var err error
 	f.wire, err = f.genWire()
@@ -241,7 +241,7 @@ func ParseConnectionCloseFrame(data []byte) (Frame, int, error) {
 	// TODO: check whether the code exists
 	idx += 2
 	frameType := qtype.DecodeQuicInt(data[idx:])
-	f.FrameType = FrameType(frameType)
+	f.ErrorFrameType = FrameType(frameType)
 	idx += frameType.GetByteLen()
 	f.ReasonLength = qtype.DecodeQuicInt(data[idx:])
 	idx += f.ReasonLength.GetByteLen()
@@ -253,14 +253,14 @@ func ParseConnectionCloseFrame(data []byte) (Frame, int, error) {
 }
 
 func (f ConnectionCloseFrame) String() string {
-	return fmt.Sprintf("[%s]\n\tErrCode:%s\tReason:%s(%d)", f.BaseFrame, f.ErrorCode, f.Reason, f.ReasonLength)
+	return fmt.Sprintf("[%s]\n\tErrCode:%s\tErrFrame:%s\tReason:%s(%d)", f.BaseFrame, f.ErrorFrameType, f.ErrorCode, f.Reason, f.ReasonLength)
 }
 
 func (f ConnectionCloseFrame) genWire() (wire []byte, err error) {
 	wire = make([]byte, 3+f.ReasonLength.GetByteLen()+len(f.Reason))
 	wire[0] = byte(ConnectionCloseFrameType)
 	binary.BigEndian.PutUint16(wire[1:], uint16(f.ErrorCode))
-	idx := qtype.QuicInt(f.FrameType).PutWire(wire[3:]) + 3
+	idx := qtype.QuicInt(f.ErrorFrameType).PutWire(wire[3:]) + 3
 	idx += f.ReasonLength.PutWire(wire[idx:])
 	copy(wire[idx:], []byte(f.Reason))
 	return
