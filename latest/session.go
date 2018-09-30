@@ -28,9 +28,16 @@ type Session struct {
 	// or prepare several channel for priority based channels ?
 	sendFrameChan chan Frame
 	// high priority channel when wire has over 1000 (MTUIPv4*0.8)
-	sendFrameHPChan      chan Frame
-	sendPacketChan       chan Packet
+	sendFrameHPChan chan Frame
+	sendPacketChan  chan Packet
+
+	// A server MAY encode tokens provided with NEW_TOKEN
+	// frames and Retry packets differently, and validate the latter more strictly.
 	RetryPacketTokenSent string
+	// from Token of Retry Packet, MUST not be discarded
+	RetryTokenReceived []byte
+	// from NEW_TOKEN
+	TokenReceived []byte
 
 	blockedFramesOnConnection *utils.RingBuffer
 
@@ -71,10 +78,10 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		isClient:       isClient,
 		recvPacketChan: make(chan Packet),
 		// channel size should be configured or detect filled
-		sendFrameChan:   make(chan Frame, 100),
-		sendFrameHPChan: make(chan Frame, 100),
-		sendPacketChan:  make(chan Packet, 100),
-		closeChan:       make(chan struct{}),
+		sendFrameChan:             make(chan Frame, 100),
+		sendFrameHPChan:           make(chan Frame, 100),
+		sendPacketChan:            make(chan Packet, 100),
+		closeChan:                 make(chan struct{}),
 		flowController:            NewConnectionFlowController(),
 		blockedFramesOnConnection: utils.NewRingBuffer(256),
 		// used for send frame ASAP after generate frame
@@ -495,6 +502,16 @@ func (s *Session) handleAckEcnFrame(f *AckEcnFrame) error {
 	return nil
 }
 func (s *Session) handleNewTokenFrame(f *NewTokenFrame) error {
+	// If the client has a token received in a NEW_TOKEN frame on a previous
+	// connection to what it believes to be the same server, it can include
+	// that value in the Token field of its Initial packet.
+	// TODO: configurable
+	if true {
+		s.TokenReceived = f.Token
+		// TODO: store token for next connection
+	}
+	// Tokens obtained in Retry packets MUST NOT be discarded
+
 	return nil
 }
 
