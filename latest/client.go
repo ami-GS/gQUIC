@@ -156,6 +156,7 @@ func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 	// The client retains the state of its cryptographic handshake, but discards all transport state.
 	c.session.DestConnID, _ = packet.GetHeader().GetConnectionIDPair()
 	c.session.SrcConnID, _ = qtype.NewConnectionID(nil)
+	c.session.RetryTokenReceived = packet.RetryToken
 
 	// try again with new transport, but MUST remember the results of any version negotiation that occurred
 	pn := packet.GetPacketNumber()
@@ -166,5 +167,13 @@ func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 }
 
 func (c *Client) handleHandshakePacket(packet *HandshakePacket) error {
+	return nil
+}
+
+func (c *Client) handleInitialPacket(packet *InitialPacket) error {
+	pn := packet.GetPacketNumber()
+	if packet.TokenLen != 0 {
+		c.session.sendPacketChan <- NewProtectedPacket0RTT(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, pn.Increase(), []Frame{NewConnectionCloseFrame(0, qtype.ProtocolViolation, "client receives initial packet with Non-zero token length")})
+	}
 	return nil
 }
