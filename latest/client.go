@@ -62,14 +62,59 @@ func DialAddr(addr string) (*Client, error) {
 	return cli, nil
 }
 
+func (c *Client) readTokenInfo() (*qtype.TokenInfo, bool) {
+	return nil, false
+}
+
+func (c *Client) ReadUsableToken() []byte {
+	// TODO: not fully implemented
+	// 1. whether client has token? true -> 2.
+	if tknInfo, exists := c.readTokenInfo(); exists {
+		// 2. check local IP and network interface, is it different from that of used last time? true -> return last token.
+		localAddr := c.session.conn.conn.LocalAddr().(*net.UDPAddr)
+		if tknInfo.Addr != localAddr.String() {
+			return nil
+		}
+
+		ifaces, err := net.Interfaces()
+		if err != nil {
+			panic(err)
+		}
+		for _, iface := range ifaces {
+			addrs, err := iface.Addrs()
+			if err != nil {
+				panic(err)
+			}
+
+			for _, addr := range addrs {
+				switch v := addr.(type) {
+				case *net.IPNet:
+					continue
+				case *net.IPAddr:
+					if localAddr.String() == v.IP.String() {
+						if tknInfo.Iface == iface.Name {
+							return tknInfo.Raw
+						}
+					}
+				}
+			}
+		}
+
+	}
+	// For now, return nil
+	return nil
+}
+
 func (c *Client) Connect() {
 	// version negotiation
 	// wait response
 
+	token := c.ReadUsableToken()
+
 	// first initial packet
 	destID, _ := qtype.NewConnectionID(nil)
 	c.session.sendPacketChan <- //NewCoalescingPacket([]Packet{
-	NewInitialPacket(c.versionOffer, destID, destID, nil, c.session.LastPacketNumber,
+	NewInitialPacket(c.versionOffer, destID, destID, token, c.session.LastPacketNumber,
 		[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message (ClientHello)"))})
 	//NewProtectedPacket0RTT(c.versionOffer, destID, destID, c.session.LastPacketNumber, []Frame{NewStreamFrame(0, 0, true, true, false, []byte("0-RTT[0]: STREAM[0, ...]"))}),
 	//})
