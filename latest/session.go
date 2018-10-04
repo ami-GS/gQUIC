@@ -502,6 +502,11 @@ func (s *Session) handleAckEcnFrame(f *AckEcnFrame) error {
 	return nil
 }
 func (s *Session) handleNewTokenFrame(f *NewTokenFrame) error {
+	if !s.isClient {
+		// This is not written in spec, need to ask
+		return qtype.ProtocolViolation
+	}
+
 	// If the client has a token received in a NEW_TOKEN frame on a previous
 	// connection to what it believes to be the same server, it can include
 	// that value in the Token field of its Initial packet.
