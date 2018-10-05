@@ -378,7 +378,11 @@ func (s *Session) HandleFrames(fs []Frame) error {
 				panic("not supported Frame type")
 			}
 			if err != nil {
-				panic(err)
+				if e, ok := err.(*qtype.TransportError); ok {
+					s.sendFrameHPChan <- NewConnectionCloseFrame(frame.GetType(), *e, "")
+				} else {
+					panic(err)
+				}
 			}
 		}(oneFrame)
 	}
@@ -461,7 +465,7 @@ func (s *Session) handleAckFrame(frame *AckFrame) error {
 	largest := frame.LargestAcked
 	for _, block := range frame.AckBlocks {
 		if largest < 0 || largest < block.Block {
-			return qtype.FrameError | qtype.TransportError(AckFrameType)
+			return qtype.FrameEncodingError
 		}
 		for acked := largest; acked >= largest-block.Block; acked -= qtype.PacketNumberIncreaseSize {
 			//ackedPNs[idx] = qtype.PacketNumber(acked)
@@ -490,7 +494,7 @@ func (s *Session) handlePathChallengeFrame(frame *PathChallengeFrame) error {
 
 func (s *Session) handlePathResponseFrame(frame *PathResponseFrame) error {
 	if !bytes.Equal(frame.Data[:], s.PathChallengeData[:]) {
-		return qtype.UnsolicitedPathResponse
+		return qtype.ProtocolViolation
 	}
 	return nil
 }

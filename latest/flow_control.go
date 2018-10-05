@@ -102,7 +102,7 @@ func (c *ConnectionFlowController) SendableByOffset(largestOffset qtype.QuicInt)
 
 func (c *ConnectionFlowController) ReceivableByOffset(largestOffset qtype.QuicInt) error {
 	if c.bytesReceived+largestOffset > c.MaxDataLimit {
-		return qtype.FlowControlReceivedTooMuchData
+		return qtype.FlowControlError
 	}
 	return nil
 }

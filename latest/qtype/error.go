@@ -13,22 +13,19 @@ const (
 	StreamIDError
 	StreamStateError
 	FinalOffsetError
-	FrameFormatError
+	FrameEncodingError
 	TransportParameterError
 	VersionNegotiationError
 	ProtocolViolation
-	UnsolicitedPathResponse
+	InvalidMigration = 0xc
 
-	// not defined the value in spec 11
-	FlowControlReceivedTooMuchData
-
-	FrameError = 0x100 // 0x1XX, the XX will be frame type
+	CryptoError = 0x100 // 0x1XX, XX is reserved for carrying error codes specific to the cryptographic handshake
 )
 
 func (e TransportError) Error() string {
-	if e >= FrameError {
+	if e >= CryptoError {
 		// TODO: solve import cycle by separating file of FrameType implementation
-		return "FrameError: " // + quiclatest.FrameType(uint16(e)&0xff).String()
+		return "CryptoError: " // + quiclatest.FrameType(uint16(e)&0xff).String()
 	}
 	return []string{
 		"NoError",
@@ -38,11 +35,12 @@ func (e TransportError) Error() string {
 		"StreamIDError",
 		"StreamStateError",
 		"FinalOffsetError",
-		"FrameFormatError",
+		"FrameEncodingError",
 		"TransportParameterError",
 		"VersionNegotiationError",
 		"ProtocolViolation",
-		"UnsolicitedPathResponse",
+		"_",
+		"InvalidMigration",
 	}[e]
 }
 

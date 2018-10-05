@@ -155,7 +155,7 @@ func (f *BaseFrame) String() string {
 func ParseFrame(data []byte) (f Frame, idx int, err error) {
 	if data[0] > 0x1a {
 		// TODO: error needed, but not decided
-		return nil, 0, qtype.ProtocolViolation
+		return nil, 0, qtype.FrameEncodingError
 	}
 	if StreamFrameType <= FrameType(data[0]) && data[0]&StreamFrameTypeMask <= StreamFrameTypeMax {
 		return FrameParserMap[StreamFrameType](data)
