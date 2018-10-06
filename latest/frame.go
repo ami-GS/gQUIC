@@ -49,6 +49,7 @@ var FrameParserMap = map[FrameType]FrameParser{
 	StopSendingFrameType:        ParseStopSendingFrame,
 	AckFrameTypeA:               ParseAckFrame,
 	AckFrameTypeB:               ParseAckFrame,
+	RetireConnectionIDFrameType: ParseRetireConnectionFrame,
 	PathChallengeFrameType:      ParsePathChallengeFrame,
 	PathResponseFrameType:       ParsePathResponseFrame,
 	// type should be (type & StreamFrameTypeCommon)
@@ -75,6 +76,7 @@ const (
 	StreamIDBlockedFrameType
 	NewConnectionIDFrameType
 	StopSendingFrameType
+	RetireConnectionIDFrameType
 	PathChallengeFrameType
 	PathResponseFrameType
 	StreamFrameType           // 0x10-0x17
@@ -105,6 +107,7 @@ func (frameType FrameType) String() string {
 		"STREAM_ID_BLOCKED",
 		"NEW_CONNECTION_ID",
 		"STOP_SENDING",
+		"RETIRE_CONNECTION_ID",
 		"PATH_CHALLENGE",
 		"PATH_RESPONSE",
 		"STREAM",
@@ -835,6 +838,48 @@ func (f NewConnectionIDFrame) genWire() (wire []byte, err error) {
 	idx += len(f.ConnID) + 1
 	copy(wire[idx:], f.StatelessRstTkn[:])
 	return
+}
+
+/*
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                      Sequence Number (i)                    ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
+type RetireConnectionIDFrame struct {
+	*BaseFrame
+	SequenceNumber qtype.QuicInt
+}
+
+func NewRetireConnectionIDFrame(sequence qtype.QuicInt) *RetireConnectionIDFrame {
+	f := &RetireConnectionIDFrame{
+		BaseFrame:      NewBaseFrame(RetireConnectionIDFrameType),
+		SequenceNumber: sequence,
+	}
+	var err error
+	f.wire, err = f.genWire()
+	if err != nil {
+		// error
+	}
+	return f
+}
+
+func ParseRetireConnectionFrame(data []byte) (Frame, int, error) {
+	f := &RetireConnectionIDFrame{
+		BaseFrame: NewBaseFrame(RetireConnectionIDFrameType),
+	}
+	f.SequenceNumber = qtype.DecodeQuicInt(data[1:])
+	f.wire = data[:1+f.SequenceNumber.GetByteLen()]
+	return f, 1 + f.SequenceNumber.GetByteLen(), nil
+}
+
+func (f RetireConnectionIDFrame) genWire() (wire []byte, err error) {
+	wire = make([]byte, 1+f.SequenceNumber.GetByteLen())
+	wire[0] = byte(RetireConnectionIDFrameType)
+	_ = f.SequenceNumber.PutWire(wire[1:])
+	return wire, nil
 }
 
 /*

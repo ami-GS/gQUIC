@@ -336,7 +336,7 @@ func (s *Session) maybeAckPacket(p Packet) {
 			break
 		}
 		if i == len(p.GetFrames())-1 {
-			// MUST NOT generate packets that only contain ACK
+			// MUST NOT generate packets that only contain ACK and PADDING
 			// frames in response to packets which only contain ACK frames.
 			return
 		}
@@ -362,6 +362,9 @@ func (s *Session) HandleFrames(fs []Frame) error {
 			case *BlockedFrame:
 				err = s.handleBlockedFrame(f)
 			case *NewConnectionIDFrame:
+				err = s.handleNewConnectionIDFrame(f)
+			case *RetireConnectionIDFrame:
+				err = s.handleRetireConnectionIDFrame(f)
 			case *PathChallengeFrame:
 				err = s.handlePathChallengeFrame(f)
 			case *PathResponseFrame:
@@ -454,6 +457,16 @@ func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func (s *Session) handleNewConnectionIDFrame(frame *NewConnectionIDFrame) error {
+	panic("NotImplementedError")
+	return nil
+}
+
+func (s *Session) handleRetireConnectionIDFrame(frame *RetireConnectionIDFrame) error {
+	panic("NotImplementedError")
 	return nil
 }
 
