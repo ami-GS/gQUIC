@@ -761,9 +761,9 @@ func (f StreamIDBlockedFrame) genWire() (wire []byte, err error) {
     0                   1                   2                   3
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                          Sequence (i)                       ...
+   |   Length (8)  |            Sequence Number (i)              ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |   Length (8)  |          Connection ID (32..144)            ...
+   |                    Connection ID (32..144)                  ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                                                               |
    +                                                               +
@@ -777,8 +777,8 @@ func (f StreamIDBlockedFrame) genWire() (wire []byte, err error) {
 
 type NewConnectionIDFrame struct {
 	*BaseFrame
-	Sequence        qtype.QuicInt
 	Length          byte
+	Sequence        qtype.QuicInt
 	ConnID          qtype.ConnectionID
 	StatelessRstTkn [16]byte
 }
@@ -786,8 +786,8 @@ type NewConnectionIDFrame struct {
 func NewNewConnectionIDFrame(sequence qtype.QuicInt, length byte, connID qtype.ConnectionID, stateLessRstTkn [16]byte) *NewConnectionIDFrame {
 	f := &NewConnectionIDFrame{
 		BaseFrame:       NewBaseFrame(NewConnectionIDFrameType),
-		Sequence:        sequence,
 		Length:          length,
+		Sequence:        sequence,
 		ConnID:          connID,
 		StatelessRstTkn: stateLessRstTkn,
 	}
@@ -805,11 +805,11 @@ func ParseNewConnectionIDFrame(data []byte) (Frame, int, error) {
 	f := &NewConnectionIDFrame{
 		BaseFrame: NewBaseFrame(NewConnectionIDFrameType),
 	}
-	f.Sequence = qtype.DecodeQuicInt(data[idx:])
-	f.Length = data[idx+f.Sequence.GetByteLen()]
+	f.Length = data[idx]
 	if f.Length < 4 || 18 < f.Length {
 		return nil, 0, qtype.ProtocolViolation
 	}
+	f.Sequence = qtype.DecodeQuicInt(data[idx+1:])
 	idx += f.Sequence.GetByteLen() + 1
 	f.ConnID, err = qtype.ReadConnectionID(data[idx:], int(f.Length))
 	if err != nil {
