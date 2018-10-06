@@ -34,28 +34,28 @@ func (s *BaseStreamLevelFrame) GetStreamID() qtype.StreamID {
 type FrameParser func(data []byte) (Frame, int, error)
 
 var FrameParserMap = map[FrameType]FrameParser{
-	PaddingFrameType:          ParsePaddingFrame,
-	RstStreamFrameType:        ParseRstStreamFrame,
-	ConnectionCloseFrameType:  ParseConnectionCloseFrame,
-	ApplicationCloseFrameType: ParseApplicationCloseFrame,
-	MaxDataFrameType:          ParseMaxDataFrame,
-	MaxStreamDataFrameType:    ParseMaxStreamDataFrame,
-	MaxStreamIDFrameType:      ParseMaxStreamIDFrame,
-	PingFrameType:             ParsePingFrame,
-	BlockedFrameType:          ParseBlockedFrame,
-	StreamBlockedFrameType:    ParseStreamBlockedFrame,
-	StreamIDBlockedFrameType:  ParseStreamIDBlockedFrame,
-	NewConnectionIDFrameType:  ParseNewConnectionIDFrame,
-	StopSendingFrameType:      ParseStopSendingFrame,
-	AckFrameType:              ParseAckFrame,
-	PathChallengeFrameType:    ParsePathChallengeFrame,
-	PathResponseFrameType:     ParsePathResponseFrame,
+	PaddingFrameType:            ParsePaddingFrame,
+	RstStreamFrameType:          ParseRstStreamFrame,
+	ConnectionCloseFrameType:    ParseConnectionCloseFrame,
+	ApplicationCloseFrameType:   ParseApplicationCloseFrame,
+	MaxDataFrameType:            ParseMaxDataFrame,
+	MaxStreamDataFrameType:      ParseMaxStreamDataFrame,
+	MaxStreamIDFrameType:        ParseMaxStreamIDFrame,
+	PingFrameType:               ParsePingFrame,
+	BlockedFrameType:            ParseBlockedFrame,
+	StreamBlockedFrameType:      ParseStreamBlockedFrame,
+	StreamIDBlockedFrameType:    ParseStreamIDBlockedFrame,
+	NewConnectionIDFrameType:    ParseNewConnectionIDFrame,
+	StopSendingFrameType:        ParseStopSendingFrame,
+	AckFrameTypeA:               ParseAckFrame,
+	AckFrameTypeB:               ParseAckFrame,
+	PathChallengeFrameType:      ParsePathChallengeFrame,
+	PathResponseFrameType:       ParsePathResponseFrame,
 	// type should be (type & StreamFrameTypeCommon)
 	StreamFrameType: ParseStreamFrame,
 
 	CryptoFrameType:   ParseCryptoFrame,
 	NewTokenFrameType: ParseNewTokenFrame,
-	AckEcnFrameType:   ParseAckEcnFrame,
 }
 
 type FrameType qtype.QuicInt
@@ -75,16 +75,19 @@ const (
 	StreamIDBlockedFrameType
 	NewConnectionIDFrameType
 	StopSendingFrameType
-	AckFrameType
 	PathChallengeFrameType
 	PathResponseFrameType
 	StreamFrameType           // 0x10-0x17
 	CryptoFrameType FrameType = iota + 7
 	NewTokenFrameType
-	AckEcnFrameType
+	AckFrameTypeA
+	AckFrameTypeB
+	AckFrameTypeMask = 0x1b
 
 	StreamFrameTypeMax  = 0x17
 	StreamFrameTypeMask = 0x1f
+
+	FrameSentinel = 0x1c
 )
 
 func (frameType FrameType) String() string {
@@ -102,7 +105,6 @@ func (frameType FrameType) String() string {
 		"STREAM_ID_BLOCKED",
 		"NEW_CONNECTION_ID",
 		"STOP_SENDING",
-		"ACK",
 		"PATH_CHALLENGE",
 		"PATH_RESPONSE",
 		"STREAM",
@@ -115,7 +117,7 @@ func (frameType FrameType) String() string {
 		"_",
 		"CRYPTO",
 		"NEW_TOKEN",
-		"ACK_ECN",
+		"ACK",
 	}
 	if 0x10 <= frameType && frameType <= 0x17 {
 		return "STREAM"
@@ -153,14 +155,14 @@ func (f *BaseFrame) String() string {
 }
 
 func ParseFrame(data []byte) (f Frame, idx int, err error) {
-	if data[0] > 0x1a {
-		// TODO: error needed, but not decided
+	fType := FrameType(data[0])
+	if fType >= FrameSentinel {
 		return nil, 0, qtype.FrameEncodingError
 	}
-	if StreamFrameType <= FrameType(data[0]) && data[0]&StreamFrameTypeMask <= StreamFrameTypeMax {
+	if StreamFrameType <= fType && data[0]&StreamFrameTypeMask <= StreamFrameTypeMax {
 		return FrameParserMap[StreamFrameType](data)
 	}
-	return FrameParserMap[FrameType(data[0])](data)
+	return FrameParserMap[fType](data)
 }
 
 func ParseFrames(data []byte) (fs []Frame, idx int, err error) {
@@ -900,6 +902,8 @@ func (f StopSendingFrame) genWire() (wire []byte, err error) {
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    |                          ACK Blocks (*)                     ...
    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                         [ECN Section]                       ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
 
 type AckBlock struct {
@@ -913,18 +917,26 @@ type AckFrame struct {
 	AckDelay      qtype.QuicInt
 	AckBlockCount qtype.QuicInt
 	AckBlocks     []AckBlock
+	ECN           *ECNSection
 }
 
-func NewAckFrame(lAcked, ackDelay qtype.QuicInt, ackBlocks []AckBlock) *AckFrame {
+func NewAckFrame(lAcked, ackDelay qtype.QuicInt, ackBlocks []AckBlock, ecn *ECNSection) *AckFrame {
 	if ackBlocks == nil {
 		ackBlocks = []AckBlock{AckBlock{0, 0}}
 	}
+
+	fType := AckFrameTypeA
+	if ecn != nil {
+		fType = AckFrameTypeB
+	}
+
 	f := &AckFrame{
-		BaseFrame:     NewBaseFrame(AckFrameType),
+		BaseFrame:     NewBaseFrame(fType),
 		LargestAcked:  lAcked,
 		AckDelay:      ackDelay,
 		AckBlockCount: qtype.QuicInt(uint64(len(ackBlocks) - 1)),
 		AckBlocks:     ackBlocks,
+		ECN:           ecn,
 	}
 	var err error
 	f.wire, err = f.genWire()
@@ -936,7 +948,7 @@ func NewAckFrame(lAcked, ackDelay qtype.QuicInt, ackBlocks []AckBlock) *AckFrame
 
 func ParseAckFrame(data []byte) (Frame, int, error) {
 	f := &AckFrame{
-		BaseFrame: NewBaseFrame(AckFrameType),
+		BaseFrame: NewBaseFrame(FrameType(data[0])),
 	}
 	idx := 1
 	f.LargestAcked = qtype.DecodeQuicInt(data[idx:])
@@ -955,6 +967,11 @@ func ParseAckFrame(data []byte) (Frame, int, error) {
 		f.AckBlocks[i].Block = qtype.DecodeQuicInt(data[idx:])
 		idx += f.AckBlocks[i].Block.GetByteLen()
 	}
+	if FrameType(data[0]) == AckFrameTypeB {
+		var secLen int
+		f.ECN, secLen, _ = ParseECNSection(data[idx:])
+		idx += secLen
+	}
 	f.wire = data[:idx]
 	return f, idx, nil
 }
@@ -964,6 +981,9 @@ func (f AckFrame) String() string {
 	for i := 1; i < int(f.AckBlockCount); i++ {
 		out += fmt.Sprintf("\n\tAck:%d\tGap:%d", f.AckBlocks[i].Block, f.AckBlocks[i].Gap)
 	}
+	if f.ECN != nil {
+		out += f.ECN.String()
+	}
 	return out
 }
 
@@ -972,8 +992,14 @@ func (f AckFrame) genWire() (wire []byte, err error) {
 	for _, v := range f.AckBlocks {
 		blockByteLen += v.Block.GetByteLen() + v.Gap.GetByteLen()
 	}
+	if f.ECN != nil {
+		blockByteLen += f.ECN.GetByteLen()
+	}
 	wire = make([]byte, 1+f.LargestAcked.GetByteLen()+f.AckDelay.GetByteLen()+f.AckBlockCount.GetByteLen()+blockByteLen)
-	wire[0] = byte(AckFrameType)
+	wire[0] = byte(AckFrameTypeA)
+	if f.ECN != nil {
+		wire[0] = byte(AckFrameTypeB)
+	}
 	idx := f.LargestAcked.PutWire(wire[1:]) + 1
 	idx += f.AckDelay.PutWire(wire[idx:])
 	idx += f.AckBlockCount.PutWire(wire[idx:])
@@ -983,6 +1009,9 @@ func (f AckFrame) genWire() (wire []byte, err error) {
 		v := f.AckBlocks[i]
 		idx += v.Gap.PutWire(wire[idx:])
 		idx += v.Block.PutWire(wire[idx:])
+	}
+	if f.ECN != nil {
+		_, _ = f.ECN.PutWire(wire[idx:])
 	}
 
 	return
@@ -1325,97 +1354,56 @@ func (f NewTokenFrame) String() string {
 	return fmt.Sprintf("[%s]\n\tToken Length:%d\n\tToken: %s", f.BaseFrame, f.TokenLen, string(f.Token))
 }
 
-/*
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                     Largest Acknowledged (i)                ...
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                          ACK Delay (i)                      ...
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                        ECT(0) Count (i)                     ...
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                        ECT(1) Count (i)                     ...
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                        ECN-CE Count (i)                     ...
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                       ACK Block Count (i)                   ...
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                          ACK Blocks (*)                     ...
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/*  ECN section
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        ECT(0) Count (i)                     ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        ECT(1) Count (i)                     ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        ECN-CE Count (i)                     ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
 
-type AckEcnFrame struct {
-	*BaseFrame
-	LargestAcked  qtype.QuicInt
-	AckDelay      qtype.QuicInt
-	Etc0Count     qtype.QuicInt
-	Etc1Count     qtype.QuicInt
-	EcnCeCount    qtype.QuicInt
-	AckBlockCount qtype.QuicInt
-	AckBlocks     []AckBlock
+type ECNSection struct {
+	Etc0Count  qtype.QuicInt
+	Etc1Count  qtype.QuicInt
+	EcnCeCount qtype.QuicInt
 }
 
-func NewAckEcnFrame(lAcked, ackDelay, etc0count, etc1count, ecnCeCount qtype.QuicInt, ackBlocks []AckBlock) *AckEcnFrame {
-	f := &AckEcnFrame{
-		BaseFrame:     NewBaseFrame(AckEcnFrameType),
-		LargestAcked:  lAcked,
-		AckDelay:      ackDelay,
-		Etc0Count:     etc0count,
-		Etc1Count:     etc1count,
-		EcnCeCount:    ecnCeCount,
-		AckBlockCount: qtype.QuicInt(len(ackBlocks)),
-		AckBlocks:     ackBlocks,
-	}
-	var err error
-	f.wire, err = f.genWire()
-	if err != nil {
-		// error
+func NewECNSection(etc0count, etc1count, ecnCeCount qtype.QuicInt) *ECNSection {
+	f := &ECNSection{
+		Etc0Count:  etc0count,
+		Etc1Count:  etc1count,
+		EcnCeCount: ecnCeCount,
 	}
 	return f
 }
 
-func ParseAckEcnFrame(data []byte) (Frame, int, error) {
-	f := &AckEcnFrame{
-		BaseFrame: NewBaseFrame(AckEcnFrameType),
-	}
-	idx := 1
-	f.LargestAcked = qtype.DecodeQuicInt(data[idx:])
-	idx += f.LargestAcked.GetByteLen()
-	f.AckDelay = qtype.DecodeQuicInt(data[idx:])
-	idx += f.AckDelay.GetByteLen()
+func ParseECNSection(data []byte) (*ECNSection, int, error) {
+	f := &ECNSection{}
+	idx := 0
 	f.Etc0Count = qtype.DecodeQuicInt(data[idx:])
 	idx += f.Etc0Count.GetByteLen()
 	f.Etc1Count = qtype.DecodeQuicInt(data[idx:])
 	idx += f.Etc1Count.GetByteLen()
 	f.EcnCeCount = qtype.DecodeQuicInt(data[idx:])
 	idx += f.EcnCeCount.GetByteLen()
-	f.AckBlockCount = qtype.DecodeQuicInt(data[idx:])
-	idx += f.AckBlockCount.GetByteLen()
-	f.AckBlocks = make([]AckBlock, f.AckBlockCount)
-	for i := 0; i < int(f.AckBlockCount); i++ {
-		f.AckBlocks[i].Block = qtype.DecodeQuicInt(data[idx:])
-		idx += f.AckBlocks[i].Block.GetByteLen()
-		f.AckBlocks[i].Gap = qtype.DecodeQuicInt(data[idx:])
-		idx += f.AckBlocks[i].Gap.GetByteLen()
-	}
-	f.wire = data[:idx]
 	return f, idx, nil
 }
 
-func (f AckEcnFrame) genWire() (wire []byte, err error) {
-	wireLen := 1 + f.LargestAcked.GetByteLen() + f.AckDelay.GetByteLen() + f.Etc0Count.GetByteLen() + f.Etc1Count.GetByteLen() + f.EcnCeCount.GetByteLen() + f.AckBlockCount.GetByteLen()
-	for _, ackBlock := range f.AckBlocks {
-		wireLen += ackBlock.Block.GetByteLen()
-		wireLen += ackBlock.Gap.GetByteLen()
-	}
-	return wire, nil
+func (f ECNSection) PutWire(wire []byte) (len int, err error) {
+	f.Etc0Count.PutWire(wire)
+	f.Etc1Count.PutWire(wire[f.Etc0Count.GetByteLen():])
+	f.EcnCeCount.PutWire(wire[f.Etc0Count.GetByteLen()+f.Etc1Count.GetByteLen():])
+	return f.GetByteLen(), nil
 }
 
-func (f AckEcnFrame) String() string {
-	blockStr := ""
-	for _, block := range f.AckBlocks {
-		blockStr += fmt.Sprintf("\n\tAck:%d\tGap%d", block.Block, block.Gap)
-	}
-	return fmt.Sprintf("[%s]\n\tLargest Acked:%d\tAck Delay:%d\tETC(0) Count:%d\tETC(1) Count:%d\n\tECN-CE Count:%d\tAck Block Count:%d\n\tAck Blocks:%s", f.BaseFrame, f.LargestAcked, f.AckDelay, f.Etc0Count, f.Etc1Count, f.EcnCeCount, f.AckBlockCount, blockStr)
+func (f ECNSection) GetByteLen() int {
+	return f.Etc0Count.GetByteLen() + f.Etc1Count.GetByteLen() + f.EcnCeCount.GetByteLen()
+}
+
+func (f ECNSection) String() string {
+	return fmt.Sprintf("\n\tETC(0) Count:%d\tETC(1) Count:%d\n\tECN-CE Count:%d", f.Etc0Count, f.Etc1Count, f.EcnCeCount)
 }
