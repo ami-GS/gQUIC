@@ -287,6 +287,7 @@ func (s *Session) HandlePacket(p Packet) error {
 }
 
 func (s *Session) AssembleAckFrame() *AckFrame {
+	// TODO: set ECN
 	s.ackPacketQueueMutex.Lock()
 	defer s.ackPacketQueueMutex.Unlock()
 	if s.ackPacketQueue.Len() == 0 {
@@ -295,7 +296,7 @@ func (s *Session) AssembleAckFrame() *AckFrame {
 	pLargest := qtype.PacketNumber(heap.Pop(s.ackPacketQueue).(uint64))
 	ackBlocks := []AckBlock{}
 	if s.ackPacketQueue.Len() == 0 {
-		return NewAckFrame(qtype.QuicInt(pLargest), 0, []AckBlock{AckBlock{0, 0}})
+		return NewAckFrame(qtype.QuicInt(pLargest), 0, []AckBlock{AckBlock{0, 0}}, nil)
 	}
 
 	prevpNum := pLargest
@@ -312,7 +313,7 @@ func (s *Session) AssembleAckFrame() *AckFrame {
 		prevpNum = pNum
 	}
 	ackBlocks = append(ackBlocks, AckBlock{qtype.QuicInt(count), qtype.QuicInt(prevpNum - pNum - 2)})
-	return NewAckFrame(qtype.QuicInt(pLargest), 0, ackBlocks)
+	return NewAckFrame(qtype.QuicInt(pLargest), 0, ackBlocks, nil)
 }
 
 // send ack frame if needed
@@ -330,7 +331,8 @@ func (s *Session) maybeAckPacket(p Packet) {
 	}
 
 	for i, frame := range p.GetFrames() {
-		if frame.GetType() != AckFrameType && frame.GetType() != PaddingFrameType {
+		fType := frame.GetType()
+		if fType|AckFrameTypeMask != AckFrameTypeA && fType != PaddingFrameType {
 			break
 		}
 		if i == len(p.GetFrames())-1 {
@@ -360,20 +362,18 @@ func (s *Session) HandleFrames(fs []Frame) error {
 			case *BlockedFrame:
 				err = s.handleBlockedFrame(f)
 			case *NewConnectionIDFrame:
-			case *AckFrame:
-				err = s.handleAckFrame(f)
 			case *PathChallengeFrame:
 				err = s.handlePathChallengeFrame(f)
 			case *PathResponseFrame:
 				err = s.handlePathResponseFrame(f)
 			case *CryptoFrame:
 				err = s.handleCryptoFrame(f)
-			case *AckEcnFrame:
-				err = s.handleAckEcnFrame(f)
 			case *NewTokenFrame:
 				err = s.handleNewTokenFrame(f)
 			case StreamLevelFrame:
 				err = s.streamManager.handleFrame(f)
+			case *AckFrame:
+				err = s.handleAckFrame(f)
 			default:
 				panic("not supported Frame type")
 			}
@@ -426,7 +426,6 @@ func (s *Session) QueueFrame(frame Frame) error {
 		s.PathChallengeData = f.Data
 	case *PathResponseFrame:
 	case *CryptoFrame:
-	case *AckEcnFrame:
 	case *NewTokenFrame:
 	case StreamLevelFrame:
 		err = s.streamManager.QueueFrame(nil, f)
@@ -502,9 +501,6 @@ func (s *Session) handlePathResponseFrame(frame *PathResponseFrame) error {
 func (s *Session) handleCryptoFrame(f *CryptoFrame) error {
 	return nil
 }
-func (s *Session) handleAckEcnFrame(f *AckEcnFrame) error {
-	return nil
-}
 func (s *Session) handleNewTokenFrame(f *NewTokenFrame) error {
 	if !s.isClient {
 		// This is not written in spec, need to ask
@@ -549,20 +545,21 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 	packetNum := p.GetPacketNumber()
 	for _, frame := range p.GetFrames() {
 		// TODO: check packet number
-		if frame.GetType() == AckFrameType && packetNum == 0 {
+		if frame.GetType()|AckFrameTypeMask == AckFrameTypeA && packetNum == 0 {
 			if s.isClient {
 				packets := []Packet{}
+				// TODO: set ECN
 				packets = append(packets,
 					NewInitialPacket(s.versionDecided, s.DestConnID, s.SrcConnID, nil, 1,
-						[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)}),
+						[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil)}),
 					NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, 0,
 						[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message (ClientHello)")), []byte("CRYPTO[FIN]")),
-							NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil),
+							NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil),
 						}))
 				if oneRTTForNow {
 					s.sendPacketChan <- NewCoalescingPacket(append(packets, NewProtectedPacket1RTT(false, s.DestConnID, 0,
 						[]Frame{NewStreamFrame(0, 0, true, true, true, []byte("1-RTT[0]: STREAM[0, ...]")),
-							NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil),
+							NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil),
 						})))
 				} else {
 					// TODO: unknown offset
@@ -571,7 +568,7 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 							[]Frame{NewCryptoFrame(0, []byte("0-RTT[1]: CRYPTO[EOED]"))}),
 						NewProtectedPacket1RTT(false, s.DestConnID, 2,
 							[]Frame{NewStreamFrame(0, 0, true, true, true, []byte("1-RTT[2]: STREAM[0, ...]")),
-								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil),
+								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil),
 							})))
 				}
 			} else { // server
@@ -579,16 +576,16 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 					s.sendPacketChan <- NewCoalescingPacket([]Packet{
 						NewProtectedPacket1RTT(false, s.DestConnID, 1,
 							[]Frame{NewStreamFrame(55, 0, true, true, true, []byte("1-RTT[1]: STREAM[55, ...]")),
-								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)}),
+								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil)}),
 						NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, 1,
-							[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)})})
+							[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil)})})
 				} else {
 					s.sendPacketChan <- NewCoalescingPacket([]Packet{
 						NewProtectedPacket1RTT(false, s.DestConnID, 1,
 							[]Frame{NewStreamFrame(55, 0, true, true, true, []byte("1-RTT[1]: STREAM[55, ...]")),
-								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()+1), 0, nil)}),
+								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()+1), 0, nil, nil)}),
 						NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber,
-							[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()+2), 0, []AckBlock{AckBlock{qtype.QuicInt(p.GetPacketNumber() + 1), 0}})}),
+							[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()+2), 0, []AckBlock{AckBlock{qtype.QuicInt(p.GetPacketNumber() + 1), 0}}, nil)}),
 					})
 				}
 			}
@@ -606,10 +603,11 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 	// TODO: need to check condition
 	if initialPacketForNow {
 		// initial packet from server or retry packet from server
+		// TODO: set ECN
 		packets := []Packet{
 			NewInitialPacket(s.versionDecided, s.DestConnID, s.SrcConnID, nil, 0,
 				[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message from server (HelloRetryRequest)")),
-					NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)}),
+					NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil)}),
 			// TODO: this is stil under investigating
 			NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber,
 				[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message from server (HelloRetryRequest)")), []byte("CRYPTO[EE, CERT, CV, FIN]"))}),
@@ -622,7 +620,7 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 		} else {
 			// 0-RTT handshake
 			s.sendPacketChan <- NewCoalescingPacket(append(packets, NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, 0,
-				append(protectedFrames, NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil)))))
+				append(protectedFrames, NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil)))))
 
 		}
 	} else {
