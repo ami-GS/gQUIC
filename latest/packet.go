@@ -270,7 +270,7 @@ func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.Connect
 	hasAck := false
 	frameLen := 0
 	for _, frame := range frames {
-		if frame.GetType() == AckFrameType {
+		if frame.GetType()|AckFrameTypeMask == AckFrameTypeA {
 			if hasAck {
 				// should be single ack?
 				return nil
