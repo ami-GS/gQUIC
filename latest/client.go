@@ -1,6 +1,7 @@
 package quiclatest
 
 import (
+	"bytes"
 	"net"
 
 	"github.com/ami-GS/gQUIC/latest/qtype"
@@ -199,7 +200,19 @@ func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 	// send second initial packet
 
 	// The client retains the state of its cryptographic handshake, but discards all transport state.
-	c.session.DestConnID, _ = packet.GetHeader().GetConnectionIDPair()
+	//c.session.DestConnID, _ = packet.GetHeader().GetConnectionIDPair()
+	_, destConnID := packet.GetHeader().GetConnectionIDPair()
+	if !bytes.Equal(destConnID, c.session.DestConnID) {
+		/*
+		   Clients MUST discard Retry packets that contain an Original
+		   Destination Connection ID field that does not match the Destination
+		   Connection ID from its Initial packet.  This prevents an off-path
+		   attacker from injecting a Retry packet.
+		*/
+		// any error?
+		panic("destConnID mismatch")
+		return nil
+	}
 	c.session.SrcConnID, _ = qtype.NewConnectionID(nil)
 	c.session.RetryTokenReceived = packet.RetryToken
 
