@@ -332,7 +332,7 @@ func (s *Session) maybeAckPacket(p Packet) {
 
 	for i, frame := range p.GetFrames() {
 		fType := frame.GetType()
-		if fType|AckFrameTypeMask != AckFrameTypeA && fType != PaddingFrameType {
+		if fType&AckFrameTypeMask != AckFrameTypeA && fType != PaddingFrameType {
 			break
 		}
 		if i == len(p.GetFrames())-1 {
@@ -558,7 +558,7 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 	packetNum := p.GetPacketNumber()
 	for _, frame := range p.GetFrames() {
 		// TODO: check packet number
-		if frame.GetType()|AckFrameTypeMask == AckFrameTypeA && packetNum == 0 {
+		if frame.GetType()&AckFrameTypeMask == AckFrameTypeA && packetNum == 0 {
 			if s.isClient {
 				packets := []Packet{}
 				// TODO: set ECN
