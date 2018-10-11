@@ -430,6 +430,10 @@ func (rp *RetryPacket) GetWire() (wire []byte, err error) {
 	return append(hWire, rp.payload...), nil
 }
 
+func (p RetryPacket) String() string {
+	return fmt.Sprintf("%s\nODCIL:%d\nOriglDstConnID:%v\nRetryToken:[%s]", p.BasePacket, p.ODCIL, p.OriginalDestConnID.Bytes(), string(p.RetryToken))
+}
+
 // long header with type of 0x7D
 type HandshakePacket struct {
 	*BasePacket
