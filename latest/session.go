@@ -16,8 +16,11 @@ type Session struct {
 
 	// tls config
 	// connection
-	DestConnID    qtype.ConnectionID
-	SrcConnID     qtype.ConnectionID
+	DestConnID qtype.ConnectionID
+	DesSeqID   qtype.QuicInt
+	SrcConnID  qtype.ConnectionID
+	SrcSeqID   qtype.QuicInt
+
 	DoneHandShake bool
 	conn          *Connection
 	isClient      bool
@@ -66,6 +69,10 @@ type Session struct {
 	server *Server
 
 	PathChallengeData [8]byte
+
+	// For RetireConnectionIDFrame
+	SmallestSeqIDSent    qtype.QuicInt
+	DidSendZeroLenConnID bool
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
@@ -89,13 +96,15 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		// TODO: this would be configurable
 		WaitFrameTimeout: time.NewTicker(10 * time.Millisecond),
 		// TODO: this should be configured by transport parameter
-		versionDecided:      qtype.VersionPlaceholder,
-		LastPacketNumber:    qtype.InitialPacketNumber,
-		ackPacketQueue:      h,
-		ackPacketQueueMutex: new(sync.Mutex),
-		UnAckedPacket:       make(map[qtype.PacketNumber]Packet),
-		mapMutex:            new(sync.Mutex),
-		pingHelper:          NewPingHelper(15 * time.Second),
+		versionDecided:       qtype.VersionPlaceholder,
+		LastPacketNumber:     qtype.InitialPacketNumber,
+		ackPacketQueue:       h,
+		ackPacketQueueMutex:  new(sync.Mutex),
+		UnAckedPacket:        make(map[qtype.PacketNumber]Packet),
+		mapMutex:             new(sync.Mutex),
+		pingHelper:           NewPingHelper(15 * time.Second),
+		SmallestSeqIDSent:    qtype.MaxQuicInt,
+		DidSendZeroLenConnID: false,
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess
@@ -466,6 +475,24 @@ func (s *Session) handleNewConnectionIDFrame(frame *NewConnectionIDFrame) error 
 }
 
 func (s *Session) handleRetireConnectionIDFrame(frame *RetireConnectionIDFrame) error {
+	/*
+	   Receipt of a RETIRE_CONNECTION_ID frame containing a sequence number
+	   greater than any previously sent to the peer MAY be treated as a
+	   connection error of type PROTOCOL_VIOLATION.
+	*/
+	if s.SmallestSeqIDSent < frame.SequenceNumber {
+		return qtype.ProtocolViolation
+	}
+	/*
+	   An endpoint cannot send this frame if it was provided with a zero-
+	   length connection ID by its peer.  An endpoint that provides a zero-
+	   length connection ID MUST treat receipt of a RETIRE_CONNECTION_ID
+	   frame as a connection error of type PROTOCOL_VIOLATION.
+	*/
+	if s.DidSendZeroLenConnID {
+		return qtype.ProtocolViolation
+	}
+
 	panic("NotImplementedError")
 	return nil
 }

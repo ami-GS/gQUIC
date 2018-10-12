@@ -22,6 +22,8 @@ import (
 
 type QuicInt uint64
 
+const MaxQuicInt = 4611686018427387903
+
 func (v QuicInt) GetEncoded() uint64 {
 	switch {
 	case 0 <= v && v <= 63:
@@ -30,7 +32,7 @@ func (v QuicInt) GetEncoded() uint64 {
 		return uint64(v) | 0x4000
 	case 0 <= v && v <= 1073741823:
 		return uint64(v) | 0x80000000
-	case 0 <= v && v <= 4611686018427387903:
+	case 0 <= v && v <= MaxQuicInt:
 		return uint64(v) | 0xC000000000000000
 	default:
 		// error
