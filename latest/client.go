@@ -201,24 +201,24 @@ func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 
 	// The client retains the state of its cryptographic handshake, but discards all transport state.
 	//c.session.DestConnID, _ = packet.GetHeader().GetConnectionIDPair()
-	_, destConnID := packet.GetHeader().GetConnectionIDPair()
-	if !bytes.Equal(destConnID, c.session.DestConnID) {
+	rcvSrcConnID, _ := packet.GetHeader().GetConnectionIDPair()
+
+	if !bytes.Equal(packet.OriginalDestConnID, c.session.DestConnID) {
 		/*
-		   Clients MUST discard Retry packets that contain an Original
-		   Destination Connection ID field that does not match the Destination
-		   Connection ID from its Initial packet.  This prevents an off-path
-		   attacker from injecting a Retry packet.
+			Clients MUST discard Retry packets that contain an Original
+			Destination Connection ID field that does not match the Destination
+			Connection ID from its Initial packet.
 		*/
-		// any error?
-		panic("destConnID mismatch")
+		panic("original DestinationID mismatch")
 		return nil
 	}
-	c.session.SrcConnID, _ = qtype.NewConnectionID(nil)
+
+	c.session.DestConnID = rcvSrcConnID
 	c.session.RetryTokenReceived = packet.RetryToken
 
 	// try again with new transport, but MUST remember the results of any version negotiation that occurred
 	pn := packet.GetPacketNumber()
-	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID,
+	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, rcvSrcConnID, c.session.SrcConnID,
 		packet.RetryToken, pn.Increase(),
 		[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message (ClientHello)")), []byte("second cryptographic handshake message"))})
 	return nil
