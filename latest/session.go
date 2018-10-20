@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	qerror "github.com/ami-GS/gQUIC/latest/error"
 	"github.com/ami-GS/gQUIC/latest/qtype"
 	"github.com/ami-GS/gQUIC/latest/utils"
 )
@@ -390,7 +391,7 @@ func (s *Session) HandleFrames(fs []Frame) error {
 				panic("not supported Frame type")
 			}
 			if err != nil {
-				if e, ok := err.(*qtype.TransportError); ok {
+				if e, ok := err.(*qerror.TransportError); ok {
 					s.sendFrameHPChan <- NewConnectionCloseFrame(frame.GetType(), *e, "")
 				} else {
 					panic(err)
@@ -481,7 +482,7 @@ func (s *Session) handleRetireConnectionIDFrame(frame *RetireConnectionIDFrame) 
 	   connection error of type PROTOCOL_VIOLATION.
 	*/
 	if s.SmallestSeqIDSent < frame.SequenceNumber {
-		return qtype.ProtocolViolation
+		return qerror.ProtocolViolation
 	}
 	/*
 	   An endpoint cannot send this frame if it was provided with a zero-
@@ -490,7 +491,7 @@ func (s *Session) handleRetireConnectionIDFrame(frame *RetireConnectionIDFrame) 
 	   frame as a connection error of type PROTOCOL_VIOLATION.
 	*/
 	if s.DidSendZeroLenConnID {
-		return qtype.ProtocolViolation
+		return qerror.ProtocolViolation
 	}
 
 	panic("NotImplementedError")
@@ -504,7 +505,7 @@ func (s *Session) handleAckFrame(frame *AckFrame) error {
 	largest := frame.LargestAcked
 	for _, block := range frame.AckBlocks {
 		if largest < 0 || largest < block.Block {
-			return qtype.FrameEncodingError
+			return qerror.FrameEncodingError
 		}
 		for acked := largest; acked >= largest-block.Block; acked -= qtype.PacketNumberIncreaseSize {
 			//ackedPNs[idx] = qtype.PacketNumber(acked)
@@ -533,7 +534,7 @@ func (s *Session) handlePathChallengeFrame(frame *PathChallengeFrame) error {
 
 func (s *Session) handlePathResponseFrame(frame *PathResponseFrame) error {
 	if !bytes.Equal(frame.Data[:], s.PathChallengeData[:]) {
-		return qtype.ProtocolViolation
+		return qerror.ProtocolViolation
 	}
 	return nil
 }
@@ -544,7 +545,7 @@ func (s *Session) handleCryptoFrame(f *CryptoFrame) error {
 func (s *Session) handleNewTokenFrame(f *NewTokenFrame) error {
 	if !s.isClient {
 		// This is not written in spec, need to ask
-		return qtype.ProtocolViolation
+		return qerror.ProtocolViolation
 	}
 
 	// If the client has a token received in a NEW_TOKEN frame on a previous
@@ -565,7 +566,7 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 	oneRTTForNow := false
 	initialPacketForNow := false
 	if lh, ok := p.GetHeader().(*LongHeader); ok && lh.Length < InitialPacketMinimumPayloadSize {
-		return qtype.ProtocolViolation
+		return qerror.ProtocolViolation
 	}
 	var originalDestID qtype.ConnectionID
 	s.DestConnID, originalDestID = p.GetHeader().GetConnectionIDPair()
@@ -573,7 +574,7 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 		// If the client has not previously received a Retry packet from the server, it populates
 		// the Destination Connection ID field with a randomly selected value.
 		// This MUST be at least 8 octets in length.
-		return qtype.ProtocolViolation
+		return qerror.ProtocolViolation
 	}
 
 	if p.TokenLen != 0 {

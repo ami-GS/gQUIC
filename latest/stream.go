@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	qerror "github.com/ami-GS/gQUIC/latest/error"
 	"github.com/ami-GS/gQUIC/latest/qtype"
 	"github.com/ami-GS/gQUIC/latest/utils"
 )
@@ -200,11 +201,11 @@ func (s *SendStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
 // SendStream handle StopSending for receiving abondon request
 func (s *SendStream) handleStopSendingFrame(f *StopSendingFrame) error {
 	if s.State == qtype.StreamReady {
-		return qtype.ProtocolViolation
+		return qerror.ProtocolViolation
 	}
 	// respond by RstStreamFrame with error code of STOPPING
 	s.stopSendingCh <- struct{}{}
-	return s.QueueFrame(NewRstStreamFrame(s.ID, qtype.Stopping, qtype.QuicInt(s.largestOffset)))
+	return s.QueueFrame(NewRstStreamFrame(s.ID, qerror.Stopping, qtype.QuicInt(s.largestOffset)))
 }
 
 // AckFrame comes via connection level handling
@@ -219,15 +220,15 @@ func (s *SendStream) handleAckFrame(f *AckFrame) error {
 }
 
 func (s *SendStream) handleStreamFrame(f *StreamFrame) error {
-	return qtype.ProtocolViolation
+	return qerror.ProtocolViolation
 }
 
 func (s *SendStream) handleRstStreamFrame(f *RstStreamFrame) error {
-	return qtype.ProtocolViolation
+	return qerror.ProtocolViolation
 }
 
 func (s *SendStream) handleStreamBlockedFrame(f *StreamBlockedFrame) error {
-	return qtype.ProtocolViolation
+	return qerror.ProtocolViolation
 }
 
 func (s *SendStream) ackedAllStreamData() {
@@ -325,17 +326,17 @@ func (s *RecvStream) sendStopSendingFrame(f *StopSendingFrame) error {
 }
 
 func (s *RecvStream) handleMaxStreamDataFrame(f *MaxStreamDataFrame) error {
-	return qtype.ProtocolViolation
+	return qerror.ProtocolViolation
 }
 
 func (s *RecvStream) handleStopSendingFrame(f *StopSendingFrame) error {
-	return qtype.ProtocolViolation
+	return qerror.ProtocolViolation
 }
 
 func (s *RecvStream) handleRstStreamFrame(f *RstStreamFrame) error {
 	if f.FinalOffset < s.largestOffset ||
 		s.State == qtype.StreamSizeKnown && f.FinalOffset != s.largestOffset {
-		return qtype.FinalOffsetError
+		return qerror.FinalOffsetError
 	}
 
 	if s.State == qtype.StreamDataRecvd {
@@ -365,7 +366,7 @@ func (s *RecvStream) handleStreamFrame(f *StreamFrame) error {
 
 	if s.State == qtype.StreamSizeKnown {
 		if s.largestOffset < f.Offset {
-			return qtype.FinalOffsetError
+			return qerror.FinalOffsetError
 		}
 	}
 

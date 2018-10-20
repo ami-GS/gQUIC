@@ -1,4 +1,4 @@
-package qtype
+package error
 
 import "math"
 

@@ -4,6 +4,7 @@ import (
 	"net"
 	"sync"
 
+	qerror "github.com/ami-GS/gQUIC/latest/error"
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
 
@@ -54,7 +55,7 @@ func (s *Server) Serve() error {
 		if err != nil {
 			// TODO: this type assertion is dangerous
 			// TODO: err should have frame info and pass as 1st argument
-			_ = s.Close(0, err.(qtype.TransportError))
+			_ = s.Close(0, err.(qerror.TransportError))
 			return err
 		}
 
@@ -68,7 +69,7 @@ func (s *Server) Serve() error {
 	}
 }
 
-func (s *Server) Close(fType FrameType, err qtype.TransportError) error {
+func (s *Server) Close(fType FrameType, err qerror.TransportError) error {
 	wg := &sync.WaitGroup{}
 	frame := NewConnectionCloseFrame(fType, err, "error: experimental")
 	for _, session := range s.sessions {
@@ -154,7 +155,7 @@ func (s *Server) IsAcceptableSession(version qtype.Version, srcID, destID qtype.
 	s.sessionsMutex.Unlock()
 	if sessionNum >= s.SessionLimitNum {
 		p := NewHandshakePacket(version, srcID, destID, qtype.InitialPacketNumber,
-			[]Frame{NewConnectionCloseFrame(0, qtype.ServerBusy, "The number of session reached server limit")})
+			[]Frame{NewConnectionCloseFrame(0, qerror.ServerBusy, "The number of session reached server limit")})
 		wire, err := p.GetWire()
 		if err != nil {
 			//

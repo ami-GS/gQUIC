@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	qerror "github.com/ami-GS/gQUIC/latest/error"
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
 
@@ -189,7 +190,7 @@ func newPacket(ph PacketHeader, data []byte) (p Packet, idx int, err error) {
 			}
 		default:
 			// error type is not defined
-			return nil, 0, qtype.ProtocolViolation
+			return nil, 0, qerror.ProtocolViolation
 		}
 	} else if _, ok := ph.(*ShortHeader); ok {
 		p = &ProtectedPacket{
@@ -576,7 +577,7 @@ func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
 	packet.Version = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
 	if packet.Version != 0 {
 		// must be zero, but the error is not defined
-		return nil, 0, qtype.ProtocolViolation
+		return nil, 0, qerror.ProtocolViolation
 	}
 	idx += 4
 	packet.DCIL = data[idx] >> 4

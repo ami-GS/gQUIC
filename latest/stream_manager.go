@@ -3,6 +3,7 @@ package quiclatest
 import (
 	"sync"
 
+	qerror "github.com/ami-GS/gQUIC/latest/error"
 	"github.com/ami-GS/gQUIC/latest/qtype"
 	"github.com/ami-GS/gQUIC/latest/utils"
 )
@@ -73,12 +74,12 @@ func (s *StreamManager) IsValidID(streamID qtype.StreamID) error {
 	if streamID&qtype.UnidirectionalStream == qtype.UnidirectionalStream {
 		// unidirectional
 		if streamID > s.maxStreamIDUni {
-			return qtype.StreamIDError
+			return qerror.StreamIDError
 		}
 	} else {
 		// bidirectional
 		if streamID > s.maxStreamIDBidi {
-			return qtype.StreamIDError
+			return qerror.StreamIDError
 		}
 	}
 	return nil
@@ -253,7 +254,7 @@ func (s *StreamManager) handleFrame(f StreamLevelFrame) error {
 		// stream it has not opened MUST terminate the connection with error
 		// PROTOCOL_VIOLATION.
 		delete(s.streamMap, sid)
-		return qtype.ProtocolViolation
+		return qerror.ProtocolViolation
 	}
 
 	var stream Stream

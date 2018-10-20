@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	qerror "github.com/ami-GS/gQUIC/latest/error"
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
 
@@ -66,7 +67,7 @@ func (s *StreamFlowController) SendableByOffset(offset qtype.QuicInt) FlowContro
 
 func (s *StreamFlowController) ReceivableByOffset(offset qtype.QuicInt) error {
 	if offset > s.MaxDataLimit {
-		return qtype.FlowControlError
+		return qerror.FlowControlError
 	}
 	return nil
 }
@@ -102,7 +103,7 @@ func (c *ConnectionFlowController) SendableByOffset(largestOffset qtype.QuicInt)
 
 func (c *ConnectionFlowController) ReceivableByOffset(largestOffset qtype.QuicInt) error {
 	if c.bytesReceived+largestOffset > c.MaxDataLimit {
-		return qtype.FlowControlError
+		return qerror.FlowControlError
 	}
 	return nil
 }

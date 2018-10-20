@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 
+	qerror "github.com/ami-GS/gQUIC/latest/error"
 	"github.com/ami-GS/gQUIC/latest/qtype"
 )
 
@@ -30,7 +31,7 @@ func (s *Client) Close() {
 
 func (s *Client) close(f *ConnectionCloseFrame) {
 	if f == nil {
-		f = NewConnectionCloseFrame(0, qtype.NoError, "Close request from client")
+		f = NewConnectionCloseFrame(0, qerror.NoError, "Close request from client")
 	}
 	s.session.Close(f)
 }
@@ -231,7 +232,7 @@ func (c *Client) handleHandshakePacket(packet *HandshakePacket) error {
 func (c *Client) handleInitialPacket(packet *InitialPacket) error {
 	pn := packet.GetPacketNumber()
 	if packet.TokenLen != 0 {
-		c.session.sendPacketChan <- NewProtectedPacket0RTT(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, pn.Increase(), []Frame{NewConnectionCloseFrame(0, qtype.ProtocolViolation, "client receives initial packet with Non-zero token length")})
+		c.session.sendPacketChan <- NewProtectedPacket0RTT(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, pn.Increase(), []Frame{NewConnectionCloseFrame(0, qerror.ProtocolViolation, "client receives initial packet with Non-zero token length")})
 	}
 	return nil
 }
