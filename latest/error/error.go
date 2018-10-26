@@ -17,7 +17,7 @@ const (
 	TransportParameterError
 	VersionNegotiationError
 	ProtocolViolation
-	InvalidMigration = 0xc
+	InvalidMigration TransportError = 0xc
 
 	CryptoError = 0x100 // 0x1XX, XX is reserved for carrying error codes specific to the cryptographic handshake
 )
