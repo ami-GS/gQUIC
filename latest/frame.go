@@ -787,10 +787,10 @@ type NewConnectionIDFrame struct {
 	StatelessRstTkn [16]byte
 }
 
-func NewNewConnectionIDFrame(sequence qtype.QuicInt, length byte, connID qtype.ConnectionID, stateLessRstTkn [16]byte) *NewConnectionIDFrame {
+func NewNewConnectionIDFrame(sequence qtype.QuicInt, connID qtype.ConnectionID, stateLessRstTkn [16]byte) *NewConnectionIDFrame {
 	f := &NewConnectionIDFrame{
 		BaseFrame:       NewBaseFrame(NewConnectionIDFrameType),
-		Length:          length,
+		Length:          byte(len(connID)),
 		Sequence:        sequence,
 		ConnID:          connID,
 		StatelessRstTkn: stateLessRstTkn,
