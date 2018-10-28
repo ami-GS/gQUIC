@@ -69,7 +69,7 @@ type Session struct {
 
 	server *Server
 
-	PathChallengeData [8]byte
+	PathChallengeData [][8]byte
 
 	// For RetireConnectionIDFrame
 	SmallestSeqIDSent    qtype.QuicInt
@@ -104,6 +104,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		UnAckedPacket:        make(map[qtype.PacketNumber]Packet),
 		mapMutex:             new(sync.Mutex),
 		pingHelper:           NewPingHelper(15 * time.Second),
+		PathChallengeData:    make([][8]byte, 0),
 		SmallestSeqIDSent:    qtype.MaxQuicInt,
 		DidSendZeroLenConnID: false,
 	}
@@ -205,6 +206,19 @@ func (s *Session) Read() (data []byte, err error) {
 func (s *Session) Write(data []byte) (n int, err error) {
 	// TODO: encrypt data
 	return s.streamManager.Write(data)
+}
+
+func (s *Session) PathValidation() error {
+	data := make([]byte, 8)
+	var arrayData [8]byte
+	_, err := rand.Read(data)
+	copy(arrayData[:], data)
+	if err != nil {
+		panic(err)
+	}
+	f := NewPathChallengeFrame(arrayData)
+
+	return nil
 }
 
 func (s *Session) SetFinishedStream(stream *RecvStream) {
@@ -436,7 +450,9 @@ func (s *Session) QueueFrame(frame Frame) error {
 	case *NewConnectionIDFrame:
 	case *AckFrame:
 	case *PathChallengeFrame:
-		s.PathChallengeData = f.Data
+		s.PathChallengeData = append(s.PathChallengeData, f.Data)
+		s.sendFrameHPChan <- f
+		return nil
 	case *PathResponseFrame:
 	case *CryptoFrame:
 	case *NewTokenFrame:
@@ -529,13 +545,25 @@ func (s *Session) handleAckFrame(frame *AckFrame) error {
 
 func (s *Session) handlePathChallengeFrame(frame *PathChallengeFrame) error {
 	// TODO: send path response with same data as received PathChallengeFrame
+	s.QueueFrame(NewPathResponseFrame(frame.Data))
 	return nil
 }
 
 func (s *Session) handlePathResponseFrame(frame *PathResponseFrame) error {
-	if !bytes.Equal(frame.Data[:], s.PathChallengeData[:]) {
+	hasSameData := false
+	for _, data := range s.PathChallengeData {
+		if bytes.Equal(frame.Data[:], data[:]) {
+			hasSameData = true
+			break
+		}
+	}
+	if !hasSameData {
+		// MAY generate this error
 		return qerror.ProtocolViolation
 	}
+
+	// reset challenging data
+	s.PathChallengeData = make([][8]byte, 0)
 	return nil
 }
 
