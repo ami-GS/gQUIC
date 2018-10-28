@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"container/heap"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -74,6 +75,11 @@ type Session struct {
 	// For RetireConnectionIDFrame
 	SmallestSeqIDSent    qtype.QuicInt
 	DidSendZeroLenConnID bool
+	// Maximum of 8 IDs, experimentally used now, Set is better
+	// int is SequenceNumber
+	PeerSeqNumber qtype.QuicInt
+	PeerConIDPool map[qtype.QuicInt]qtype.ConnectionID
+	PeerConIDUsed map[qtype.QuicInt]qtype.ConnectionID
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
@@ -107,6 +113,9 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		PathChallengeData:    make([][8]byte, 0),
 		SmallestSeqIDSent:    qtype.MaxQuicInt,
 		DidSendZeroLenConnID: false,
+		PeerSeqNumber:        0,
+		PeerConIDPool:        make(map[qtype.QuicInt]qtype.ConnectionID),
+		PeerConIDUsed:        make(map[qtype.QuicInt]qtype.ConnectionID),
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess
@@ -446,6 +455,9 @@ func (s *Session) QueueFrame(frame Frame) error {
 		//TODO: controller should be prepared for both direction on Connection?
 		s.flowController.maybeUpdateMaxDataLimit(f.Data)
 	case *PingFrame:
+	case *RetireConnectionIDFrame:
+		id := s.MyConIDPool[f.SequenceNumber]
+		s.MyConIDUsed[f.SequenceNumber] = id
 	case *BlockedFrame:
 	case *NewConnectionIDFrame:
 	case *AckFrame:
@@ -509,6 +521,22 @@ func (s *Session) handleRetireConnectionIDFrame(frame *RetireConnectionIDFrame) 
 	if s.DidSendZeroLenConnID {
 		return qerror.ProtocolViolation
 	}
+
+	// Mutex.Lock?
+	s.PeerConIDUsed[frame.SequenceNumber] = s.PeerConIDPool[frame.SequenceNumber]
+	delete(s.PeerConIDPool, frame.SequenceNumber)
+	// Mutex.Unlock?
+
+	// TODO: This SeqNo incrementation is not work properly if this packet drops
+	s.PeerSeqNumber++
+	cID, _ := qtype.NewConnectionID(nil)
+	s.PeerConIDPool[s.PeerSeqNumber] = cID
+	tkn := make([]byte, 16)
+	_, _ = rand.Read(tkn)
+	var arrayTkn [16]byte
+	copy(arrayTkn[:], tkn)
+	s.QueueFrame(NewNewConnectionIDFrame(s.PeerSeqNumber, cID, arrayTkn))
+	// TODO: 6.13.4.2.  Calculating a Stateless Reset Token
 
 	panic("NotImplementedError")
 	return nil
