@@ -77,9 +77,14 @@ type Session struct {
 	DidSendZeroLenConnID bool
 	// Maximum of 8 IDs, experimentally used now, Set is better
 	// int is SequenceNumber
+	MySeqNumber   qtype.QuicInt
+	MyConIDPool   map[qtype.QuicInt]qtype.ConnectionID
+	MyConIDUsed   map[qtype.QuicInt]qtype.ConnectionID
 	PeerSeqNumber qtype.QuicInt
 	PeerConIDPool map[qtype.QuicInt]qtype.ConnectionID
 	PeerConIDUsed map[qtype.QuicInt]qtype.ConnectionID
+	// connectionID string
+	StatelessResetToken map[string][16]byte
 }
 
 func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isClient bool) *Session {
@@ -113,9 +118,13 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		PathChallengeData:    make([][8]byte, 0),
 		SmallestSeqIDSent:    qtype.MaxQuicInt,
 		DidSendZeroLenConnID: false,
+		MySeqNumber:          0, // start from 1 if defined by transport param
+		MyConIDPool:          make(map[qtype.QuicInt]qtype.ConnectionID),
+		MyConIDUsed:          make(map[qtype.QuicInt]qtype.ConnectionID),
 		PeerSeqNumber:        0,
 		PeerConIDPool:        make(map[qtype.QuicInt]qtype.ConnectionID),
 		PeerConIDUsed:        make(map[qtype.QuicInt]qtype.ConnectionID),
+		StatelessResetToken:  make(map[string][16]byte),
 	}
 	sess.streamManager = NewStreamManager(sess)
 	return sess
@@ -499,7 +508,38 @@ func (s *Session) handleMaxDataFrame(frame *MaxDataFrame) error {
 }
 
 func (s *Session) handleNewConnectionIDFrame(frame *NewConnectionIDFrame) error {
-	panic("NotImplementedError")
+	if frame.Length < 4 && 18 < frame.Length {
+		return qerror.ProtocolViolation
+	}
+
+	/*
+	   If an endpoint receives a NEW_CONNECTION_ID frame that repeats a
+	   previously issued connection ID with a different Stateless Reset
+	   Token or a different sequence number, the endpoint MAY treat that
+	   receipt as a connection error of type PROTOCOL_VIOLATION.
+	*/
+	validateFn := func(IDs map[qtype.QuicInt]qtype.ConnectionID) error {
+		for seq, con := range IDs {
+			if bytes.Equal(con, frame.ConnID) && seq != frame.Sequence {
+				return qerror.ProtocolViolation
+			}
+			if tkn, ok := s.StatelessResetToken[frame.ConnID.String()]; ok && tkn != frame.StatelessRstTkn {
+				return qerror.ProtocolViolation
+			}
+		}
+		return nil
+	}
+
+	err := validateFn(s.MyConIDPool)
+	if err != nil {
+		return err
+	}
+	err = validateFn(s.MyConIDUsed)
+	if err != nil {
+		return err
+	}
+
+	s.MyConIDPool[frame.Sequence] = frame.ConnID
 	return nil
 }
 
