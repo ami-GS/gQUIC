@@ -235,7 +235,37 @@ func (s *Session) PathValidation() error {
 		panic(err)
 	}
 	f := NewPathChallengeFrame(arrayData)
+	s.QueueFrame(f)
 
+	return nil
+}
+
+func (s *Session) Migration() error {
+	// An endpoint MUST NOT initiate connection migration before the
+	// handshake is finished and the endpoint has 1-RTT keys.
+	if !s.DoneHandShake {
+		return nil
+	}
+	// An endpoint also MUST NOT initiate connection migration if the peer
+	// sent the "disable_migration" transport parameter during the handshake.
+
+	// reset congestion controller
+	//
+
+	// probing packet : includes only PATH_CHALLENGE, PATH_RESPONSE, NEW_CONNECTION_ID, and PADDING frames
+	// send non-probing packet
+	// ack from peer meens successful migration
+	return nil
+}
+
+func (s *Session) HandleMigration() error {
+	// An endpoint also MUST NOT initiate connection migration if the peer
+	// sent the "disable_migration" transport parameter during the handshake.
+	if false {
+		return qerror.InvalidMigration
+	}
+
+	s.PathValidation()
 	return nil
 }
 
