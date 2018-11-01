@@ -19,6 +19,7 @@ type Packet interface {
 	GetFrames() []Frame
 	GetPacketNumber() qtype.PacketNumber
 	SetFrames(fs []Frame)
+	IsProbePacket() bool
 }
 
 func ParsePackets(data []byte) (packets []Packet, idx int, err error) {
@@ -92,6 +93,7 @@ type BasePacket struct {
 	Frames     []Frame
 	PaddingNum int
 	payload    []byte
+	isProbing  bool
 }
 
 func (bp *BasePacket) GetHeader() PacketHeader {
@@ -102,7 +104,18 @@ func (bp *BasePacket) SetHeader(h PacketHeader) {
 }
 
 func (bp *BasePacket) SetFrames(fs []Frame) {
+	bp.isProbing = true
+	for _, f := range fs {
+		if !f.IsProbeFrame() {
+			bp.isProbing = false
+			break
+		}
+	}
 	bp.Frames = fs
+}
+
+func (bp *BasePacket) IsProbePacket() bool {
+	return bp.isProbing
 }
 
 func (bp *BasePacket) GetFrames() []Frame {
@@ -663,6 +676,9 @@ func (p VersionNegotiationPacket) SetFrames(fs []Frame) {
 func (p VersionNegotiationPacket) GetFrames() []Frame {
 	return nil
 }
+func (p VersionNegotiationPacket) IsProbePacket() bool {
+	return false
+}
 func (p VersionNegotiationPacket) String() string {
 	return fmt.Sprintf("NoHeader:VersionNegotiationPacket\tVer:N/A(%d)\nDCIL:%d,SCIL:%d\n%s\nSupported Versions:%v", p.Version, p.DCIL, p.SCIL, p.BasePacketHeader, p.SupportedVersions)
 }
@@ -709,3 +725,4 @@ func (ps CoalescingPacket) GetHeader() PacketHeader             { return nil }
 func (ps CoalescingPacket) GetFrames() []Frame                  { return nil }
 func (ps CoalescingPacket) GetPacketNumber() qtype.PacketNumber { return 0 }
 func (ps CoalescingPacket) SetFrames(fs []Frame)                {}
+func (ps CoalescingPacket) IsProbePacket() bool                 { return false }

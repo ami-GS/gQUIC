@@ -14,6 +14,7 @@ type Frame interface {
 	String() string
 	GetType() FrameType
 	GetWireSize() int
+	IsProbeFrame() bool
 }
 
 type StreamLevelFrame interface {
@@ -144,6 +145,13 @@ func NewBaseFrame(frameType FrameType) *BaseFrame {
 
 func (f *BaseFrame) GetType() FrameType {
 	return f.Type
+}
+
+func (f *BaseFrame) IsProbeFrame() bool {
+	if f.Type == PathChallengeFrameType || f.Type == PathResponseFrameType || f.Type == NewConnectionIDFrameType {
+		return true
+	}
+	return false
 }
 
 func (f *BaseFrame) GetWire() []byte {
