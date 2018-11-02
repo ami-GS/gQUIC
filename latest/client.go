@@ -150,6 +150,10 @@ func (c *Client) run() {
 }
 
 func (c *Client) handlePacket(p Packet) error {
+	if p.IsProbePacket() {
+		// TODO: handle error or ignore
+	}
+
 	if _, ok := p.(*VersionNegotiationPacket); !ok && c.versionNegotiated == false {
 		c.versionNegotiated = true
 		c.session.versionDecided = c.versionOffer

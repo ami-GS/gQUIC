@@ -128,6 +128,8 @@ func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 			s.sessions[destID.String()] = sess
 			s.addrSessions[remoteAddr.String()] = sess
 			s.sessionsMutex.Unlock()
+		} else if packet.IsProbePacket() {
+			handleMigration()
 		}
 	} else {
 		sess, ok = s.addrSessions[remoteAddr.String()]
@@ -138,6 +140,18 @@ func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 	}
 	sess.HandlePacket(packet)
 	return nil
+}
+
+func (s *Server) handleMigration(remoteAddr net.Addr, destID, srcID qtype.ConnectionID) {
+	// TODO: have to reset Session when Retry Packet sent to client. then thsi can use DestID for packet maching
+	sess := NewSession(&Connection{conn: s.conn, remoteAddr: remoteAddr}, destID, srcID, false)
+	sess.server = s
+	// packet handler for each session on server is now defined in session.go
+	sess.packetHandler = sess
+	go sess.Run()
+
+	sess.HandleMigration()
+
 }
 
 func (s *Server) IsVersionSupported(version qtype.Version) bool {
