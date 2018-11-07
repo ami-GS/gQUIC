@@ -803,6 +803,21 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 }
 
 func (h *Session) handleHandshakePacket(p *HandshakePacket) error {
+	/*
+		The payload of this packet contains CRYPTO frames and could contain
+		PADDING, or ACK frames.  Handshake packets MAY contain
+		CONNECTION_CLOSE or APPLICATION_CLOSE frames.  Endpoints MUST treat
+		receipt of Handshake packets with other frames as a connection error.
+	*/
+	for _, frame := range p.GetFrames() {
+		switch frame.GetType() {
+		case CryptoFrameType, PaddingFrameType, AckFrameTypeA, AckFrameTypeB:
+		case ConnectionCloseFrameType, ApplicationCloseFrameType:
+		default:
+			return qerror.ProtocolViolation
+		}
+	}
+
 	return nil
 }
 
