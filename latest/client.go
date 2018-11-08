@@ -116,7 +116,7 @@ func (c *Client) Connect() {
 	// first initial packet
 	destID, _ := qtype.NewConnectionID(nil)
 	c.session.sendPacketChan <- //NewCoalescingPacket([]Packet{
-	NewInitialPacket(c.versionOffer, destID, destID, token, c.session.LastPacketNumber,
+	NewInitialPacket(c.versionOffer, destID, destID, token, c.session.LastInitialPN.Increase(),
 		[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message (ClientHello)"))})
 	//NewProtectedPacket0RTT(c.versionOffer, destID, destID, c.session.LastPacketNumber, []Frame{NewStreamFrame(0, 0, true, true, false, []byte("0-RTT[0]: STREAM[0, ...]"))}),
 	//})
@@ -196,7 +196,7 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 	// WIP
 
 	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, c.session.DestConnID, c.session.SrcConnID, nil,
-		c.session.LastPacketNumber,
+		c.session.LastInitialPN.Increase(),
 		[]Frame{NewCryptoFrame(0, []byte("second cryptographic handshake message for answering VersionNegotiation Packet"))})
 	return nil
 }

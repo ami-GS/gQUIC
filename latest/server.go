@@ -129,7 +129,7 @@ func (s *Server) handlePacket(remoteAddr net.Addr, packet Packet) error {
 			s.addrSessions[remoteAddr.String()] = sess
 			s.sessionsMutex.Unlock()
 		} else if packet.IsProbePacket() {
-			handleMigration()
+			//s.handleMigration()
 		}
 	} else {
 		sess, ok = s.addrSessions[remoteAddr.String()]

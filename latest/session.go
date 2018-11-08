@@ -59,7 +59,10 @@ type Session struct {
 
 	versionDecided qtype.Version
 
-	LastPacketNumber qtype.PacketNumber
+	// three packet number spaces
+	LastHandshakePN qtype.PacketNumber
+	LastAppPN       qtype.PacketNumber
+	LastInitialPN   qtype.PacketNumber
 
 	packetHandler PacketHandler
 
@@ -109,7 +112,7 @@ func NewSession(conn *Connection, dstConnID, srcConnID qtype.ConnectionID, isCli
 		WaitFrameTimeout: time.NewTicker(10 * time.Millisecond),
 		// TODO: this should be configured by transport parameter
 		versionDecided:       qtype.VersionPlaceholder,
-		LastPacketNumber:     qtype.InitialPacketNumber,
+		LastAppPN:            qtype.InitialPacketNumber,
 		ackPacketQueue:       h,
 		ackPacketQueueMutex:  new(sync.Mutex),
 		UnAckedPacket:        make(map[qtype.PacketNumber]Packet),
@@ -177,12 +180,12 @@ RunLOOP:
 			if len(frames) == 0 {
 				continue
 			}
-			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), frames))
+			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastAppPN.Increase(), frames))
 		case <-s.pingHelper.Ticker.C:
 			// currently 1 packet per 1 ping
-			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), []Frame{NewPingFrame()}))
+			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastAppPN.Increase(), []Frame{NewPingFrame()}))
 		case f := <-s.sendFrameHPChan:
-			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber.Increase(), []Frame{f}))
+			err = s.SendPacket(NewProtectedPacket0RTT(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastAppPN.Increase(), []Frame{f}))
 		case p := <-s.sendPacketChan:
 			// TODO: frames must be evaluated to be sent
 			// currently assuming all frames in p is valid
@@ -751,7 +754,7 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 						NewProtectedPacket1RTT(false, s.DestConnID, 1,
 							[]Frame{NewStreamFrame(55, 0, true, true, true, []byte("1-RTT[1]: STREAM[55, ...]")),
 								NewAckFrame(qtype.QuicInt(p.GetPacketNumber()+1), 0, nil, nil)}),
-						NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber,
+						NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastHandshakePN.Increase(),
 							[]Frame{NewAckFrame(qtype.QuicInt(p.GetPacketNumber()+2), 0, []AckBlock{AckBlock{qtype.QuicInt(p.GetPacketNumber() + 1), 0}}, nil)}),
 					})
 				}
@@ -776,7 +779,7 @@ func (s *Session) handleInitialPacket(p *InitialPacket) error {
 				[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message from server (HelloRetryRequest)")),
 					NewAckFrame(qtype.QuicInt(p.GetPacketNumber()), 0, nil, nil)}),
 			// TODO: this is stil under investigating
-			NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastPacketNumber,
+			NewHandshakePacket(s.versionDecided, s.DestConnID, s.SrcConnID, s.LastHandshakePN.Increase(),
 				[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message from server (HelloRetryRequest)")), []byte("CRYPTO[EE, CERT, CV, FIN]"))}),
 		}
 		protectedFrames := []Frame{NewStreamFrame(1, 0, true, true, true, []byte("1-RTT[0]: STREAM[1, ...]"))}
