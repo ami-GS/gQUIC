@@ -1,4 +1,4 @@
-package quiclatest
+package quic
 
 type PacketHandler interface {
 	handleInitialPacket(p *InitialPacket) error

@@ -1,9 +1,9 @@
-package quiclatest
+package quic
 
 import (
 	"net"
 
-	"github.com/ami-GS/gQUIC/latest/qtype"
+	"github.com/ami-GS/gQUIC/qtype"
 )
 
 type SessionStore struct {

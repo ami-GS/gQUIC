@@ -1,11 +1,11 @@
-package quiclatest
+package quic
 
 import (
 	"fmt"
 	"sync"
 
-	qerror "github.com/ami-GS/gQUIC/latest/error"
-	"github.com/ami-GS/gQUIC/latest/qtype"
+	qerror "github.com/ami-GS/gQUIC/error"
+	"github.com/ami-GS/gQUIC/qtype"
 )
 
 type baseFlowController struct {

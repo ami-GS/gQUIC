@@ -1,9 +1,9 @@
-package quiclatest
+package quic
 
 import (
 	"testing"
 
-	"github.com/ami-GS/gQUIC/latest/qtype"
+	"github.com/ami-GS/gQUIC/qtype"
 	. "github.com/smartystreets/goconvey/convey"
 )
 

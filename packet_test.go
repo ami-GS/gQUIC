@@ -1,65 +1,79 @@
 package quic
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/ami-GS/gQUIC/qtype"
+	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestPacketHeader(t *testing.T) {
-	// pubFlag:5 ConnID: 1, version: 1, pacNum:1
-	//data := []byte{0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01}
-	// pubFlag:5 ConnID: 1, version: 1, pacNum:1
-	data := []byte{0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01}
-	//
-	actualHeader := NewPacketHeader(VersionNegotiationPacketType, 1, []uint32{1}, 0, nil)
-
-	header, actualLen, _ := ParsePacketHeader(data, true)
-	if actualLen != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
-	}
-
-	if !reflect.DeepEqual(actualHeader, header) {
-		t.Errorf("got %v\nwant %v", actualHeader, header)
-	}
-
-	actualWire, _ := header.GetWire()
-	if !reflect.DeepEqual(actualWire, data) {
-		t.Errorf("got %v\nwant %v", actualWire, data)
-	}
+func TestNewPacket(t *testing.T) {
+	dstConnID, _ := qtype.NewConnectionID(nil)
+	srcConnID, _ := qtype.NewConnectionID(nil)
+	pn := qtype.PacketNumber(1)
+	Convey("InitialPacketType", t, func() {
+		sFrame := NewStreamFrame(0, 0, true, true, true, []byte{0x11, 0x22})
+		header := NewLongHeader(InitialPacketType, qtype.VersionQuicTLS, dstConnID, srcConnID, pn, InitialPacketMinimumPayloadSize)
+		ePacket := NewInitialPacket(qtype.VersionQuicTLS, dstConnID, srcConnID, pn, sFrame)
+		aPacket, err := newPacket(header, []Frame{sFrame})
+		So(err, ShouldBeNil)
+		So(aPacket, ShouldResemble, ePacket)
+	})
+	Convey("RetryPacketType", t, func() {
+		sFrame := NewStreamFrame(0, 0, true, true, true, []byte{0x11, 0x22})
+		aFrame := NewAckFrame(2, 3, []AckBlock{AckBlock{32, 0}})
+		frames := []Frame{sFrame, aFrame}
+		payloadLen := 0
+		for _, f := range frames {
+			payloadLen += f.GetWireSize()
+		}
+		header := NewLongHeader(RetryPacketType, qtype.VersionQuicTLS, dstConnID, srcConnID, pn, qtype.QuicInt(payloadLen))
+		ePacket := NewRetryPacket(qtype.VersionQuicTLS, dstConnID, srcConnID, pn, []Frame{sFrame, aFrame})
+		aPacket, err := newPacket(header, []Frame{sFrame, aFrame})
+		So(err, ShouldBeNil)
+		So(aPacket, ShouldResemble, ePacket)
+	})
+	Convey("HandshakePacketType", t, func() {
+		sFrame := NewStreamFrame(0, 0, true, true, true, []byte{0x11, 0x22})
+		frames := []Frame{sFrame}
+		header := NewLongHeader(HandshakePacketType, qtype.VersionQuicTLS, dstConnID, srcConnID, pn, qtype.QuicInt(frames[0].GetWireSize()))
+		aPacket, err := newPacket(header, frames)
+		ePacket := NewHandshakePacket(qtype.VersionQuicTLS, dstConnID, srcConnID, pn, frames)
+		So(err, ShouldBeNil)
+		So(aPacket, ShouldResemble, ePacket)
+	})
+	Convey("ZeroRTTPacketType", t, func() {
+		sFrame := NewStreamFrame(0, 0, true, true, true, []byte{0x11, 0x22})
+		frames := []Frame{sFrame}
+		header := NewLongHeader(ZeroRTTProtectedPacketType, qtype.VersionQuicTLS, dstConnID, srcConnID, pn, qtype.QuicInt(frames[0].GetWireSize()))
+		aPacket, err := newPacket(header, frames)
+		ePacket := NewProtectedPacket(qtype.VersionQuicTLS, false, dstConnID, srcConnID, pn, 0, frames)
+		So(err, ShouldBeNil)
+		So(aPacket, ShouldResemble, ePacket)
+	})
+	Convey("OneRTTPacketType", t, func() {
+		sFrame := NewStreamFrame(0, 0, true, true, true, []byte{0x11, 0x22})
+		frames := []Frame{sFrame}
+		header := NewShortHeader(false, dstConnID, pn)
+		aPacket, err := newPacket(header, frames)
+		ePacket := NewProtectedPacket(qtype.VersionQuicTLS, false, dstConnID, srcConnID, pn, 1, frames)
+		So(err, ShouldBeNil)
+		So(aPacket, ShouldResemble, ePacket)
+	})
 }
 
-func TestFramePacket(t *testing.T) {
-	data := []byte{
-		//header, pubFlag:4, connID:1, pacNum:1
-		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01,
-		// stream, fin:true, stID:1, offset:1, dataLength:1
-		0xe4, 0x01, 0x00, 0x01, 0x00, 0x05, 'a', 'i', 'u', 'e', 'o',
-		// window update, stID:1, offset:1
-		0x04, 0x00, 0x00, 0x00, 0x01, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-	}
-	actual_ph, idx, _ := ParsePacketHeader(data, false)
-	packet, actualLen := PacketParserMap[actual_ph.Type](actual_ph, data[idx:])
-	ph := NewPacketHeader(FramePacketType, 1, nil, 1, nil)
-	actualPacket := NewFramePacket(1, 1, nil)
-	actualPacket.PacketHeader = ph
-	f1 := NewStreamFrame(true, 1, 1, []byte("aiueo"))
-	f1.FramePacket = actualPacket
-	f2 := NewWindowUpdateFrame(1, 1)
-	f2.FramePacket = actualPacket
-	actualPacket.PushBack(f1)
-	actualPacket.PushBack(f2)
-	actualWire, _ := packet.GetWire()
-
-	if actualLen+10 != len(data) {
-		t.Errorf("got %v\nwant %v", actualLen, len(data))
-	}
-
-	if !reflect.DeepEqual(actualPacket, packet) {
-		t.Errorf("got %v\nwant %v", actualPacket, packet)
-	}
-
-	if !reflect.DeepEqual(actualWire, data) {
-		t.Errorf("got %v\nwant %v", actualWire, data)
-	}
+func TestParsePacket(t *testing.T) {
+	dstConnID, _ := qtype.NewConnectionID(nil)
+	srcConnID, _ := qtype.NewConnectionID(nil)
+	pn := qtype.PacketNumber(1)
+	Convey("InitialPacketType", t, func() {
+		sFrame := NewStreamFrame(0, 0, true, true, true, []byte{0x11, 0x22})
+		ePacket := NewInitialPacket(qtype.VersionQuicTLS, dstConnID, srcConnID, pn, sFrame)
+		wire, err := ePacket.GetWire()
+		So(err, ShouldBeNil)
+		aPacket, length, err := ParsePacket(wire)
+		So(err, ShouldBeNil)
+		So(length, ShouldEqual, len(wire))
+		So(aPacket, ShouldResemble, ePacket)
+	})
 }

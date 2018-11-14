@@ -1,11 +1,11 @@
-package quiclatest
+package quic
 
 import (
 	"encoding/binary"
 	"fmt"
 	"math/rand"
 
-	"github.com/ami-GS/gQUIC/latest/qtype"
+	"github.com/ami-GS/gQUIC/qtype"
 )
 
 type LongHeaderPacketType byte

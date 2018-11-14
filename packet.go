@@ -1,524 +1,728 @@
 package quic
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 
-	"github.com/ami-GS/gQUIC/utils"
+	qerror "github.com/ami-GS/gQUIC/error"
+	"github.com/ami-GS/gQUIC/qtype"
 )
 
 type Packet interface {
+	// doesn't need genWire
 	GetWire() ([]byte, error)
-	GetConnectionID() uint64
-	GetHeader() *PacketHeader
+	SetWire(wire []byte)
+	GetHeader() PacketHeader
 	String() string
+	SetHeader(ph PacketHeader)
+	GetFrames() []Frame
+	GetPacketNumber() qtype.PacketNumber
+	SetFrames(fs []Frame)
+	IsProbePacket() bool
 }
 
-type PacketParser func(ph *PacketHeader, data []byte) (Packet, int)
-
-var PacketParserMap = map[PacketType]PacketParser{
-	VersionNegotiationPacketType: ParseVersionNegotiationPacket,
-	FramePacketType:              ParseFramePacket,
-	PublicResetPacketType:        ParsePublicResetPacket,
-}
-
-type PacketType byte
-
-const (
-	VersionNegotiationPacketType PacketType = iota
-	FramePacketType
-	PublicResetPacketType
-)
-
-func (pType PacketType) String() string {
-	t := []string{
-		"Version Negotiation",
-		"Frame",
-		"Public Reset",
-	}
-	return t[int(pType)]
-}
-
-type PublicFlagType byte
-
-const (
-	CONTAIN_QUIC_VERSION      PublicFlagType = 0x01
-	PUBLIC_RESET                             = 0x02
-	PRESENT_NONSE                            = 0x04
-	CONNECTION_ID_LENGTH_8                   = 0x08
-	OMIT_CONNECTION_ID                       = 0x00
-	PACKET_NUMBER_LENGTH_MASK                = 0x30
-	PACKET_NUMBER_LENGTH_6                   = 0x30
-	PACKET_NUMBER_LENGTH_4                   = 0x20
-	PACKET_NUMBER_LENGTH_2                   = 0x10
-	PACKET_NUMBER_LENGTH_1                   = 0x00
-	RESERVED_MULTIPATH                       = 0x40
-	MUST_BE_ZERO                             = 0x80
-)
-
-func (f PublicFlagType) String() string {
-	str := ""
-	if f&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-		str += "\tCONTAIN_QUIC_VERSION\n"
-	}
-	if f&PUBLIC_RESET == PUBLIC_RESET {
-		str += "\tPUBLIC_RESET\n"
-	}
-	if f&PRESENT_NONSE == PRESENT_NONSE {
-		str += "\tPRESENT_NONSE"
-	}
-	if f&CONNECTION_ID_LENGTH_8 == CONNECTION_ID_LENGTH_8 {
-		str += "\tCONNECTION_ID_LENGTH_8"
-	} else {
-		str += "\tCONNECTION_ID_NOT_PRESENT"
-	}
-	switch f & PACKET_NUMBER_LENGTH_MASK {
-	case PACKET_NUMBER_LENGTH_6:
-		str += "\tPACKET_NUMBER_LENGTH_6\n"
-	case PACKET_NUMBER_LENGTH_4:
-		str += "\tPACKET_NUMBER_LENGTH_4\n"
-	case PACKET_NUMBER_LENGTH_2:
-		str += "\tPACKET_NUMBER_LENGTH_2\n"
-	case PACKET_NUMBER_LENGTH_1:
-		str += "\tPACKET_NUMBER_LENGTH_1\n"
-	}
-	if len(str) > 0 {
-		str = "\n" + str
-	}
-	return str
-}
-
-// Packet Header
-/*
-     0        1        2        3        4            8
-+--------+--------+--------+--------+--------+---    ---+
-| Public |    Connection ID (0 or 64)    ...            | ->
-|Flags(8)|      (variable length)                       |
-+--------+--------+--------+--------+--------+---    ---+
-
-     9       10       11        12
-+--------+--------+--------+--------+
-|      QUIC Version (32)            | ->
-|         (optional)                |
-+--------+--------+--------+--------+
-
-
-    13       14       15        16      17       18       19       20
-+--------+--------+--------+--------+--------+--------+--------+--------+
-|                        Diversification Nonce                          | ->
-|                              (optional)                               |
-+--------+--------+--------+--------+--------+--------+--------+--------+
-
-    21       22       23        24      25       26       27       28
-+--------+--------+--------+--------+--------+--------+--------+--------+
-|                   Diversification Nonce Continued                     | ->
-|                              (optional)                               |
-+--------+--------+--------+--------+--------+--------+--------+--------+
-
-    29       30       31        32      33       34       35       36
-+--------+--------+--------+--------+--------+--------+--------+--------+
-|                   Diversification Nonce Continued                     | ->
-|                              (optional)                               |
-+--------+--------+--------+--------+--------+--------+--------+--------+
-
-    37       38       39        40      41       42       43       44
-+--------+--------+--------+--------+--------+--------+--------+--------+
-|                   Diversification Nonce Continued                     | ->
-|                              (optional)                               |
-+--------+--------+--------+--------+--------+--------+--------+--------+
-
-
-    45      46       47        48       49       50
-+--------+--------+--------+--------+--------+--------+
-|           Packet Number (8, 16, 32, or 48)          |
-|                  (variable length)                  |
-+--------+--------+--------+--------+--------+--------+
-*/
-
-type PacketHeader struct {
-	Type          PacketType
-	PublicFlags   PublicFlagType
-	ConnectionID  uint64
-	Nonse         []uint8 // 0(nil) or 32
-	Versions      []uint32
-	PacketNumber  uint64
-	RegularPacket bool
-}
-
-func NewPacketHeader(packetType PacketType, connectionID uint64, versions []uint32, packetNumber uint64, nonse []uint8) *PacketHeader {
-	var publicFlags PublicFlagType
-	regularPacket := false
-	switch packetType {
-	case PublicResetPacketType:
-		publicFlags |= PUBLIC_RESET
-	case VersionNegotiationPacketType:
-		publicFlags |= CONTAIN_QUIC_VERSION
-	default:
-		regularPacket = true
-	}
-
-	// This must be set in all packets until negotiated
-	//　to a different value for a given direction
-	// if not negotiated {
-	publicFlags |= CONNECTION_ID_LENGTH_8
-	if nonse != nil {
-		publicFlags |= PRESENT_NONSE
-	}
-	if packetType == FramePacketType {
-		switch {
-		case packetNumber <= 0xff:
-			publicFlags |= PACKET_NUMBER_LENGTH_1
-		case packetNumber <= 0xffff:
-			publicFlags |= PACKET_NUMBER_LENGTH_2
-		case packetNumber <= 0xffffffff:
-			publicFlags |= PACKET_NUMBER_LENGTH_4
-		case packetNumber <= 0xffffffffffff:
-			publicFlags |= PACKET_NUMBER_LENGTH_6
-		}
-
-		// version negotiation packet is still considering?
-		// others indicate frame packet
-	} else {
-		publicFlags |= PACKET_NUMBER_LENGTH_1
-	}
-
-	if !regularPacket {
-		packetNumber = 0
-		// TODO: emit warnning, packet number cannnot be set
-	}
-	ph := &PacketHeader{
-		Type:          packetType,
-		PublicFlags:   publicFlags,
-		ConnectionID:  connectionID,
-		Nonse:         nonse,
-		Versions:      versions,
-		PacketNumber:  packetNumber,
-		RegularPacket: regularPacket,
-	}
-	return ph
-}
-
-func ParsePacketHeader(data []byte, fromServer bool) (ph *PacketHeader, length int, err error) {
-	ph = &PacketHeader{
-		PublicFlags:   PublicFlagType(data[0]),
-		RegularPacket: false,
-		Type:          FramePacketType,
-	}
-
-	if ph.PublicFlags&PUBLIC_RESET == PUBLIC_RESET {
-		ph.Type = PublicResetPacketType
-	} else if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-		if fromServer {
-			ph.Type = VersionNegotiationPacketType
+func ParsePackets(data []byte) (packets []Packet, idx int, err error) {
+	var packet Packet
+	var idxTmp int
+	for {
+		version := binary.BigEndian.Uint32(data[idx+1 : idx+5])
+		if version == 0 {
+			packet, idxTmp, err = ParseVersionNegotiationPacket(data)
 		} else {
-			// Regular Packet with QUIC Version present in header
-			ph.RegularPacket = true
-		}
-	} else {
-		ph.RegularPacket = true // Regular Packet
-	}
-	length = 1
-	if ph.PublicFlags&CONNECTION_ID_LENGTH_8 == CONNECTION_ID_LENGTH_8 {
-		ph.ConnectionID = binary.BigEndian.Uint64(data[1:9])
-		length += 8
-	}
-	if ph.PublicFlags&PRESENT_NONSE == PRESENT_NONSE {
-		copy(ph.Nonse, data[length:length+32])
-		length += 32
-	}
+			var header PacketHeader
+			header, idxTmp, err = PacketHeaderParserMap[PacketHeaderType(data[idx]&0x80)](data) // ParseHeader
+			if err != nil {
+				return nil, 0, err
+			}
+			idx += idxTmp
 
-	if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-		ph.Versions = append(ph.Versions, binary.BigEndian.Uint32(data[length:]))
-		length += 4
-		if ph.Type == VersionNegotiationPacketType {
-			for length < len(data) {
-				ph.Versions = append(ph.Versions, binary.BigEndian.Uint32(data[length:]))
-				length += 4
+			if lh, ok := header.(*LongHeader); ok {
+				if lh.PacketType == RetryPacketType {
+					packet, idxTmp, err = ParseRetryPacket(lh, data[idx:])
+				} else if lh.PacketType == InitialPacketType {
+					packet, idxTmp, err = ParseInitialPacket(lh, data[idx:])
+					idx += idxTmp
+					fs, idxTmp, err := ParseFrames(data[idx:])
+					if err != nil {
+						return nil, 0, err
+					}
+					packet.SetFrames(fs)
+					if initialPacket, ok := packet.(*InitialPacket); ok {
+						length := lh.getPacketNumber().GetByteLen()
+						for _, frame := range fs {
+							length += frame.GetWireSize()
+						}
+
+						initialPacket.PaddingNum = InitialPacketMinimumPayloadSize - length
+					}
+					idx += idxTmp
+				} else {
+					packet, idxTmp, err = newPacket(header, data[idx:idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
+					if err != nil {
+						return nil, 0, err
+					}
+
+					packet.SetWire(data[idx : idx+int(lh.Length)-lh.PacketNumber.GetByteLen()])
+					if lh.PacketType == InitialPacketType {
+					}
+				}
+			} else { // ShortHeader
+				packet, idxTmp, err = newPacket(header, data[idx:])
+				if err != nil {
+					return nil, 0, err
+				}
+				packet.SetWire(data[idx:])
 			}
 		}
-	}
-
-	// TODO : here Nonce
-
-	if ph.RegularPacket {
-		// TODO: parse sequence number
-		switch ph.PublicFlags & PACKET_NUMBER_LENGTH_MASK {
-		case PACKET_NUMBER_LENGTH_6:
-			ph.PacketNumber = binary.BigEndian.Uint64(data[length:])
-			length += 6
-		case PACKET_NUMBER_LENGTH_4:
-			ph.PacketNumber = uint64(data[length])<<24 | uint64(data[length+1])<<16 | uint64(data[length+2])<<8 | uint64(data[length+3])
-			length += 4
-		case PACKET_NUMBER_LENGTH_2:
-			ph.PacketNumber = uint64(data[length])<<8 | uint64(data[length+1])
-			length += 2
-		case PACKET_NUMBER_LENGTH_1:
-			ph.PacketNumber = uint64(data[length])
-			length++
+		idx += idxTmp
+		if idx >= len(data) {
+			break
 		}
+		packets = append(packets, packet)
 	}
-	return ph, length, err
+	if len(packets) > 1 {
+		return NewCoalescingPacket(packets), idx, err
+	}
+	return []Packet{packet}, idx, err
+
 }
 
-func (ph *PacketHeader) GetWire() (wire []byte, err error) {
-	// confirm variable length
-	cIDLen := 0
-	if ph.PublicFlags&CONNECTION_ID_LENGTH_8 == CONNECTION_ID_LENGTH_8 {
-		cIDLen = 8
+type BasePacket struct {
+	Header     PacketHeader
+	Frames     []Frame
+	PaddingNum int
+	payload    []byte
+	isProbing  bool
+}
+
+func (bp *BasePacket) GetHeader() PacketHeader {
+	return bp.Header
+}
+func (bp *BasePacket) SetHeader(h PacketHeader) {
+	bp.Header = h
+}
+
+func (bp *BasePacket) SetFrames(fs []Frame) {
+	bp.isProbing = true
+	for _, f := range fs {
+		if !f.IsProbeFrame() {
+			bp.isProbing = false
+			break
+		}
+	}
+	bp.Frames = fs
+}
+
+func (bp *BasePacket) IsProbePacket() bool {
+	return bp.isProbing
+}
+
+func (bp *BasePacket) GetFrames() []Frame {
+	return bp.Frames
+}
+func (bp *BasePacket) GetPacketNumber() qtype.PacketNumber {
+	return bp.Header.getPacketNumber()
+}
+
+func (bp *BasePacket) String() string {
+	frameStr := ""
+	for _, frame := range bp.Frames {
+		frameStr += fmt.Sprintf("\n\t%s", frame)
+	}
+	return fmt.Sprintf("%s\nPaddingLen:%d\n\t{%s\n\t}", bp.Header.String(), bp.PaddingNum, frameStr)
+}
+
+func (bp *BasePacket) SetWire(wire []byte) {
+	bp.payload = wire
+}
+
+func (bp *BasePacket) GetPayloadLen() int {
+	if bp.payload != nil {
+		return len(bp.payload)
 	}
 
-	vLen := 0
-	if ph.PublicFlags&CONTAIN_QUIC_VERSION == CONTAIN_QUIC_VERSION {
-		vLen = 4 * len(ph.Versions)
+	length := 0
+	for _, frame := range bp.Frames {
+		length += frame.GetWireSize()
 	}
+	return length
+}
 
-	nonseLen := 0
-	if ph.PublicFlags&PRESENT_NONSE == PRESENT_NONSE {
-		nonseLen = 32
+//GetWire of BasePacket assembles all wires, from header wire to frame wires
+func (bp *BasePacket) GetWire() (wire []byte, err error) {
+	if bp.payload != nil {
+		// bp.wire is filled after parsing
+		return append(bp.Header.GetWire(), bp.payload...), nil
 	}
+	hWire := bp.Header.GetWire()
+	if err != nil {
+		return nil, err
+	}
+	bp.payload, err = GetFrameWires(bp.Frames)
+	if err != nil {
+		return nil, err
+	}
+	if bp.PaddingNum != 0 {
+		bp.payload = append(bp.payload, make([]byte, bp.PaddingNum)...)
+	}
+	// TODO: protect for short header?
+	return append(hWire, bp.payload...), nil
+}
 
-	pNumLen := 0
-	if ph.RegularPacket {
-		switch ph.PublicFlags & PACKET_NUMBER_LENGTH_MASK {
-		case PACKET_NUMBER_LENGTH_6:
-			pNumLen = 6
-		case PACKET_NUMBER_LENGTH_4:
-			pNumLen = 4
-		case PACKET_NUMBER_LENGTH_2:
-			pNumLen = 2
-		case PACKET_NUMBER_LENGTH_1:
-			pNumLen = 1
+func newPacket(ph PacketHeader, data []byte) (p Packet, idx int, err error) {
+	// TODO: needs frame type validation for each packet type
+	if lh, ok := ph.(*LongHeader); ok {
+		switch lh.PacketType {
+		case RetryPacketType:
+			retryPacket := &RetryPacket{
+				BasePacket: &BasePacket{
+					Header: ph,
+				},
+			}
+			retryPacket.ODCIL = data[idx]
+			retryPacket.OriginalDestConnID, err = qtype.ReadConnectionID(data[idx+1:], int(retryPacket.ODCIL))
+			if err != nil {
+				return nil, 0, err
+			}
+			retryPacket.RetryToken = data[idx+1+int(retryPacket.ODCIL):]
+			// TODO: check no frame is correct
+			return retryPacket, idx + 1 + int(retryPacket.ODCIL) + len(data), nil
+		case HandshakePacketType:
+			p = &HandshakePacket{
+				&BasePacket{
+					Header: ph,
+				},
+			}
+		case ZeroRTTProtectedPacketType:
+			p = &ProtectedPacket{
+				BasePacket: &BasePacket{
+					Header: ph,
+				},
+				RTT: 0,
+			}
+		default:
+			// error type is not defined
+			return nil, 0, qerror.ProtocolViolation
+		}
+	} else if _, ok := ph.(*ShortHeader); ok {
+		p = &ProtectedPacket{
+			BasePacket: &BasePacket{
+				Header: ph,
+			},
+			RTT: 1,
 		}
 	}
 
-	wire = make([]byte, 1+cIDLen+vLen+pNumLen+nonseLen)
-	wire[0] = byte(ph.PublicFlags)
-	index := 1
-	index += utils.MyPutUint64(wire[index:], ph.ConnectionID, cIDLen)
+	fs, idxTmp, err := ParseFrames(data[idx:])
+	if err != nil {
+		return nil, 0, err
+	}
+	p.SetFrames(fs)
 
-	if vLen > 0 {
-		for _, v := range ph.Versions {
-			binary.BigEndian.PutUint32(wire[index:], v)
-			index += vLen
+	return p, idx + idxTmp, nil
+}
+
+/*
+   +-+-+-+-+-+-+-+-+
+   |1|    0x7f     |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                         Version (32)                          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |DCIL(4)|SCIL(4)|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |               Destination Connection ID (0/32..144)         ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                 Source Connection ID (0/32..144)            ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                         Token Length (i)                    ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                            Token (*)                        ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                           Length (i)                        ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                     Packet Number (8/16/32)                   |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                          Payload (*)                        ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
+// long header with type of 0x7F
+type InitialPacket struct {
+	*BasePacket
+	// Additional Header fields
+	TokenLen qtype.QuicInt
+	Token    []byte
+}
+
+const InitialPacketMinimumPayloadSize = 1200
+
+func ParseInitialPacket(lh *LongHeader, data []byte) (*InitialPacket, int, error) {
+	initialPacket := &InitialPacket{
+		BasePacket: &BasePacket{
+			Header: lh,
+		},
+	}
+	initialPacket.TokenLen = qtype.DecodeQuicInt(data)
+	idx := initialPacket.TokenLen.GetByteLen()
+	initialPacket.Token = data[idx : idx+int(initialPacket.TokenLen)]
+	idx += int(initialPacket.TokenLen)
+
+	lh.Length = qtype.DecodeQuicInt(data[idx:])
+	idx += lh.Length.GetByteLen()
+	lh.PacketNumber = qtype.DecodePacketNumber(data[idx:])
+	idx += lh.PacketNumber.GetByteLen()
+	lh.wire = data[:idx]
+
+	initialPacket.payload = data[idx:]
+	return initialPacket, idx, nil
+}
+
+// TODO: may contain AckFrame
+func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, token []byte, packetNumber qtype.PacketNumber, frames []Frame) *InitialPacket {
+	hasCrypto := false
+	hasAck := false
+	frameLen := 0
+	for _, frame := range frames {
+		if frame.GetType()|AckFrameTypeMask == AckFrameTypeA {
+			if hasAck {
+				// should be single ack?
+				return nil
+			}
+			hasAck = true
+		} else if frame.GetType() == CryptoFrameType {
+			if hasCrypto {
+				// should be single crypto?
+				return nil
+			}
+			hasCrypto = true
+		}
+		frameLen += frame.GetWireSize()
+	}
+	if !hasAck && !hasCrypto {
+		return nil
+	}
+	var lh *LongHeader
+	tknLen := 0
+	if token != nil {
+		tknLen = len(token)
+	}
+	length := frameLen + packetNumber.GetByteLen()
+	paddingNum := 0
+	if InitialPacketMinimumPayloadSize <= length {
+		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length))
+	} else {
+		lh = NewLongHeader(InitialPacketType, version, destConnID, srcConnID, packetNumber, InitialPacketMinimumPayloadSize)
+		paddingNum = InitialPacketMinimumPayloadSize - length
+	}
+	p := &InitialPacket{
+		BasePacket: &BasePacket{
+			Header:     lh,
+			Frames:     frames,
+			PaddingNum: paddingNum,
+		},
+		TokenLen: qtype.QuicInt(tknLen),
+		Token:    token,
+	}
+	return p
+}
+
+// TODO: can be optimized
+func (ip *InitialPacket) GetWire() (wire []byte, err error) {
+	hWire := ip.Header.GetWire()
+	additionalhWire := make([]byte, ip.TokenLen.GetByteLen())
+	if ip.TokenLen >= 0 {
+		_ = ip.TokenLen.PutWire(additionalhWire)
+		hWire = append(hWire, append(additionalhWire, ip.Token...)...)
+	}
+
+	// here is long-header's part
+	lh := ip.Header.(*LongHeader)
+	longHeaderAdditionalWire := make([]byte, lh.Length.GetByteLen()+lh.PacketNumber.GetByteLen())
+
+	lh.Length.PutWire(longHeaderAdditionalWire)
+	idx := lh.Length.GetByteLen()
+	lh.PacketNumber.PutWire(longHeaderAdditionalWire[idx:])
+
+	if ip.payload != nil {
+		return append(append(hWire, longHeaderAdditionalWire...), ip.payload...), nil
+	}
+
+	ip.payload, err = GetFrameWires(ip.Frames)
+	if err != nil {
+		return nil, err
+	}
+	if ip.PaddingNum != 0 {
+		ip.payload = append(ip.payload, make([]byte, ip.PaddingNum)...)
+	}
+	// TODO: protect for short header?
+	return append(append(hWire, longHeaderAdditionalWire...), ip.payload...), nil
+}
+
+/*
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+
+   |1|    0x7e     |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                         Version (32)                          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |DCIL(4)|SCIL(4)|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |               Destination Connection ID (0/32..144)         ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                 Source Connection ID (0/32..144)            ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |    ODCIL(8)   |      Original Destination Connection ID (*)   |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        Retry Token (*)                      ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
+// long header with type of 0x7E
+type RetryPacket struct {
+	*BasePacket
+	ODCIL              byte
+	OriginalDestConnID qtype.ConnectionID
+	RetryToken         []byte
+}
+
+func NewRetryPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, originalDestConnID qtype.ConnectionID, retryToken []byte) *RetryPacket {
+	return &RetryPacket{
+		BasePacket: &BasePacket{
+			Header: NewLongHeader(RetryPacketType, version, destConnID, srcConnID, 0, qtype.QuicInt(0)),
+			Frames: nil,
+		},
+		ODCIL:              byte(len(originalDestConnID)),
+		OriginalDestConnID: originalDestConnID,
+		RetryToken:         retryToken,
+	}
+}
+
+func ParseRetryPacket(header *LongHeader, data []byte) (Packet, int, error) {
+	p := &RetryPacket{
+		BasePacket: &BasePacket{
+			Header: header,
+			Frames: nil,
+		},
+	}
+	var err error
+	p.ODCIL = data[0]
+	p.OriginalDestConnID, err = qtype.ReadConnectionID(data[1:], int(p.ODCIL))
+	if err != nil {
+		return nil, 0, err
+	}
+	// TODO: token length?
+	p.RetryToken = data[1+p.ODCIL:]
+	// this is not payload strictly saying, but storing
+	p.payload = data
+	return p, len(data), err
+}
+
+// TODO: can be optimized
+func (rp *RetryPacket) GetWire() (wire []byte, err error) {
+	// TODO: PutWire([]byte) is better?
+	hWire := rp.Header.GetWire()
+	if rp.payload != nil {
+		// bp.wire is filled after parsing
+		return append(hWire, rp.payload...), nil
+	}
+	lh := rp.Header.(*LongHeader)
+	partialLength := 6 + lh.DCIL + lh.SCIL + 6
+	hWire = append(hWire[:partialLength], append([]byte{rp.ODCIL}, append(rp.OriginalDestConnID.Bytes(), rp.RetryToken...)...)...)
+
+	if rp.Frames != nil {
+		rp.payload, err = GetFrameWires(rp.Frames)
+		if err != nil {
+			return nil, err
 		}
 	}
-	if nonseLen > 0 {
-		copy(wire[index:], ph.Nonse)
-		index += nonseLen
+	if rp.PaddingNum != 0 {
+		rp.payload = append(rp.payload, make([]byte, rp.PaddingNum)...)
+	}
+	// TODO: protect for short header?
+	return append(hWire, rp.payload...), nil
+}
+
+func (p RetryPacket) String() string {
+	return fmt.Sprintf("%s\nODCIL:%d\nOriglDstConnID:%v\nRetryToken:[%s]", p.BasePacket, p.ODCIL, p.OriginalDestConnID.Bytes(), string(p.RetryToken))
+}
+
+// long header with type of 0x7D
+type HandshakePacket struct {
+	*BasePacket
+}
+
+func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *HandshakePacket {
+	minimumReq := false
+	length := packetNumber.GetByteLen()
+	for i := 0; i < len(frames); i++ {
+		switch frames[i].(type) {
+		case *ConnectionCloseFrame:
+			// This stands for the handshake is unsaccessful
+			minimumReq = true
+		case *CryptoFrame:
+			minimumReq = true
+		case *AckFrame:
+		default:
+			// TODO: error, handshake packet cannot have these frames
+			return nil
+		}
+		length += frames[i].GetWireSize()
+	}
+	if !minimumReq {
+		return nil
 	}
 
-	index += utils.MyPutUint64(wire[index:], ph.PacketNumber, pNumLen)
+	return &HandshakePacket{
+		BasePacket: &BasePacket{
+			Header: NewLongHeader(HandshakePacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length)),
+			Frames: frames,
+		},
+	}
+}
 
+// long header with 0-RTT (type:0x7C)
+// short header with 1-RTT
+type ProtectedPacket struct {
+	*BasePacket
+	RTT byte
+}
+
+func NewProtectedPacket1RTT(key bool, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *ProtectedPacket {
+	return &ProtectedPacket{
+		BasePacket: &BasePacket{
+			Header: NewShortHeader(key, destConnID, packetNumber),
+			Frames: frames,
+		},
+		RTT: 1,
+	}
+}
+
+func NewProtectedPacket0RTT(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *ProtectedPacket {
+	length := packetNumber.GetByteLen()
+	for _, frame := range frames {
+		length += frame.GetWireSize()
+	}
+
+	return &ProtectedPacket{
+		BasePacket: &BasePacket{
+			Header: NewLongHeader(ZeroRTTProtectedPacketType, version, destConnID, srcConnID, packetNumber, qtype.QuicInt(length)),
+			Frames: frames,
+		},
+		RTT: 0,
+	}
+}
+
+func (p ProtectedPacket) String() string {
+	return fmt.Sprintf("%s, RTT:%d", p.BasePacket, p.RTT)
+}
+
+/*
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+
+   |1|  Unused (7) |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                          Version (32)                         |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |DCIL(4)|SCIL(4)|
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |               Destination Connection ID (0/32..144)         ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                 Source Connection ID (0/32..144)            ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Supported Version 1 (32)                 ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                   [Supported Version 2 (32)]                ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                                  ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                   [Supported Version N (32)]                ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
+// Version negotiation doesn't use long header, but have similar form
+type VersionNegotiationPacket struct {
+	*BasePacketHeader
+	wire              []byte
+	Version           qtype.Version
+	DCIL              byte
+	SCIL              byte
+	SupportedVersions []qtype.Version
+}
+
+func NewVersionNegotiationPacket(destConnID, srcConnID qtype.ConnectionID, supportedVersions []qtype.Version) *VersionNegotiationPacket {
+	dcil := 0
+	if destConnID != nil {
+		dcil = len(destConnID) - 3
+	}
+	scil := 0
+	if srcConnID != nil {
+		scil = len(srcConnID) - 3
+	}
+
+	p := &VersionNegotiationPacket{
+		BasePacketHeader: &BasePacketHeader{
+			DestConnID:   destConnID,
+			SrcConnID:    srcConnID,
+			PacketNumber: 0,
+		},
+		Version:           0,
+		DCIL:              byte(dcil),
+		SCIL:              byte(scil),
+		SupportedVersions: supportedVersions,
+	}
+	var err error
+	p.wire, err = p.genWire()
+	if err != nil {
+		return nil
+	}
+	return p
+}
+
+func ParseVersionNegotiationPacket(data []byte) (Packet, int, error) {
+	idx := 0
+	packet := NewVersionNegotiationPacket(nil, nil, nil)
+	if data[0]&0x80 != 0x80 {
+		//TODO: error
+	}
+	idx++
+	packet.Version = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
+	if packet.Version != 0 {
+		// must be zero, but the error is not defined
+		return nil, 0, qerror.ProtocolViolation
+	}
+	idx += 4
+	packet.DCIL = data[idx] >> 4
+	packet.SCIL = data[idx] & 0x0f
+	idx++
+	if packet.DCIL != 0 {
+		dcil := int(packet.DCIL + 3)
+		packet.BasePacketHeader.DestConnID, _ = qtype.ReadConnectionID(data[idx:], dcil)
+		idx += dcil
+	}
+	if packet.SCIL != 0 {
+		scil := int(packet.SCIL + 3)
+		packet.BasePacketHeader.SrcConnID, _ = qtype.ReadConnectionID(data[idx:], scil)
+		idx += scil
+	}
+	numVersions := (len(data) - idx) / 4
+	packet.SupportedVersions = make([]qtype.Version, numVersions)
+	for i := 0; i < numVersions; i++ {
+		packet.SupportedVersions[i] = qtype.Version(binary.BigEndian.Uint32(data[idx:]))
+		idx += 4
+	}
+	packet.wire = data
+	return packet, idx, nil
+}
+
+func (p VersionNegotiationPacket) genWire() (wire []byte, err error) {
+	wireLen := 6 + len(p.SupportedVersions)*4
+	if p.DCIL != 0 {
+		wireLen += int(p.DCIL + 3)
+	}
+	if p.SCIL != 0 {
+		wireLen += int(p.SCIL + 3)
+	}
+	//wireLen = qtype.MTUIPv4
+	wire = make([]byte, wireLen)
+	if _, err := rand.Read(wire[0:1]); err != nil {
+		return nil, err
+	}
+	wire[0] |= 0x80
+	binary.BigEndian.PutUint32(wire[1:], uint32(p.Version))
+	wire[5] = (p.DCIL << 4) | p.SCIL
+	idx := 6
+	if p.DCIL != 0 {
+		for i := 0; i < int(p.DCIL+3); i++ {
+			wire[idx+i] = p.DestConnID[i]
+		}
+		idx += int(p.DCIL + 3)
+	}
+	if p.SCIL != 0 {
+		for i := 0; i < int(p.SCIL+3); i++ {
+			wire[idx+i] = p.SrcConnID[i]
+		}
+		idx += int(p.SCIL + 3)
+	}
+
+	for i, version := range p.SupportedVersions {
+		binary.BigEndian.PutUint32(wire[idx+i*4:], uint32(version))
+	}
+	// TODO: VersionNegotiationPacket fills MTU
 	return
 }
 
-func (ph *PacketHeader) String() string {
-	versions := []string{}
-	buff := make([]byte, 4)
-	for _, v := range ph.Versions {
-		binary.BigEndian.PutUint32(buff, v)
-		versions = append(versions, string(buff))
-	}
-	return fmt.Sprintf("Packet Type=%s, PublicFlags={%s}, ConnectionID=%d, Version=%v, PacketNumber=%d\n", ph.Type.String(), ph.PublicFlags.String(), ph.ConnectionID, versions, ph.PacketNumber)
+func (p VersionNegotiationPacket) SetWire(wire []byte) {
+	// actual set is done in ParseVersionNegotiationPacket()
 }
 
-/*
-0        1        2        3        4        5        6        7       8
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-| Public |    Connection ID (64)                                                 | ->
-|Flags(8)|                                                                       |
-+--------+--------+--------+--------+--------+--------+--------+--------+--------+
-	9       10       11        12       13      14       15       16       17
-+--------+--------+--------+--------+--------+--------+--------+--------+---...--+
-|      1st QUIC version supported   |     2nd QUIC version supported    |   ...
-|      by server (32)               |     by server (32)                |
-+--------+--------+--------+--------+--------+--------+--------+--------+---...--+
-*/
-
-type VersionNegotiationPacket struct {
-	*PacketHeader
+func (p VersionNegotiationPacket) GetWire() ([]byte, error) {
+	return p.wire, nil
 }
 
-func NewVersionNegotiationPacket(connectionID uint64, versions []uint32) *VersionNegotiationPacket {
-	ph := NewPacketHeader(VersionNegotiationPacketType, connectionID, versions, 0, nil)
-	packet := &VersionNegotiationPacket{
-		PacketHeader: ph,
-	}
-	return packet
+func (p VersionNegotiationPacket) GetHeader() PacketHeader {
+	return nil
 }
-
-func ParseVersionNegotiationPacket(ph *PacketHeader, data []byte) (Packet, int) {
-	packet := &VersionNegotiationPacket{
-		PacketHeader: ph,
-	}
-	// TODO: there are no detail on specification stil
-	return packet, len(data)
+func (p VersionNegotiationPacket) GetPacketNumber() qtype.PacketNumber {
+	return 0
 }
-
-func (packet *VersionNegotiationPacket) GetWire() (wire []byte, err error) {
-	// TODO: there are no detail on specification stil
-	hWire, _ := packet.PacketHeader.GetWire()
-	return append(hWire, wire...), err
+func (p VersionNegotiationPacket) SetHeader(h PacketHeader) {
+	// no op?
 }
-
-func (packet *VersionNegotiationPacket) GetConnectionID() uint64 {
-	return packet.ConnectionID
+func (p VersionNegotiationPacket) SetFrames(fs []Frame) {
+	// no op?
 }
-
-func (packet *VersionNegotiationPacket) GetHeader() *PacketHeader {
-	return packet.PacketHeader
+func (p VersionNegotiationPacket) GetFrames() []Frame {
+	return nil
 }
-
-func (packet *VersionNegotiationPacket) String() string {
-	return packet.PacketHeader.String() // TODO
-}
-
-/*
-   +--------+---...---+--------+---...---+
-   | Type   | Payload | Type   | Payload |
-   +--------+---...---+--------+---...---+
-*/
-type FramePacket struct {
-	*PacketHeader
-	Frames   []Frame
-	Wire     []byte
-	DataSize uint16
-	RestSize uint16
-}
-
-func NewFramePacket(connectionID, packetNumber uint64, frame []Frame) *FramePacket {
-	ph := NewPacketHeader(FramePacketType, connectionID, nil, packetNumber, nil)
-	packet := &FramePacket{
-		PacketHeader: ph,
-		Frames:       frame,
-		RestSize:     MTU,
-	}
-	return packet
-}
-
-func ParseFramePacket(ph *PacketHeader, data []byte) (Packet, int) {
-	packet := &FramePacket{
-		PacketHeader: ph,
-		Wire:         data,
-		DataSize:     uint16(len(data)),
-		RestSize:     MTU - uint16(len(data)),
-	}
-	idx := 0
-	dataLen := len(data)
-	for idx < dataLen {
-		f := FrameParserMap[FrameType(data[idx])]
-		if f == nil {
-			if data[idx]&StreamFrameType == StreamFrameType {
-				f = FrameParserMap[FrameType(data[idx]&0x80)]
-			} else if data[idx]&AckFrameType == AckFrameType {
-				f = FrameParserMap[FrameType(data[idx]&0x40)]
-			} else if data[idx]&CongestionFeedbackFrameType == CongestionFeedbackFrameType {
-				f = FrameParserMap[FrameType(data[idx]&0x20)]
-			}
-		}
-		frame, nxt := f(packet, data[idx:])
-		packet.Frames = append(packet.Frames, frame)
-		idx += nxt
-	}
-	return packet, idx
-}
-
-func (packet *FramePacket) GetWire() ([]byte, error) {
-	hWire, err := packet.PacketHeader.GetWire()
-	if len(packet.Wire) == 0 {
-		for _, f := range packet.Frames {
-			wire, _ := f.GetWire()
-			packet.Wire = append(packet.Wire, wire...)
-		}
-	}
-	return append(hWire, packet.Wire...), err // temporally
-}
-
-func (packet *FramePacket) GetConnectionID() uint64 {
-	return packet.ConnectionID
-}
-
-func (packet *FramePacket) GetHeader() *PacketHeader {
-	return packet.PacketHeader
-}
-
-func (packet *FramePacket) PushBack(frame Frame) bool {
-	wire, _ := frame.GetWire()
-	dataSize := uint16(len(wire))
-
-	if packet.DataSize+dataSize <= MTU {
-		packet.Frames = append(packet.Frames, frame)
-		packet.Wire = append(packet.Wire, wire...)
-		packet.DataSize += dataSize
-		packet.RestSize -= dataSize
-		//frame.SetPacket(packet) // TODO: is this cool?
-		return true
-	}
+func (p VersionNegotiationPacket) IsProbePacket() bool {
 	return false
 }
+func (p VersionNegotiationPacket) String() string {
+	return fmt.Sprintf("NoHeader:VersionNegotiationPacket\tVer:N/A(%d)\nDCIL:%d,SCIL:%d\n%s\nSupported Versions:%v", p.Version, p.DCIL, p.SCIL, p.BasePacketHeader, p.SupportedVersions)
+}
 
-func (packet *FramePacket) String() (str string) {
-	str = packet.PacketHeader.String()
-	for _, frame := range packet.Frames {
-		str += "\t" + frame.String() + "\n"
+type CoalescingPacket []Packet
+
+func NewCoalescingPacket(packets []Packet) CoalescingPacket {
+	for i, p := range packets {
+		if _, ok := p.GetHeader().(*ShortHeader); ok && len(packets)-1 != i {
+			panic("short header packet should be set at the end of coalescing packet")
+		}
 	}
-	return
+
+	return CoalescingPacket(packets)
 }
 
-/*
-        0        1        2        3        4         8
-   +--------+--------+--------+--------+--------+--   --+
-   | Public |    Connection ID (64)                ...  | ->
-   |Flags(8)|                                           |
-   +--------+--------+--------+--------+--------+--   --+
-        9       10       11        12       13      14
-   +--------+--------+--------+--------+--------+--------+---
-   |      Quic Tag (32)                |  Tag value map      ... ->
-   |         (PRST)                    |  (variable length)
-   +--------+--------+--------+--------+--------+--------+---
-*/
-type PublicResetPacket struct {
-	*PacketHeader
-	Msg *Message
-}
-
-func NewPublicResetPacket(connectionID uint64) *PublicResetPacket {
-	ph := NewPacketHeader(PublicResetPacketType, connectionID, nil, 0, nil)
-	packet := &PublicResetPacket{
-		PacketHeader: ph,
-		Msg:          NewMessage(PRST),
+func (ps CoalescingPacket) GetWire() ([]byte, error) {
+	wire, err := ps[0].GetWire()
+	if err != nil {
+		return nil, err
 	}
-	return packet
-}
-
-func ParsePublicResetPacket(ph *PacketHeader, data []byte) (Packet, int) {
-	packet := &PublicResetPacket{
-		PacketHeader: ph,
-		Msg:          &Message{},
+	for i := 1; i < len(ps); i++ {
+		p := ps[i]
+		w, err := p.GetWire()
+		if err != nil {
+			return nil, err
+		}
+		wire = append(wire, w...)
 	}
-	packet.Msg.Parse(data)
-	return packet, len(data)
+	return wire, nil
 }
 
-func (packet *PublicResetPacket) GetWire() ([]byte, error) {
-	// wire of Public Flags and Connection ID are extract from PacketHeader
-	hWire, err := packet.PacketHeader.GetWire()
-	msgWire, err := packet.Msg.GetWire()
-	return append(hWire, msgWire...), err
+func (ps CoalescingPacket) String() string {
+	out := fmt.Sprintf("%s", ps[0])
+	for i := 1; i < len(ps); i++ {
+		out += fmt.Sprintf("\n%s", ps[i])
+	}
+	return fmt.Sprintf("CoalescingPacket {\n%s}", out)
 }
 
-func (packet *PublicResetPacket) GetConnectionID() uint64 {
-	return packet.ConnectionID
-}
-
-func (packet *PublicResetPacket) GetHeader() *PacketHeader {
-	return packet.PacketHeader
-}
-
-func (packet *PublicResetPacket) String() string {
-	return packet.PacketHeader.String() //TODO
-}
-
-func (packet *PublicResetPacket) AppendTagValue(tag QuicTag, value []byte) bool {
-	return packet.Msg.AppendTagValue(tag, value)
-}
+func (ps CoalescingPacket) SetWire(wire []byte)                 {}
+func (ps CoalescingPacket) SetHeader(ph PacketHeader)           {}
+func (ps CoalescingPacket) GetHeader() PacketHeader             { return nil }
+func (ps CoalescingPacket) GetFrames() []Frame                  { return nil }
+func (ps CoalescingPacket) GetPacketNumber() qtype.PacketNumber { return 0 }
+func (ps CoalescingPacket) SetFrames(fs []Frame)                {}
+func (ps CoalescingPacket) IsProbePacket() bool                 { return false }

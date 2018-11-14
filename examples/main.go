@@ -3,16 +3,16 @@ package main
 import (
 	"time"
 
-	"github.com/ami-GS/gQUIC/latest"
+	quic "github.com/ami-GS/gQUIC"
 )
 
 func main() {
-	_, err := quiclatest.ListenAddr("127.0.0.1:8080")
+	_, err := quic.ListenAddr("127.0.0.1:8080")
 	if err != nil {
 		panic(err)
 	}
 
-	cli, err := quiclatest.DialAddr("127.0.0.1:8080")
+	cli, err := quic.DialAddr("127.0.0.1:8080")
 	if err != nil {
 		panic(err)
 	}

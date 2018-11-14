@@ -1,5 +1,5 @@
 // or log package?
-package quiclatest
+package quic
 
 import (
 	"os"

@@ -3,7 +3,7 @@ package qtype
 import (
 	"math"
 
-	"github.com/ami-GS/gQUIC/latest/utils"
+	"github.com/ami-GS/gQUIC/utils"
 )
 
 /*

@@ -1,11 +1,11 @@
-package quiclatest
+package quic
 
 import (
 	"log"
 	"sync"
 	"time"
 
-	"github.com/ami-GS/gQUIC/latest/qtype"
+	"github.com/ami-GS/gQUIC/qtype"
 )
 
 type PingHelper struct {

@@ -1,4 +1,4 @@
-package quiclatest
+package quic
 
 import (
 	"bytes"
@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	qerror "github.com/ami-GS/gQUIC/latest/error"
-	"github.com/ami-GS/gQUIC/latest/qtype"
-	"github.com/ami-GS/gQUIC/latest/utils"
+	qerror "github.com/ami-GS/gQUIC/error"
+	"github.com/ami-GS/gQUIC/qtype"
+	"github.com/ami-GS/gQUIC/utils"
 )
 
 type Session struct {
