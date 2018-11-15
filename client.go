@@ -117,9 +117,8 @@ func (c *Client) Connect() {
 	destID, _ := qtype.NewConnectionID(nil)
 	c.session.sendPacketChan <- //NewCoalescingPacket([]Packet{
 	NewInitialPacket(c.versionOffer, destID, destID, token, c.session.LastInitialPN.Increase(),
-		[]Frame{NewCryptoFrame(0, []byte("first cryptographic handshake message (ClientHello)"))})
-	//NewProtectedPacket0RTT(c.versionOffer, destID, destID, c.session.LastPacketNumber, []Frame{NewStreamFrame(0, 0, true, true, false, []byte("0-RTT[0]: STREAM[0, ...]"))}),
-	//})
+		NewCryptoFrame(0, []byte("first cryptographic handshake message (ClientHello)")))
+	//NewProtectedPacket0RTT(c.versionOffer, destID, destID, c.session.LastPacketNumber, NewStreamFrame(0, 0, true, true, false, []byte("0-RTT[0]: STREAM[0, ...]"))),
 	c.session.DestConnID = destID
 	c.session.SrcConnID = destID
 
@@ -197,7 +196,7 @@ func (c *Client) handleVersionNegotiationPacket(packet *VersionNegotiationPacket
 
 	c.session.sendPacketChan <- NewInitialPacket(c.versionOffer, c.session.DestConnID, c.session.SrcConnID, nil,
 		c.session.LastInitialPN.Increase(),
-		[]Frame{NewCryptoFrame(0, []byte("second cryptographic handshake message for answering VersionNegotiation Packet"))})
+		NewCryptoFrame(0, []byte("second cryptographic handshake message for answering VersionNegotiation Packet")))
 	return nil
 }
 
@@ -225,7 +224,7 @@ func (c *Client) handleRetryPacket(packet *RetryPacket) error {
 	pn := packet.GetPacketNumber()
 	c.session.sendPacketChan <- NewInitialPacket(c.session.versionDecided, rcvSrcConnID, c.session.SrcConnID,
 		packet.RetryToken, pn.Increase(),
-		[]Frame{NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message (ClientHello)")), []byte("second cryptographic handshake message"))})
+		NewCryptoFrame(qtype.QuicInt(len("first cryptographic handshake message (ClientHello)")), []byte("second cryptographic handshake message")))
 	return nil
 }
 
@@ -236,7 +235,7 @@ func (c *Client) handleHandshakePacket(packet *HandshakePacket) error {
 func (c *Client) handleInitialPacket(packet *InitialPacket) error {
 	pn := packet.GetPacketNumber()
 	if packet.TokenLen != 0 {
-		c.session.sendPacketChan <- NewProtectedPacket0RTT(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, pn.Increase(), []Frame{NewConnectionCloseFrame(0, qerror.ProtocolViolation, "client receives initial packet with Non-zero token length")})
+		c.session.sendPacketChan <- NewProtectedPacket0RTT(c.session.versionDecided, c.session.DestConnID, c.session.SrcConnID, pn.Increase(), NewConnectionCloseFrame(0, qerror.ProtocolViolation, "client receives initial packet with Non-zero token length"))
 	}
 	return nil
 }

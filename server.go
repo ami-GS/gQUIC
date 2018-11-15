@@ -169,7 +169,7 @@ func (s *Server) IsAcceptableSession(version qtype.Version, srcID, destID qtype.
 	s.sessionsMutex.Unlock()
 	if sessionNum >= s.SessionLimitNum {
 		p := NewHandshakePacket(version, srcID, destID, qtype.InitialPacketNumber,
-			[]Frame{NewConnectionCloseFrame(0, qerror.ServerBusy, "The number of session reached server limit")})
+			NewConnectionCloseFrame(0, qerror.ServerBusy, "The number of session reached server limit"))
 		wire, err := p.GetWire()
 		if err != nil {
 			//

@@ -82,7 +82,7 @@ func ParsePackets(data []byte) (packets []Packet, idx int, err error) {
 		packets = append(packets, packet)
 	}
 	if len(packets) > 1 {
-		return NewCoalescingPacket(packets), idx, err
+		return NewCoalescingPacket(packets...), idx, err
 	}
 	return []Packet{packet}, idx, err
 
@@ -279,7 +279,7 @@ func ParseInitialPacket(lh *LongHeader, data []byte) (*InitialPacket, int, error
 }
 
 // TODO: may contain AckFrame
-func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, token []byte, packetNumber qtype.PacketNumber, frames []Frame) *InitialPacket {
+func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, token []byte, packetNumber qtype.PacketNumber, frames ...Frame) *InitialPacket {
 	hasCrypto := false
 	hasAck := false
 	frameLen := 0
@@ -453,7 +453,7 @@ type HandshakePacket struct {
 	*BasePacket
 }
 
-func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *HandshakePacket {
+func NewHandshakePacket(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames ...Frame) *HandshakePacket {
 	minimumReq := false
 	length := packetNumber.GetByteLen()
 	for i := 0; i < len(frames); i++ {
@@ -489,7 +489,7 @@ type ProtectedPacket struct {
 	RTT byte
 }
 
-func NewProtectedPacket1RTT(key bool, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *ProtectedPacket {
+func NewProtectedPacket1RTT(key bool, destConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames ...Frame) *ProtectedPacket {
 	return &ProtectedPacket{
 		BasePacket: &BasePacket{
 			Header: NewShortHeader(key, destConnID, packetNumber),
@@ -499,7 +499,7 @@ func NewProtectedPacket1RTT(key bool, destConnID qtype.ConnectionID, packetNumbe
 	}
 }
 
-func NewProtectedPacket0RTT(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames []Frame) *ProtectedPacket {
+func NewProtectedPacket0RTT(version qtype.Version, destConnID, srcConnID qtype.ConnectionID, packetNumber qtype.PacketNumber, frames ...Frame) *ProtectedPacket {
 	length := packetNumber.GetByteLen()
 	for _, frame := range frames {
 		length += frame.GetWireSize()
@@ -685,7 +685,7 @@ func (p VersionNegotiationPacket) String() string {
 
 type CoalescingPacket []Packet
 
-func NewCoalescingPacket(packets []Packet) CoalescingPacket {
+func NewCoalescingPacket(packets ...Packet) CoalescingPacket {
 	for i, p := range packets {
 		if _, ok := p.GetHeader().(*ShortHeader); ok && len(packets)-1 != i {
 			panic("short header packet should be set at the end of coalescing packet")
