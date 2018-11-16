@@ -55,7 +55,8 @@ const (
 
 type PacketHeader interface {
 	// TODO: can be defined as different interface, like WireObject?
-	GetWire() []byte
+	GetWire() ([]byte, error)
+	SetWire(wire []byte)
 	GetWireSize() int
 	genWire() ([]byte, error)
 	String() string
@@ -78,8 +79,8 @@ func (ph *BasePacketHeader) getPacketNumber() qtype.PacketNumber {
 	return ph.PacketNumber
 }
 
-func (ph *BasePacketHeader) GetWire() []byte {
-	return ph.wire
+func (ph *BasePacketHeader) SetWire(wire []byte) {
+	ph.wire = wire
 }
 
 func (ph *BasePacketHeader) GetWireSize() int {
@@ -241,6 +242,14 @@ func (lh LongHeader) genWire() (wire []byte, err error) {
 	return
 }
 
+func (lh LongHeader) GetWire() ([]byte, error) {
+	var err error
+	if lh.wire == nil {
+		lh.wire, err = lh.genWire()
+	}
+	return lh.wire, err
+}
+
 // Short Header
 /*
     0                   1                   2                   3
@@ -318,4 +327,12 @@ func (sh ShortHeader) genWire() (wire []byte, err error) {
 	}
 	sh.PacketNumber.PutWire(wire[idx:])
 	return
+}
+
+func (sh ShortHeader) GetWire() ([]byte, error) {
+	var err error
+	if sh.wire == nil {
+		sh.wire, err = sh.genWire()
+	}
+	return sh.wire, err
 }

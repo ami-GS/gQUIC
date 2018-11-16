@@ -153,9 +153,13 @@ func (bp *BasePacket) GetPayloadLen() int {
 func (bp *BasePacket) GetWire() (wire []byte, err error) {
 	if bp.payload != nil {
 		// bp.wire is filled after parsing
-		return append(bp.Header.GetWire(), bp.payload...), nil
+		w, err := bp.Header.GetWire()
+		if err != nil {
+			return nil, err
+		}
+		return append(w, bp.payload...), nil
 	}
-	hWire := bp.Header.GetWire()
+	hWire, err := bp.Header.GetWire()
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +333,10 @@ func NewInitialPacket(version qtype.Version, destConnID, srcConnID qtype.Connect
 
 // TODO: can be optimized
 func (ip *InitialPacket) GetWire() (wire []byte, err error) {
-	hWire := ip.Header.GetWire()
+	hWire, err := ip.Header.GetWire()
+	if err != nil {
+		return nil, err
+	}
 	additionalhWire := make([]byte, ip.TokenLen.GetByteLen())
 	if ip.TokenLen >= 0 {
 		_ = ip.TokenLen.PutWire(additionalhWire)
@@ -422,7 +429,10 @@ func ParseRetryPacket(header *LongHeader, data []byte) (Packet, int, error) {
 // TODO: can be optimized
 func (rp *RetryPacket) GetWire() (wire []byte, err error) {
 	// TODO: PutWire([]byte) is better?
-	hWire := rp.Header.GetWire()
+	hWire, err := rp.Header.GetWire()
+	if err != nil {
+		return nil, err
+	}
 	if rp.payload != nil {
 		// bp.wire is filled after parsing
 		return append(hWire, rp.payload...), nil
