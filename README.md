@@ -2,7 +2,10 @@
 QUIC(Quick UDP Internet Connection) implementation in go
 [draft-ietf-quic-transport-15](https://tools.ietf.org/html/draft-ietf-quic-transport-15)
 
-Implementing in separate directory, because this draft is really progressing comparing to my previous implementation.
+### Notice
+*This is WIP, not fully functional.*
+This is test implementation of IETF QUIC, not google QUIC. Sorry for confusing naming
+
 
 # RUN example
 commands bellow can run server and client transferring application data.
